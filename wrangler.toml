@@ -2,7 +2,7 @@
 # service is "123456" (https://123456.vegettoson83.workers.dev). A different
 # name here makes a manual `wrangler deploy` create a second Worker at a new
 # URL instead of updating the live one.
-name = "123456"
+name = "stremio-doramas"
 main = "src/index.ts"
 compatibility_date = "2026-04-04"
 compatibility_flags = ["nodejs_compat"]
@@ -29,4 +29,4 @@ CF_ACCOUNT_ID = "d955dcf5145dca9d036b7f70caae0f86"
 
 [[kv_namespaces]]
 binding     = "STREAM_CACHE"
-id          = "19b6cbbb876343ffa950e8a72959b7f3"
+id          = "b267b4182580d0919d3a62c3b5f8c269"
