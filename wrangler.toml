@@ -1,0 +1,32 @@
+# Must match the Worker's name in the Cloudflare dashboard — the deployed
+# service is "123456" (https://123456.vegettoson83.workers.dev). A different
+# name here makes a manual `wrangler deploy` create a second Worker at a new
+# URL instead of updating the live one.
+name = "123456"
+main = "src/index.ts"
+compatibility_date = "2026-04-04"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+[observability.logs]
+enabled = true
+invocation_logs = true
+[observability.traces]
+enabled = true
+
+[vars]
+TMDB_KEY     = ""
+# Non-Cloudflare HTML fetch proxy (deno/fetch.ts on Deno Deploy). latanime.org
+# blocks Cloudflare Worker egress; this relays its HTML from Deno's edge. See
+# deno/README.md to deploy your own, then set the URL here (+ /fetch).
+FETCH_PROXY_URL = "http://localhost:8000/fetch"
+# FETCH_PROXY_URL = "https://doramas-stremio.jbr1989.deno.net/fetch"
+# Cloudflare Browser Rendering (optional). Set CF_ACCOUNT_ID here and the
+# token as a secret:  wrangler secret put CF_API_TOKEN
+# Token needs the "Browser Rendering: Edit" permission. Leave blank to keep
+# extraction fully manual (no browser, no cost).
+CF_ACCOUNT_ID = "d955dcf5145dca9d036b7f70caae0f86"
+
+[[kv_namespaces]]
+binding     = "STREAM_CACHE"
+id          = "19b6cbbb876343ffa950e8a72959b7f3"
