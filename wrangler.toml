@@ -28,5 +28,5 @@ FETCH_PROXY_URL = "http://localhost:8000/fetch"
 CF_ACCOUNT_ID = "d955dcf5145dca9d036b7f70caae0f86"
 
 [[kv_namespaces]]
-binding     = "STREAM_CACHE"
-id          = "b267b4182580d0919d3a62c3b5f8c269"
+binding     = "kv-doramas-stremio"
+id          = "3ab1c9ce707d4c5a84c4b369eb48254d"
