@@ -42,7 +42,7 @@ async function getCatalog(
   env?: Env
 ) {
   if (catalogId.startsWith("doramaslat"))
-    return getDoramaCatalog(DORAMA_SOURCES.dorama, extra, env);
+    return getDoramaCatalog(DORAMA_SOURCES.dlat, extra, env);
   if (catalogId.startsWith("doramedplay"))
     return getDoramaCatalog(DORAMA_SOURCES.dsub, extra, env);
   if (catalogId.startsWith("kplay")) return getKplayCatalog(extra, env);
@@ -52,8 +52,8 @@ async function getCatalog(
 }
 
 async function getMeta(id: string, tmdbKey: string, env?: Env) {
-  if (id.startsWith("dorama:"))
-    return getDoramaMeta(DORAMA_SOURCES.dorama, id, tmdbKey, env);
+  if (id.startsWith("dlat:"))
+    return getDoramaMeta(DORAMA_SOURCES.dlat, id, tmdbKey, env);
   if (id.startsWith("dsub:"))
     return getDoramaMeta(DORAMA_SOURCES.dsub, id, tmdbKey, env);
   if (id.startsWith("kplay:")) return getKplayMeta(id, tmdbKey, env);
@@ -62,8 +62,8 @@ async function getMeta(id: string, tmdbKey: string, env?: Env) {
 }
 
 async function getStreams(rawId: string, env: Env, request: Request) {
-  if (rawId.startsWith("dorama:"))
-    return getDoramaStreams(DORAMA_SOURCES.dorama, rawId, env, request);
+  if (rawId.startsWith("dlat:"))
+    return getDoramaStreams(DORAMA_SOURCES.dlat, rawId, env, request);
   if (rawId.startsWith("dsub:"))
     return getDoramaStreams(DORAMA_SOURCES.dsub, rawId, env, request);
   if (rawId.startsWith("kplay:")) return getKplayStreams(rawId, env, request);
@@ -98,7 +98,7 @@ export default {
       if (!id)
         return json({
           error:
-            "Missing ?id= (e.g. dflix:slug-1x1 or dorama:slug-1x1 or kplay:ep:slug)",
+            "Missing ?id= (e.g. dflix:slug-1x1 or dlat:slug-1x1 or kplay:ep:slug)",
         });
       const t0 = Date.now();
       try {

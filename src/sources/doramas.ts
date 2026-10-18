@@ -9,8 +9,8 @@ export interface DoramaSource {
 }
 
 export const DORAMA_SOURCES: Record<string, DoramaSource> = {
-  dorama: {
-    prefix: "dorama",
+  dlat: {
+    prefix: "dlat",
     base: "https://doramaslat.com",
     label: "Doramas Latino",
   },

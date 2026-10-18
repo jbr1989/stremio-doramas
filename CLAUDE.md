@@ -17,9 +17,9 @@ Contratos estables. Cambiarlos es trabajo de protocolo y debe cumplir la spec
 - **Rutas**: `/manifest.json`, `/catalog/...`, `/meta/...`, `/stream/...`, más
   `/proxy/m3u8` + `/proxy/seg` (proxy de reescritura HLS) y los endpoints `/debug*`.
   Toda respuesta JSON pasa por `json()` y lleva cabeceras CORS.
-- **Esquema de IDs** (4 prefijos, `idPrefixes: ["dorama:", "dsub:", "kplay:", "dflix:"]`):
-  - `dorama:{slug}` / `dsub:{slug}` — meta de serie.
-  - `dorama:{slug}-1x{N}` / `dsub:{slug}-1x{N}` — streams de episodio
+- **Esquema de IDs** (4 prefijos, `idPrefixes: ["dlat:", "dsub:", "kplay:", "dflix:"]`):
+  - `dlat:{slug}` / `dsub:{slug}` — meta de serie.
+  - `dlat:{slug}-1x{N}` / `dsub:{slug}-1x{N}` — streams de episodio
     (validado con `/-\d+x\d+$/`, página fuente `/episodes/{slug}-1xN/`).
   - `kplay:series:{slug}` / `kplay:movie:{slug}` — meta (páginas `/series/` y `/peliculas/`).
   - `kplay:ep:{epSlug}` / `kplay:movie:{slug}` — streams de episodio/película

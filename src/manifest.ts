@@ -14,5 +14,5 @@ export const MANIFEST = {
     { type: "series", id: "kplay-directory", name: "KDramas Play — Directorio", extra: [{ name: "search", isRequired: false }, { name: "skip", isRequired: false }] },
     { type: "series", id: "doramasflix-directory", name: "Doramasflix — Directorio", extra: [{ name: "search", isRequired: false }, { name: "skip", isRequired: false }] },
   ],
-  idPrefixes: ["dorama:", "dsub:", "kplay:", "dflix:"],
+  idPrefixes: ["dlat:", "dsub:", "kplay:", "dflix:"],
 };
