@@ -29,4 +29,4 @@ CF_ACCOUNT_ID = "d955dcf5145dca9d036b7f70caae0f86"
 
 [[kv_namespaces]]
 binding     = "STREAM_CACHE"
-id          = "19b6cbbb876343ffa950e8a72959b7f3"
+id          = "b267b4182580d0919d3a62c3b5f8c269"
