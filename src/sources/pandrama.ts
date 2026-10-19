@@ -1,5 +1,13 @@
 import { Env } from "../types";
-import { CHROME_UA, decodeEntities, fetchTmdb, netFetch, toMetaPreview } from "../utils";
+import {
+  cacheGet,
+  cacheSet,
+  CHROME_UA,
+  decodeEntities,
+  fetchTmdb,
+  netFetch,
+  toMetaPreview,
+} from "../utils";
 import { extractMp4upload } from "../extractors";
 
 const PANDRAMA_BASE = "https://www.pandrama.tv";
@@ -10,6 +18,44 @@ const PANDRAMA_BASE = "https://www.pandrama.tv";
 const PANDRAMA_EXPLORE_DAILY =
   "/explorar?filters=W3sia2V5IjoibWFpblR5cGVzIiwidmFsdWUiOlsyXSwib3BlcmF0b3IiOiJoYXNBbGwifV0=&order=views_day:desc";
 const PANDRAMA_PAGE_SIZE = 48;
+
+// El fan-out de src/index.ts consulta las demás fuentes con un slug canónico
+// "titulo-NxM", pero los IDs pandrama son videos (`pandrama:{titleId}:ep:{videoId}`).
+// Esta función resuelve el video a episodio vía /ver/{videoId} (que trae
+// episodePage.title.slug y episode.season_number/episode_number) y cachea el
+// resultado en KV: acierto 24h, fallo 15 min (para no martillar /ver en bucle).
+const PANDRAMA_FANOUT_TTL = 24 * 60 * 60;
+const PANDRAMA_FANOUT_MISS_TTL = 15 * 60;
+
+export async function pandramaEpCanonicalSlug(
+  videoId: string,
+  env: Env
+): Promise<string> {
+  const key = `pandrama:fanout:v1:${videoId}`;
+  const cached = (await cacheGet(key, env.STREAM_CACHE)) as
+    | { slug?: string }
+    | null;
+  if (cached) return cached.slug || "";
+
+  let slug = "";
+  try {
+    const data = await fetchPandramaData(`/ver/${videoId}`, env);
+    const page = data?.loaders?.episodePage;
+    const titleSlug = String(page?.title?.slug || "").toLowerCase();
+    const s = Number(page?.episode?.season_number || 1);
+    const e = Number(page?.episode?.episode_number || 1);
+    if (titleSlug) slug = `${titleSlug}-${s}x${e}`;
+  } catch {
+    slug = "";
+  }
+  await cacheSet(
+    key,
+    { slug },
+    slug ? PANDRAMA_FANOUT_TTL : PANDRAMA_FANOUT_MISS_TTL,
+    env.STREAM_CACHE
+  );
+  return slug;
+}
 
 export async function fetchPandramaData(path: string, env?: Env): Promise<any | null> {
   const url = path.startsWith("http") ? path : `${PANDRAMA_BASE}${path.startsWith("/") ? "" : "/"}${path}`;
