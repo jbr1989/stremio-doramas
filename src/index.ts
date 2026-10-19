@@ -295,7 +295,7 @@ export default {
       }
       return json({
         error:
-          "Missing ?key= (full KV key, e.g. stream:v3:dflix:slug-1x1) or no KV binding",
+          "Missing ?key= (full KV key, e.g. stream:v4:dflix:slug-1x1, meta:{id} or epmap:v1:kplay:{titleKey}) or no KV binding",
       });
     }
 
