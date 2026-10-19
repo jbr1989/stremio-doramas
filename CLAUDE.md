@@ -46,11 +46,14 @@ Contratos estables. Cambiarlos es trabajo de protocolo y debe cumplir la spec
   que un proxy puede salvar). El proxy permite solo los 4 dominios de dorama
   integrados (allowlist en `deno/fetch.ts`).
 - **Slug mapping entre sitios** (`src/sources/slugmap.ts`): el fan-out de
-  `getStreams` reutiliza el epSlug del sitio origen en dsub/kplay, pero cada
-  sitio nombra sus episodios con su propio slug. Si a kdramasplay.com o
-  doramedplay.net les da 404, se resuelve el slug correcto: buscar la serie por
-  título (`?s=`, scoring de tokens ≥ 0.5, stopwords en limpio) → raspar la lista
-  de episodios de la página de serie → tomar el slug del SxE pedido; se reusa
+  `getStreams` reutiliza el epSlug del sitio origen en los otros, pero cada
+  sitio nombra sus episodios con su propio slug. Si a doramaslat.com,
+  kdramasplay.com o doramedplay.net les da 404, se resuelve el slug correcto:
+  buscar la serie por título (`?s=`, scoring de tokens ≥ 0.5 con exigencia de
+  ≥2 hits para títulos multi-palabra, stopwords en limpio) → raspar la lista
+  de episodios de la página de serie → tomar el slug del SxE pedido; los DOS
+  prefijos DooPlay resuelven (`dorama`/`dsub` en `doramas.ts`) — p.ej. un id
+  de kplay también puede encontrar su episodio en doramaslat. Se reusa
   con `getKplayStreams`/`getDoramaStreams`. Cache: `epmap:v1:{site}:{titleKey}`
   (mapa `{SxE: epSlug}` de toda la serie, TTL 24h — episodios siguientes salen
   de una lectura de KV) y cache negativa `epmap:v1nx:{site}:{titleKey}` (1h;

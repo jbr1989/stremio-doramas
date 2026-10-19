@@ -234,15 +234,16 @@ export async function resolveDoramaEmbed(
   }
 }
 
-/** Resuelve el epSlug propio de doramedplay (dsub) para un epSlug venido de
- * otro sitio (mapping por título, ver slugmap.ts). El sitio origen (`dorama`)
- * del slug no necesita resolución — su meta generó ese epSlug. */
-export async function resolveDsubEpisodeSlug(
+/** Resuelve el epSlug propio de un sitio DooPlay (dorama=doramaslat, dsub=
+ * doramedplay) para un epSlug venido de otro sitio (mapping por título, ver
+ * slugmap.ts). Antes solo dsub resolvía; hoy AMBOS participan: cuando el id
+ * llega con prefijo kplay/dflix/dsub, doramaslat también busca su propio
+ * slug de episodio en vez de 404-ear en silencio. */
+export async function resolveDooPlayEpisodeSlug(
   src: DoramaSource,
   epSlug: string,
   env: Env
 ): Promise<string | null> {
-  if (src.prefix !== "dsub") return null;
   return resolveEpisodeSlug(
     {
       site: src.prefix,
@@ -305,7 +306,7 @@ export async function getDoramaStreams(
     html = "";
   }
   if (!html) {
-    const resolved = await resolveDsubEpisodeSlug(src, epSlug, env);
+    const resolved = await resolveDooPlayEpisodeSlug(src, epSlug, env);
     if (resolved && resolved !== epSlug) {
       console.log(`[${src.prefix}] slug resuelto: ${epSlug} → ${resolved}`);
       try {
