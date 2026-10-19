@@ -5,34 +5,52 @@ import { resolveEpisodeSlug, searchVariants } from "./slugmap";
 
 const GRAPHQL_ENDPOINT = "https://user-api.seriesapi.co/graphql";
 const DORAMASFLIX_BASE = "https://doramasflix.in";
+// Espejos: los 4 dominios son la misma plataforma con el mismo backend
+// (user-api.seriesapi.co — verificado in-vivo: misma BD, mismos _id).
+// Si un origen falla (red/timeout/HTTP), se reintenta con el siguiente.
+const GQL_ORIGINS = [
+  DORAMASFLIX_BASE,            // doramasflix.in (primario)
+  "https://doramasia.com",     // espejo actual
+  "https://doramasflix.io",    // espejo: misma marca, web alternativa
+  "https://doramasmp4.io",     // espejo: otra marca, mismo backend
+];
 
 async function fetchGql(
   query: string,
   variables: Record<string, any> = {},
   timeoutMs = 12000
 ): Promise<any> {
-  const res = await netFetch("direct", GRAPHQL_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Origin: DORAMASFLIX_BASE,
-      Referer: `${DORAMASFLIX_BASE}/`,
-      "User-Agent": CHROME_UA,
-    },
-    body: JSON.stringify({ query, variables }),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
+  const errors: string[] = [];
+  for (const base of GQL_ORIGINS) {
+    try {
+      const res = await netFetch("direct", GRAPHQL_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: base,
+          Referer: `${base}/`,
+          "User-Agent": CHROME_UA,
+        },
+        body: JSON.stringify({ query, variables }),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
 
-  if (!res.ok) {
-    throw new Error(`Doramasflix GraphQL HTTP ${res.status}`);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const json: any = await res.json();
+      if (json.errors && json.errors.length > 0) {
+        throw new Error(`GraphQL: ${json.errors[0].message}`);
+      }
+
+      return json.data;
+    } catch (e) {
+      errors.push(`${base}: ${e instanceof Error ? e.message : String(e)}`);
+      // Red fallida con este origen -> probar el siguiente (failover secuencial).
+    }
   }
-
-  const json: any = await res.json();
-  if (json.errors && json.errors.length > 0) {
-    throw new Error(`Doramasflix GraphQL error: ${json.errors[0].message}`);
-  }
-
-  return json.data;
+  throw new Error(`Doramasflix GraphQL fallo en todos los orígenes — ${errors.join(" | ")}`);
 }
 
 export function cleanDoramasflixTitle(s: string): string {
