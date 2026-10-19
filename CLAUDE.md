@@ -64,7 +64,12 @@ Contratos estables. Cambiarlos es trabajo de protocolo y debe cumplir la spec
   variable `String!`) en vez de HTML, y su `fetchEpisodes` reusa
   `getDoramasflixMeta` (sin TMDB) porque sus slugs de episodio se recomponen
   aritméticamente como `{serieSlug}-{s}x{e}` (detalle: `detailEpisode` valida
-  la existencia real después del resolve).
+  la existencia real después del resolve). Espejo de cabeceras: `fetchGql`
+  prueba `Origin/Referer` de doramasflix.in y, ante fallo (red/timeout/HTTP),
+  reintenta secuencialmente con doramasia.com, doramasflix.io y
+  doramasmp4.io — los 4 son la misma plataforma con el mismo backend
+  (`user-api.seriesapi.co`, verificado in-vivo: misma BD, mismos `_id`),
+  así que el fallback es de cabeceras, no de URL.
 - **Extracción manual-first**: fetch HTTP directo más parse/unpack dentro del
   Worker — sin puente de navegador headless (el puente Render y el import de
   `@cloudflare/puppeteer` causaron caídas/crashes 1101 y ya no existen). La única

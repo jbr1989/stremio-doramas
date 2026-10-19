@@ -13,9 +13,39 @@ Addon de Stremio para ver **doramas en español** (sub español/latino), corrien
 | `dorama:` | [doramaslat.com](https://doramaslat.com) | `src/sources/doramas.ts` | WordPress + tema DooPlay | ✅ Funcional |
 | `dsub:` | [doramedplay.net](https://doramedplay.net) | `src/sources/doramas.ts` | WordPress + tema DooPlay | ✅ Funcional |
 | `kplay:` | [kdramasplay.com](https://kdramasplay.com) | `src/sources/kdramasplay.ts` | WordPress + tema DooPlay | ⚠️ Episodios sin streams (ver problema conocido) |
-| `dflix:` | [doramasflix.in](https://doramasflix.in) | `src/sources/doramasflix.ts` | App propia | ✅ Funcional |
+| `dflix:` | [doramasflix.in](https://doramasflix.in) | `src/sources/doramasflix.ts` | App propia (GraphQL) | ✅ Funcional |
 
 Todas exponen catálogo (directorio + búsqueda), meta con episodios (pósteres vía TMDB) y streams.
+
+### Espejos de cabeceras para `dflix` (failover de `fetchGql`)
+
+Los siguientes dominios son **la misma plataforma que doramasflix**: comparten el
+backend GraphQL `https://user-api.seriesapi.co/graphql` (verificado in-vivo:
+misma BD, mismos `_id` y posters TMDB; y `doramasmp4.io` lo declara literal en
+su bundle con Apollo). No se exponen como fuentes separadas ni agregan catálogo
+propio: el addon usa `doramasflix.in` como origen primario y, ante un fallo de
+petición (red, timeout, HTTP ≠ 2xx), reintenta con las cabeceras `Origin/Referer`
+de cada espejo, uno a uno:
+
+| Dominio | Papel |
+|---|---|
+| [doramasflix.in](https://doramasflix.in) | Origen primario |
+| [doramasia.com](https://doramasia.com) | Espejo (skin Next.js de la plataforma) |
+| [doramasflix.io](https://doramasflix.io) | Espejo (misma marca, web alternativa, con SSR de episodios en `/capitulos/{slug}-SxE`) |
+| [doramasmp4.io](https://doramasmp4.io) | Espejo (otra marca de la plataforma) |
+
+En el camino feliz cuesta 1 petición; los espejos solo se consultan de forma
+secuencial cuando el intento anterior falla (timeout, HTTP ≠ 2xx). **Límite**:
+al ser 1 solo backend, si `seriesapi.co` cae, caen los 4 a la vez — el failover
+protege contra dominio confiscado o validación de `Origin` bloqueada, no contra
+la caída total del backend.
+
+> Nota de investigación (oct. 2026) — si algún día los backends divergen: la
+> plataforma expone además queries GraphQL no usadas por `dflix`
+> (`MovieLinks`, `NextPrevEpisode`, `EpisodesPagination`) y sus skins
+> personalizan servidores como Streamwish, Dood, Mixdrop, Mp4Upload,
+> Streamtape, Filemoon, Mega, Ok, Primeload, Uqload. `doramasia.com` tiene
+> además SSR de episodios en `/capitulos/{slug}-SxE` (fallback HTML posible).
 
 ### Cómo funciona la extracción (sitios DooPlay)
 
@@ -61,21 +91,20 @@ streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|do7
 
 | Sitio | Tecnología | Hallazgos | Esfuerzo |
 |---|---|---|---|
-| **[doramasia.com](https://doramasia.com)** ⭐ | Next.js (App Router) + backend GraphQL en `https://user-api.seriesapi.co` | Episodios en `/capitulos/{slug}-SxE`, catálogo en `/doramas` (`/search?q=` devuelve 404 — falta localizar el endpoint de búsqueda). Los links de video NO están en el HTML: se piden por GraphQL al elegir servidor. Queries detectadas en el bundle: `EpisodeLinksOnline`, `MovieLinks`, `EpisodeDetailSlug`, `NextPrevEpisode`, `EpisodesPagination`. Servidores: Streamwish, Dood, Mixdrop, Mp4Upload, Streamtape, Filemoon, Mega, Ok, Primeload, Uqload. | Medio |
-| **[tudorama.com](https://tudorama.com)** | WP + tema propio "WStream 2.1.6" | Episodios `/ver/{slug}-s1xN`; player vía AJAX custom (`admin-ajax.php` presente pero acción distinta a DooPlay). | Medio |
+| **[tudorama.com](https://tudorama.com)** ⭐ | WP + tema propio "WStream 2.1.6" | Episodios `/ver/{slug}-s1xN`; player vía AJAX custom (`admin-ajax.php` presente pero acción distinta a DooPlay). | Medio |
 | **[doramasyt.com](https://www.doramasyt.com)** | App propia (no WP), carga dinámica | Episodios `/ver/{slug}-episodio-N`; servidores DooD, StreamTape, Filemoon → requiere extractores nuevos (DooD/StreamTape son duros; Filemoon viable). | Alto |
 | **[seriesbl.net](https://seriesbl.net)** | WordPress + DooPlay | Patrón DooPlay estándar: basta añadir una entrada a `DORAMA_SOURCES`. Nicho: series/pelis Boys Love. | Bajo |
 
-Descartados: `doramedplay.com` (misma marca que doramedplay.net, ya integrada como `dsub:`) y `doramasmp4.com` (muerto, redirige a la alianza antipiratería).
+Descartados: `doramedplay.com` (misma marca que doramedplay.net, ya integrada como `dsub:`), `doramasmp4.com` (muerto, redirige a la alianza antipiratería; **no confundir con `doramasmp4.io`, espejo vivo de la plataforma doramasflix** — ver arriba) y `doramasia.com` como fuente independiente (es espejo de la plataforma dflix, ver arriba; su contenido ya se sirve bajo `dflix:`).
 
-Orden de integración sugerido: `doramasia.com` → `tudorama.com` → `doramasyt.com` → `seriesbl.net` (nicho). (El fix de `kplay` está aplicado — ver arriba.)
+Orden de integración sugerido: `tudorama.com` → `doramasyt.com` → `seriesbl.net` (nicho). (El fix de `kplay` está aplicado — ver arriba.)
 
 ## Añadir a Stremio
 
 El addon desplegado vive en:
 
 ```
-https://123456.vegettoson83.workers.dev/manifest.json
+https://stremio-doramas.jbr1989-b26.workers.dev/manifest.json
 ```
 
 En Stremio → **Addons** → **Community Addons** → pegar la URL → Instalar 🎉
