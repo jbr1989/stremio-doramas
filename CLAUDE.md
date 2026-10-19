@@ -39,8 +39,32 @@ Contratos estables. Cambiarlos es trabajo de protocolo y debe cumplir la spec
   `fetchHtml` **racea** el directo contra `FETCH_PROXY_URL` (el proxy de Deno
   Deploy `deno/fetch.ts`, la ruta fiable) y toma el primer HTML válido; después
   cae a Browser Rendering (si está configurado) → proxies CORS gratuitos (casi
-  todos muertos). El proxy permite solo los 4 dominios de dorama integrados
-  (allowlist en `deno/fetch.ts`).
+  todos muertos). Si direct o el relay obtienen **404/410** del upstream
+  (`SiteNotFoundError`), `fetchHtml` no prueba ni render ni proxies: la página no
+  existe y reintentarla solo quemaría ~16s (esto es el común en streams con slug
+  de episodio inexistente en un sitio). Los 403/5xx sí reintentan (bloqueo de CF
+  que un proxy puede salvar). El proxy permite solo los 4 dominios de dorama
+  integrados (allowlist en `deno/fetch.ts`).
+- **Slug mapping entre sitios** (`src/sources/slugmap.ts`): el fan-out de
+  `getStreams` reutiliza el epSlug del sitio origen en los otros, pero cada
+  sitio nombra sus episodios con su propio slug. Si a doramaslat.com,
+  kdramasplay.com o doramedplay.net les da 404, se resuelve el slug correcto:
+  buscar la serie por título (`?s=`, scoring de tokens ≥ 0.5 con exigencia de
+  ≥2 hits para títulos multi-palabra, stopwords en limpio) → raspar la lista
+  de episodios de la página de serie → tomar el slug del SxE pedido; los DOS
+  prefijos DooPlay resuelven (`dorama`/`dsub` en `doramas.ts`) — p.ej. un id
+  de kplay también puede encontrar su episodio en doramaslat. Se reusa
+  con `getKplayStreams`/`getDoramaStreams`. Cache: `epmap:v1:{site}:{titleKey}`
+  (mapa `{SxE: epSlug}` de toda la serie, TTL 24h — episodios siguientes salen
+  de una lectura de KV) y cache negativa `epmap:v1nx:{site}:{titleKey}` (1h;
+  el timeout de resolución NO la escribe). Presupuesto: el resolve entero va
+  en carrera contra 12s y solo corre en el camino de fallo (404), así que el
+  camino feliz no paga nada. doramasflix (`dflix`) SÍ participa, con un adapter
+  propio NO-DooPlay: la búsqueda es su GraphQL `searchFullDoramas` (por nombre,
+  variable `String!`) en vez de HTML, y su `fetchEpisodes` reusa
+  `getDoramasflixMeta` (sin TMDB) porque sus slugs de episodio se recomponen
+  aritméticamente como `{serieSlug}-{s}x{e}` (detalle: `detailEpisode` valida
+  la existencia real después del resolve).
 - **Extracción manual-first**: fetch HTTP directo más parse/unpack dentro del
   Worker — sin puente de navegador headless (el puente Render y el import de
   `@cloudflare/puppeteer` causaron caídas/crashes 1101 y ya no existen). La única

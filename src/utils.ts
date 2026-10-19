@@ -207,6 +207,32 @@ export function isCfChallenge(body: string): boolean {
   );
 }
 
+// The target page does not exist upstream (404/410): retrying it through
+// relay/proxies can never succeed, so fetchHtml short-circuits on this.
+export class SiteNotFoundError extends Error {
+  status: number;
+  url: string;
+  constructor(status: number, url: string) {
+    super(`HTTP ${status}: ${shortUrl(url)}`);
+    this.name = "SiteNotFoundError";
+    this.status = status;
+    this.url = url;
+  }
+}
+
+export function isSiteNotFound(e: unknown): e is SiteNotFoundError {
+  return e instanceof SiteNotFoundError;
+}
+
+// Promise.any wraps the racers' rejections in an AggregateError; look through
+// it for a definitive 404/410 from any strategy.
+export function isAnySiteNotFound(e: unknown): boolean {
+  if (isSiteNotFound(e)) return true;
+  if (e instanceof AggregateError)
+    return e.errors.some((inner) => isSiteNotFound(inner));
+  return false;
+}
+
 export async function fetchHtml(url: string, env?: Env): Promise<string> {
   const encoded = encodeURIComponent(url);
 
@@ -219,6 +245,8 @@ export async function fetchHtml(url: string, env?: Env): Promise<string> {
   ): Promise<string> => {
     if (controller.signal.aborted) throw new Error(`${name}: global timeout`);
     const r = await fetcher();
+    if (r.status === 404 || r.status === 410)
+      throw new SiteNotFoundError(r.status, url);
     if (!r.ok) throw new Error(`${name}: HTTP ${r.status}`);
     const html = await r.text();
     if (html.length < 500)
@@ -251,8 +279,13 @@ export async function fetchHtml(url: string, env?: Env): Promise<string> {
       const html = await Promise.any(racers);
       clearTimeout(globalTimer);
       return html;
-    } catch {
-      /* every racer rejected — fall through */
+    } catch (e) {
+      /* every racer rejected — fall through, unless a 404/410 proved the
+         page never existed (see tryFetch): then skip render + proxies */
+      if (isAnySiteNotFound(e)) {
+        console.log(`[fetchHtml] upstream 404/410, skipping fallbacks: ${shortUrl(url)}`);
+        throw e;
+      }
     }
 
     if (env && browserRenderingReady(env) && !controller.signal.aborted) {
@@ -284,6 +317,8 @@ export async function fetchHtml(url: string, env?: Env): Promise<string> {
         return html;
       } catch (e) {
         console.log(`[fetchHtml] ${name} failed: ${e}`);
+        // No short-circuit here: a public proxy's own 404 is not proof the
+        // upstream page is dead (we only reach this loop via 403/timeouts).
       }
     }
 

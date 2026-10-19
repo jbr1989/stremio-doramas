@@ -1,6 +1,7 @@
 import { Env } from "../types";
 import { CHROME_UA, decodeEntities, fetchHtml, fetchTmdb, netFetch, toMetaPreview } from "../utils";
 import { extractHexload, extractMp4upload } from "../extractors";
+import { resolveEpisodeSlug, searchVariants, type SiteAdapter } from "./slugmap";
 
 export const KPLAY_BASE = "https://kdramasplay.com";
 
@@ -172,6 +173,106 @@ export async function getKplayMeta(
   };
 }
 
+/** Resuelve el epSlug propio de kdramasplay para un epSlug venido de otro
+ * sitio (mapping por título, see slugmap.ts). Devuelve null si no hay match.
+ *
+ * Búsqueda: el `?s=` de kdramasplay NO emite resultados server-side (grid lo
+ * llena el livesearch) — el buscador real es la REST de DooPlay
+ * `/wp-json/dooplay/search/?keyword=&nonce=`, que devuelve HTTP 200 con JSON
+ * `{id: {title, url, img}}` (o `{error:"no_posts"|"no_verify_nonce"}`). El
+ * nonce (`"nonce":"…"` en el config `dtGonza`) sale de la misma página `?s=`
+ * que ya descargamos, así que cada resolución hace 1 fetch de página + 1-2
+ * REST. El REST matchea por frase: si la frase completa no da nada se prueba
+ * con la palabra más larga del título. */
+export async function resolveKplayEpisodeSlug(
+  epSlug: string,
+  env: Env
+): Promise<string | null> {
+  const restSearch = async (
+    kw: string,
+    nonce: string
+  ): Promise<string[]> => {
+    if (!kw.trim() || !nonce) return [];
+    try {
+      const r = await netFetch(
+        "kplaysearch",
+        `${KPLAY_BASE}/wp-json/dooplay/search/?keyword=${encodeURIComponent(
+          kw
+        )}&nonce=${encodeURIComponent(nonce)}`,
+        {
+          headers: {
+            "User-Agent": CHROME_UA,
+            "X-Requested-With": "XMLHttpRequest",
+            Referer: `${KPLAY_BASE}/`,
+          },
+          signal: AbortSignal.timeout(8000),
+        }
+      );
+      if (!r.ok) return [];
+      const data: unknown = await r.json().catch(() => null);
+      if (!data || typeof data !== "object" || "error" in (data as object))
+        return [];
+      const slugs: string[] = [];
+      for (const v of Object.values(data as Record<string, { url?: string }>)) {
+        const m = (v?.url || "").match(/\/series\/([a-z0-9-]+)\//i);
+        if (m) slugs.push(m[1]);
+      }
+      return [...new Set(slugs)];
+    } catch {
+      return [];
+    }
+  };
+
+  return resolveEpisodeSlug(
+    {
+      site: "kplay",
+      searchSeries: (title) =>
+        (async () => {
+          const variants = searchVariants(title);
+          const html = await fetchHtml(
+            `${KPLAY_BASE}/?s=${encodeURIComponent(variants[0])}`,
+            env
+          );
+          // Server-side del grid (suele venir vacío) + nonce fresco del tema.
+          const slugs = [
+            ...new Set(
+              [...html.matchAll(/\/series\/([a-z0-9-]+)\//gi)].map((m) => m[1])
+            ),
+          ];
+          const nonce =
+            html.match(/"nonce":"([a-f0-9]{10})"/)?.[1] || "";
+          for (const v of variants) {
+            slugs.push(...(await restSearch(v, nonce)));
+          }
+          return [...new Set(slugs)];
+        })(),
+      fetchEpisodes: (seriesSlug) =>
+        (async () => {
+          const html = await fetchHtml(
+            `${KPLAY_BASE}/series/${seriesSlug}/`,
+            env
+          );
+          const episodes: { s: number; e: number; epSlug: string }[] = [];
+          const seen = new Set<string>();
+          for (const m of html.matchAll(
+            /\/episodios\/([a-z0-9-]+-(\d+)x(\d+))\/?/gi
+          )) {
+            if (seen.has(m[1])) continue;
+            seen.add(m[1]);
+            episodes.push({
+              epSlug: m[1],
+              s: parseInt(m[2], 10),
+              e: parseInt(m[3], 10),
+            });
+          }
+          return episodes;
+        })(),
+    },
+    epSlug,
+    env
+  );
+}
+
 export async function resolveKplayEmbed(
   post: string,
   nume: string,
@@ -215,7 +316,7 @@ export async function getKplayStreams(
   const parts = rawId.split(":");
   if (parts.length < 3) return { streams: [] };
   const subType = parts[1]; // "ep" or "movie"
-  const slug = parts[2];
+  const slug = parts.slice(2).join(":"); // consistente con getStreams (index.ts)
 
   const targetUrl =
     subType === "movie"
@@ -226,8 +327,22 @@ export async function getKplayStreams(
   try {
     html = await fetchHtml(targetUrl, env);
   } catch {
-    return { streams: [] };
+    html = "";
   }
+  if (!html && subType === "ep") {
+    // 404/slug inexistente: kdramasplay nombra sus episodios con su propio
+    // slug — resuélvelo vía título de la serie (slugmap) y reintenta.
+    const resolved = await resolveKplayEpisodeSlug(slug, env);
+    if (resolved && resolved !== slug) {
+      console.log(`[kplay] slug resuelto: ${slug} → ${resolved}`);
+      try {
+        html = await fetchHtml(`${KPLAY_BASE}/episodios/${resolved}/`, env);
+      } catch {
+        html = "";
+      }
+    }
+  }
+  if (!html) return { streams: [] };
 
   const options: { post: string; nume: string; type: string }[] = [];
   for (const li of html.matchAll(/<li[^>]*dooplay_player_option[^>]*>/gi)) {

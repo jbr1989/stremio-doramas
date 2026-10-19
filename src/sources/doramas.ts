@@ -1,6 +1,7 @@
 import { Env } from "../types";
 import { CHROME_HEADERS, CHROME_UA, decodeEntities, fetchTmdb, netFetch, toMetaPreview } from "../utils";
 import { extractMp4upload } from "../extractors";
+import { resolveEpisodeSlug, searchVariants } from "./slugmap";
 
 export interface DoramaSource {
   prefix: string;
@@ -233,6 +234,62 @@ export async function resolveDoramaEmbed(
   }
 }
 
+/** Resuelve el epSlug propio de un sitio DooPlay (dorama=doramaslat, dsub=
+ * doramedplay) para un epSlug venido de otro sitio (mapping por título, ver
+ * slugmap.ts). Antes solo dsub resolvía; hoy AMBOS participan: cuando el id
+ * llega con prefijo kplay/dflix/dsub, doramaslat también busca su propio
+ * slug de episodio en vez de 404-ear en silencio. */
+export async function resolveDooPlayEpisodeSlug(
+  src: DoramaSource,
+  epSlug: string,
+  env: Env
+): Promise<string | null> {
+  return resolveEpisodeSlug(
+    {
+      site: src.prefix,
+      searchSeries: (title) =>
+        (async () => {
+          const slugs = new Set<string>();
+          // El LIKE de WP matchea por frase: la frase completa a veces no está
+          // literalmente en el título del sitio — prueba además las 2 primeras
+          // palabras significativas ("light shop" → "light-shop-subtitulado").
+          for (const v of searchVariants(title)) {
+            const html = await fetchDorama(
+              `${src.base}/?s=${encodeURIComponent(v)}`,
+              env
+            );
+            for (const m of html.matchAll(/\/tvshows\/([a-z0-9-]+)\//gi))
+              slugs.add(m[1]);
+          }
+          return [...slugs];
+        })(),
+      fetchEpisodes: (seriesSlug) =>
+        (async () => {
+          const html = await fetchDorama(
+            `${src.base}/tvshows/${seriesSlug}/`,
+            env
+          );
+          const episodes: { s: number; e: number; epSlug: string }[] = [];
+          const seen = new Set<string>();
+          for (const m of html.matchAll(
+            /\/episodes\/([a-z0-9-]+-(\d+)x(\d+))\/?/gi
+          )) {
+            if (seen.has(m[1])) continue;
+            seen.add(m[1]);
+            episodes.push({
+              epSlug: m[1],
+              s: parseInt(m[2], 10),
+              e: parseInt(m[3], 10),
+            });
+          }
+          return episodes;
+        })(),
+    },
+    epSlug,
+    env
+  );
+}
+
 export async function getDoramaStreams(
   src: DoramaSource,
   rawId: string,
@@ -241,7 +298,25 @@ export async function getDoramaStreams(
 ) {
   const epSlug = rawId.slice(src.prefix.length + 1);
   if (!/-\d+x\d+$/.test(epSlug)) return { streams: [] };
-  const html = await fetchDorama(`${src.base}/episodes/${epSlug}/`, env);
+
+  let html = "";
+  try {
+    html = await fetchDorama(`${src.base}/episodes/${epSlug}/`, env);
+  } catch {
+    html = "";
+  }
+  if (!html) {
+    const resolved = await resolveDooPlayEpisodeSlug(src, epSlug, env);
+    if (resolved && resolved !== epSlug) {
+      console.log(`[${src.prefix}] slug resuelto: ${epSlug} → ${resolved}`);
+      try {
+        html = await fetchDorama(`${src.base}/episodes/${resolved}/`, env);
+      } catch {
+        html = "";
+      }
+    }
+  }
+  if (!html) return { streams: [] };
 
   const options: { post: string; nume: string; type: string }[] = [];
   for (const li of html.matchAll(/<li[^>]*dooplay_player_option[^>]*>/gi)) {

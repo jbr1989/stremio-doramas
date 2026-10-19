@@ -62,14 +62,67 @@ async function getMeta(id: string, tmdbKey: string, env?: Env) {
 }
 
 async function getStreams(rawId: string, env: Env, request: Request) {
-  if (rawId.startsWith("dorama:"))
-    return getDoramaStreams(DORAMA_SOURCES.dorama, rawId, env, request);
-  if (rawId.startsWith("dsub:"))
-    return getDoramaStreams(DORAMA_SOURCES.dsub, rawId, env, request);
-  if (rawId.startsWith("kplay:")) return getKplayStreams(rawId, env, request);
-  if (rawId.startsWith("dflix:"))
-    return getDoramasflixStreams(rawId, env, request);
-  return { streams: [] };
+  let epSlug = "";
+  if (rawId.startsWith("dorama:")) {
+    epSlug = rawId.slice("dorama:".length);
+  } else if (rawId.startsWith("dsub:")) {
+    epSlug = rawId.slice("dsub:".length);
+  } else if (rawId.startsWith("dflix:")) {
+    epSlug = rawId.slice("dflix:".length);
+  } else if (rawId.startsWith("kplay:")) {
+    const parts = rawId.split(":");
+    if (parts[1] === "ep") {
+      epSlug = parts.slice(2).join(":");
+    } else if (parts[1] === "movie") {
+      epSlug = `${parts.slice(2).join(":")}-1x1`;
+    } else {
+      epSlug = parts.slice(1).join(":");
+    }
+  }
+
+  const tasks: Promise<{ streams: any[] }>[] = [];
+
+  if (rawId.startsWith("dorama:")) {
+    tasks.push(getDoramaStreams(DORAMA_SOURCES.dorama, rawId, env, request));
+  } else if (epSlug) {
+    tasks.push(getDoramaStreams(DORAMA_SOURCES.dorama, `dorama:${epSlug}`, env, request));
+  }
+
+  if (rawId.startsWith("dsub:")) {
+    tasks.push(getDoramaStreams(DORAMA_SOURCES.dsub, rawId, env, request));
+  } else if (epSlug) {
+    tasks.push(getDoramaStreams(DORAMA_SOURCES.dsub, `dsub:${epSlug}`, env, request));
+  }
+
+  if (rawId.startsWith("kplay:")) {
+    tasks.push(getKplayStreams(rawId, env, request));
+  } else if (epSlug) {
+    tasks.push(getKplayStreams(`kplay:ep:${epSlug}`, env, request));
+  }
+
+  if (rawId.startsWith("dflix:")) {
+    tasks.push(getDoramasflixStreams(rawId, env, request));
+  } else if (epSlug) {
+    tasks.push(getDoramasflixStreams(`dflix:${epSlug}`, env, request));
+  }
+
+  const results = await Promise.allSettled(tasks);
+  const combinedStreams: any[] = [];
+  const seenKey = new Set<string>();
+
+  for (const res of results) {
+    if (res.status === "fulfilled" && Array.isArray(res.value?.streams)) {
+      for (const st of res.value.streams) {
+        const key = st.url || st.externalUrl;
+        if (key && !seenKey.has(key)) {
+          seenKey.add(key);
+          combinedStreams.push(st);
+        }
+      }
+    }
+  }
+
+  return { streams: combinedStreams };
 }
 
 export default {
@@ -242,7 +295,7 @@ export default {
       }
       return json({
         error:
-          "Missing ?key= (full KV key, e.g. stream:v3:dflix:slug-1x1) or no KV binding",
+          "Missing ?key= (full KV key, e.g. stream:v4:dflix:slug-1x1, meta:{id} or epmap:v1:kplay:{titleKey}) or no KV binding",
       });
     }
 
@@ -305,7 +358,7 @@ export default {
     const streamM = path.match(/^\/stream\/([^/]+)\/(.+)\.json$/);
     if (streamM) {
       const id = decodeURIComponent(streamM[2]);
-      const cached = await cacheGet(`stream:v3:${id}`, env.STREAM_CACHE);
+      const cached = await cacheGet(`stream:v4:${id}`, env.STREAM_CACHE);
       if (cached) return json(cached);
       try {
         const { isDecoyUrl } = await import("./extractors");
@@ -316,7 +369,7 @@ export default {
         );
         if (result.streams.length > 0)
           await cacheSet(
-            `stream:v3:${id}`,
+            `stream:v4:${id}`,
             result,
             TTL.stream,
             env.STREAM_CACHE
