@@ -2,7 +2,7 @@ export const ADDON_ID = "com.doramas.stremio";
 
 export const MANIFEST = {
   id: ADDON_ID,
-  version: "1.0.0",
+  version: "1.1.0",
   name: "Doramas",
   description: "Fuentes de Doramas en español y subtituladas",
   logo: "https://doramasflix.in/favicon.ico",
