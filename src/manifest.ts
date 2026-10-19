@@ -2,7 +2,7 @@ export const ADDON_ID = "com.doramas.stremio";
 
 export const MANIFEST = {
   id: ADDON_ID,
-  version: "1.2.0",
+  version: "1.3.0",
   name: "Doramas",
   description: "Fuentes de Doramas en español y subtituladas",
   logo: "https://doramasflix.in/favicon.ico",
@@ -14,6 +14,7 @@ export const MANIFEST = {
     { type: "series", id: "kplay-directory", name: "KDramas Play — Directorio", extra: [{ name: "search", isRequired: false }, { name: "skip", isRequired: false }] },
     { type: "series", id: "doramasflix-directory", name: "Doramasflix — Directorio", extra: [{ name: "search", isRequired: false }, { name: "skip", isRequired: false }] },
     { type: "series", id: "tudorama-directory", name: "TuDorama — Directorio", extra: [{ name: "search", isRequired: false }, { name: "skip", isRequired: false }] },
+    { type: "series", id: "pandrama-directory", name: "Pandrama — Today Popular", extra: [{ name: "search", isRequired: false }, { name: "skip", isRequired: false }] },
   ],
-  idPrefixes: ["dorama:", "dsub:", "kplay:", "dflix:", "tudorama:"],
+  idPrefixes: ["dorama:", "dsub:", "kplay:", "dflix:", "tudorama:", "pandrama:"],
 };

@@ -83,8 +83,8 @@ async function handleFetch(target: string): Promise<Response> {
     logErr("fetch", `url inválida: ${trunc(target, 120)}`);
     return jsonError("invalid url", 400);
   }
-  // Allowlist: doramaslat.com, doramedplay.net, kdramasplay.com, doramasflix.in, tudorama.com.
-  if (u.protocol !== "https:" || !/(^|\.)(doramaslat\.com|doramedplay\.net|kdramasplay\.com|doramasflix\.in|tudorama\.com)$/i.test(u.hostname)) {
+  // Allowlist: doramaslat.com, doramedplay.net, kdramasplay.com, doramasflix.in, tudorama.com, pandrama.tv.
+  if (u.protocol !== "https:" || !/(^|\.)(doramaslat\.com|doramedplay\.net|kdramasplay\.com|doramasflix\.in|tudorama\.com|pandrama\.tv)$/i.test(u.hostname)) {
     logErr("fetch", `host no permitido: ${u.protocol}//${u.hostname}`);
     return jsonError("host not allowed", 403);
   }
