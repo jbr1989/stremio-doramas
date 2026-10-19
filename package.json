@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "npx wrangler dev",
-    "deploy": "npx wrangler@4 deploy",
-    "tsc": "npx tsc --noEmit"
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tsc": "tsc --noEmit",
+    "build": "tsc --noEmit"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.0.0",
