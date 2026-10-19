@@ -216,6 +216,17 @@ export async function getDoramaYtStreams(
   } catch {
     html = "";
   }
+  if (!html) {
+    const resolved = await resolveDytEpisodeSlug(epSlug, env);
+    if (resolved && resolved !== epSlug) {
+      console.log(`[dyt] slug resuelto: ${epSlug} → ${resolved}`);
+      try {
+        html = await fetchHtml(`${DORAMASYT_BASE}/ver/${resolved}`, env);
+      } catch {
+        html = "";
+      }
+    }
+  }
   if (!html) return { streams: [] };
 
   const playerTokens: { token: string; server: string }[] = [];
