@@ -35,6 +35,11 @@ import {
   getDoramasflixMeta,
   getDoramasflixStreams,
 } from "./sources/doramasflix";
+import {
+  getTudoramaCatalog,
+  getTudoramaMeta,
+  getTudoramaStreams,
+} from "./sources/tudorama";
 
 async function getCatalog(
   catalogId: string,
@@ -48,6 +53,8 @@ async function getCatalog(
   if (catalogId.startsWith("kplay")) return getKplayCatalog(extra, env);
   if (catalogId.startsWith("doramasflix"))
     return getDoramasflixCatalog(extra, env);
+  if (catalogId.startsWith("tudorama"))
+    return getTudoramaCatalog(extra, env);
   return getDoramasflixCatalog(extra, env);
 }
 
@@ -58,6 +65,7 @@ async function getMeta(id: string, tmdbKey: string, env?: Env) {
     return getDoramaMeta(DORAMA_SOURCES.dsub, id, tmdbKey, env);
   if (id.startsWith("kplay:")) return getKplayMeta(id, tmdbKey, env);
   if (id.startsWith("dflix:")) return getDoramasflixMeta(id, tmdbKey, env);
+  if (id.startsWith("tudorama:")) return getTudoramaMeta(id, tmdbKey, env);
   return { meta: null };
 }
 
@@ -69,6 +77,8 @@ async function getStreams(rawId: string, env: Env, request: Request) {
     epSlug = rawId.slice("dsub:".length);
   } else if (rawId.startsWith("dflix:")) {
     epSlug = rawId.slice("dflix:".length);
+  } else if (rawId.startsWith("tudorama:")) {
+    epSlug = rawId.slice("tudorama:".length);
   } else if (rawId.startsWith("kplay:")) {
     const parts = rawId.split(":");
     if (parts[1] === "ep") {
@@ -104,6 +114,12 @@ async function getStreams(rawId: string, env: Env, request: Request) {
     tasks.push(getDoramasflixStreams(rawId, env, request));
   } else if (epSlug) {
     tasks.push(getDoramasflixStreams(`dflix:${epSlug}`, env, request));
+  }
+
+  if (rawId.startsWith("tudorama:")) {
+    tasks.push(getTudoramaStreams(rawId, env, request));
+  } else if (epSlug) {
+    tasks.push(getTudoramaStreams(`tudorama:${epSlug}`, env, request));
   }
 
   const results = await Promise.allSettled(tasks);
