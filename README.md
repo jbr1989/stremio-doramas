@@ -14,6 +14,7 @@ Addon de Stremio para ver **doramas en español** (sub español/latino), corrien
 | `dsub:` | [doramedplay.net](https://doramedplay.net) | `src/sources/doramas.ts` | WordPress + tema DooPlay | ✅ Funcional |
 | `kplay:` | [kdramasplay.com](https://kdramasplay.com) | `src/sources/kdramasplay.ts` | WordPress + tema DooPlay | ⚠️ Episodios sin streams (ver problema conocido) |
 | `dflix:` | [doramasflix.in](https://doramasflix.in) | `src/sources/doramasflix.ts` | App propia (GraphQL) | ✅ Funcional |
+| `tudorama:` | [tudorama.com](https://tudorama.com) | `src/sources/tudorama.ts` | WordPress + tema WStream | ✅ Funcional |
 | `pandrama:` | [pandrama.tv](https://www.pandrama.tv) | `src/sources/pandrama.ts` | App propia (Laravel + React) | ✅ Funcional |
 
 Todas exponen catálogo (directorio + búsqueda), meta con episodios (pósteres vía TMDB) y streams.
@@ -92,13 +93,12 @@ streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|do7
 
 | Sitio | Tecnología | Hallazgos | Esfuerzo |
 |---|---|---|---|
-| **[tudorama.com](https://tudorama.com)** ⭐ | WP + tema propio "WStream 2.1.6" | Episodios `/ver/{slug}-s1xN`; player vía AJAX custom (`admin-ajax.php` presente pero acción distinta a DooPlay). | Medio |
 | **[doramasyt.com](https://www.doramasyt.com)** | App propia (no WP), carga dinámica | Episodios `/ver/{slug}-episodio-N`; servidores DooD, StreamTape, Filemoon → requiere extractores nuevos (DooD/StreamTape son duros; Filemoon viable). | Alto |
 | **[seriesbl.net](https://seriesbl.net)** | WordPress + DooPlay | Patrón DooPlay estándar: basta añadir una entrada a `DORAMA_SOURCES`. Nicho: series/pelis Boys Love. | Bajo |
 
 Descartados: `doramedplay.com` (misma marca que doramedplay.net, ya integrada como `dsub:`), `doramasmp4.com` (muerto, redirige a la alianza antipiratería; **no confundir con `doramasmp4.io`, espejo vivo de la plataforma doramasflix** — ver arriba) y `doramasia.com` como fuente independiente (es espejo de la plataforma dflix, ver arriba; su contenido ya se sirve bajo `dflix:`).
 
-Orden de integración sugerido: `tudorama.com` → `doramasyt.com` → `seriesbl.net` (nicho). (El fix de `kplay` está aplicado — ver arriba.)
+Orden de integración sugerido: `doramasyt.com` → `seriesbl.net` (nicho). (El fix de `kplay` está aplicado — ver arriba.)
 
 ## Añadir a Stremio
 

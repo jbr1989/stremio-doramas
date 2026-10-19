@@ -1,8 +1,8 @@
 # Addon Stremio de Doramas
 
 Cloudflare Worker que sirve el protocolo de addon de Stremio (`com.doramas.stremio`,
-v1.0.0) para **5 fuentes de doramas**: doramaslat.com, doramedplay.net,
-kdramasplay.com (WordPress + tema DooPlay), doramasflix.in (GraphQL) y pandrama.tv. Archivo
+v1.0.0) para **6 fuentes de doramas**: doramaslat.com, doramedplay.net,
+kdramasplay.com (WordPress + tema DooPlay), doramasflix.in (GraphQL), tudorama.com y pandrama.tv. Archivo
 principal: `src/index.ts`, más un servicio auxiliar `deno/fetch.ts` que corre en
 **Deno Deploy** (ver notas del proxy abajo; `deno.json` fija su entrypoint). El
 Worker se despliega con **Cloudflare Workers Builds** (integración Git del dashboard)
@@ -17,7 +17,7 @@ Contratos estables. Cambiarlos es trabajo de protocolo y debe cumplir la spec
 - **Rutas**: `/manifest.json`, `/catalog/...`, `/meta/...`, `/stream/...`, más
   `/proxy/m3u8` + `/proxy/seg` (proxy de reescritura HLS) y los endpoints `/debug*`.
   Toda respuesta JSON pasa por `json()` y lleva cabeceras CORS.
-- **Esquema de IDs** (5 prefijos, `idPrefixes: ["dorama:", "dsub:", "kplay:", "dflix:", "pandrama:"]`):
+- **Esquema de IDs** (6 prefijos, `idPrefixes: ["dorama:", "dsub:", "kplay:", "dflix:", "tudorama:", "pandrama:"]`):
   - `dorama:{slug}` / `dsub:{slug}` — meta de serie.
   - `dorama:{slug}-1x{N}` / `dsub:{slug}-1x{N}` — streams de episodio
     (validado con `/-\d+x\d+$/`, página fuente `/episodes/{slug}-1xN/`).
@@ -25,6 +25,7 @@ Contratos estables. Cambiarlos es trabajo de protocolo y debe cumplir la spec
   - `kplay:ep:{epSlug}` / `kplay:movie:{slug}` — streams de episodio/película
     (páginas `/episodios/{epSlug}/` y `/peliculas/{slug}/`).
   - `dflix:{slug}` — meta; `dflix:{slug}-1x{N}` — streams/episodios.
+  - `tudorama:{slug}` — meta; `tudorama:{slug}-s{S}x{E}` — streams de episodio.
   - `pandrama:{id}:{slug}` — meta; `pandrama:{titleId}:ep:{videoId}` — streams de episodio.
 - **Los objetos stream llevan `title` O `description`, nunca ambos**: stremio-core
   (el núcleo Rust detrás de Android + Web) deserializa `title` como alias serde de
@@ -36,7 +37,7 @@ Contratos estables. Cambiarlos es trabajo de protocolo y debe cumplir la spec
 - **Presupuesto de tiempo**: el Worker tiene 30s de muro; `fetchHtml` impone 25s.
   Toda llamada de red nueva necesita un `AbortSignal.timeout` explícito.
 - **Ruta de fetch de HTML**: los sitios de doramas bloquean el egress del Worker
-  a nivel de red, así que el `fetch` directo desde el Worker no es fiable.
+  a level de red, así que el `fetch` directo desde el Worker no es fiable.
   `fetchHtml` **racea** el directo contra `FETCH_PROXY_URL` (el proxy de Deno
   Deploy `deno/fetch.ts`, la ruta fiable) y toma el primer HTML válido; después
   cae a Browser Rendering (si está configurado) → proxies CORS gratuitos (casi
@@ -44,7 +45,7 @@ Contratos estables. Cambiarlos es trabajo de protocolo y debe cumplir la spec
   (`SiteNotFoundError`), `fetchHtml` no prueba ni render ni proxies: la página no
   existe y reintentarla solo quemaría ~16s (esto es el común en streams con slug
   de episodio inexistente en un sitio). Los 403/5xx sí reintentan (bloqueo de CF
-  que un proxy puede salvar). El proxy permite solo los 4 dominios de dorama
+  que un proxy puede salvar). El proxy permite solo los dominios de dorama
   integrados (allowlist en `deno/fetch.ts`).
 - **Slug mapping entre sitios** (`src/sources/slugmap.ts`): el fan-out de
   `getStreams` reutiliza el epSlug del sitio origen en los otros, pero cada
