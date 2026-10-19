@@ -243,6 +243,11 @@ export async function getPandramaStreams(
           bingeGroup: "pandrama-hls",
         },
       });
+      add({
+        externalUrl: src,
+        name: "Pandrama 🌐",
+        title: `🌐 ${serverName} (HLS Directo) — Pandrama`,
+      });
       continue;
     }
 
