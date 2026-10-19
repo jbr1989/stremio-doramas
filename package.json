@@ -8,9 +8,11 @@
     "tsc": "tsc --noEmit",
     "build": "tsc --noEmit"
   },
-  "devDependencies": {
+  "dependencies": {
     "@cloudflare/workers-types": "^4.0.0",
-    "typescript": "^5.0.0",
+    "typescript": "^5.0.0"
+  },
+  "devDependencies": {
     "wrangler": "^4.67.1"
   }
 }
