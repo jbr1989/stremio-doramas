@@ -44,11 +44,13 @@ import {
   getPandramaCatalog,
   getPandramaMeta,
   getPandramaStreams,
+  pandramaEpCanonicalSlug,
 } from "./sources/pandrama";
 import {
   getDoramaYtCatalog,
   getDoramaYtMeta,
   getDoramaYtStreams,
+  canonicalDytSlug,
 } from "./sources/doramasyt";
 
 async function getCatalog(
@@ -87,6 +89,7 @@ async function getMeta(id: string, tmdbKey: string, env?: Env) {
 
 async function getStreams(rawId: string, env: Env, request: Request) {
   let epSlug = "";
+  let pandramaVideoId = "";
   if (rawId.startsWith("dorama:")) {
     epSlug = rawId.slice("dorama:".length);
   } else if (rawId.startsWith("dsub:")) {
@@ -94,7 +97,9 @@ async function getStreams(rawId: string, env: Env, request: Request) {
   } else if (rawId.startsWith("dflix:")) {
     epSlug = rawId.slice("dflix:".length);
   } else if (rawId.startsWith("dyt:")) {
-    epSlug = rawId.slice("dyt:".length);
+    // DYT usa "titulo-episodio-N": a la forma canónica "titulo-1xN" para que
+    // las demás fuentes (guardean sobre -\d+x\d+$) acepten el slug.
+    epSlug = canonicalDytSlug(rawId.slice("dyt:".length));
   } else if (rawId.startsWith("tudorama:")) {
     epSlug = rawId.slice("tudorama:".length);
   } else if (rawId.startsWith("kplay:")) {
@@ -108,9 +113,19 @@ async function getStreams(rawId: string, env: Env, request: Request) {
     }
   } else if (rawId.startsWith("pandrama:")) {
     const content = rawId.slice("pandrama:".length);
-    if (!content.includes(":ep:")) {
+    if (content.includes(":ep:")) {
+      // pandrama:{titleId}:ep:{videoId} — el video no da slug comparable: se
+      // resuelve más abajo (async) a "titulo-NxM" para el fan-out.
+      pandramaVideoId = content.split(":ep:")[1] || "";
+    } else {
       epSlug = content;
     }
+  }
+
+  // Resolución async solo para pandrama: representa el video como episodio en
+  // el resto de fuentes (cacheada en KV); si falla, queda solo la fuente propia.
+  if (pandramaVideoId) {
+    epSlug = (await pandramaEpCanonicalSlug(pandramaVideoId, env)) || "";
   }
 
   const tasks: Promise<{ streams: any[] }>[] = [];

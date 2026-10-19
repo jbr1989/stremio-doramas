@@ -160,6 +160,16 @@ export async function getDoramaYtMeta(
   };
 }
 
+// DoramasYT emite slugs "titulo(-latino)?-episodio-N"; las demás fuentes exigen
+// "titulo-NxM" (guard de doramas.ts y parseSxE de slugmap.ts). Convierte el slug
+// propio a la forma canónica para que getStreams pueda hacer el fan-out.
+export function canonicalDytSlug(slug: string): string {
+  if (/-\d+x\d+$/.test(slug)) return slug;
+  const m = slug.match(/^(.*?)-episodio-(\d+)$/i);
+  if (!m) return slug;
+  return `${m[1]}-1x${parseInt(m[2], 10)}`;
+}
+
 export async function resolveDytEpisodeSlug(
   epSlug: string,
   env: Env
