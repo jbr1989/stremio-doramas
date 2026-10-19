@@ -27,7 +27,11 @@ export interface SiteAdapter {
 }
 
 const EP_MAP_TTL = 24 * 3600; // 24 h
-const NEG_TTL = 60 * 60; // 1 h
+// 20 min: corta para auto-curar falsos "no match" transitorios (p. ej. una
+// búsqueda de dflix throttled devuelve 200 con items vacíos y parece serie
+// inexistente), pero suficiente para no repetir la búsqueda en cada visita
+// (el cache de stream:v4 solo se escribe con streams > 0, cada 30 min).
+const NEG_TTL = 20 * 60;
 const RESOLVE_BUDGET_MS = 12000;
 const SCORE_MIN = 0.5; // contención mínima tokens título ↔ slug de serie
 
