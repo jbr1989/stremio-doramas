@@ -14,6 +14,7 @@ Addon de Stremio para ver **doramas en español** (sub español/latino), corrien
 | `dsub:` | [doramedplay.net](https://doramedplay.net) | `src/sources/doramas.ts` | WordPress + tema DooPlay | ✅ Funcional |
 | `kplay:` | [kdramasplay.com](https://kdramasplay.com) | `src/sources/kdramasplay.ts` | WordPress + tema DooPlay | ⚠️ Episodios sin streams (ver problema conocido) |
 | `dflix:` | [doramasflix.in](https://doramasflix.in) | `src/sources/doramasflix.ts` | App propia (GraphQL) | ✅ Funcional |
+| `pandrama:` | [pandrama.tv](https://www.pandrama.tv) | `src/sources/pandrama.ts` | App propia (Laravel + React) | ✅ Funcional |
 
 Todas exponen catálogo (directorio + búsqueda), meta con episodios (pósteres vía TMDB) y streams.
 

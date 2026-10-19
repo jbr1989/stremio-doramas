@@ -1,8 +1,8 @@
 # Addon Stremio de Doramas
 
 Cloudflare Worker que sirve el protocolo de addon de Stremio (`com.doramas.stremio`,
-v1.0.0) para **4 fuentes de doramas**: doramaslat.com, doramedplay.net,
-kdramasplay.com (WordPress + tema DooPlay) y doramasflix.in (GraphQL). Archivo
+v1.0.0) para **5 fuentes de doramas**: doramaslat.com, doramedplay.net,
+kdramasplay.com (WordPress + tema DooPlay), doramasflix.in (GraphQL) y pandrama.tv. Archivo
 principal: `src/index.ts`, más un servicio auxiliar `deno/fetch.ts` que corre en
 **Deno Deploy** (ver notas del proxy abajo; `deno.json` fija su entrypoint). El
 Worker se despliega con **Cloudflare Workers Builds** (integración Git del dashboard)
@@ -17,7 +17,7 @@ Contratos estables. Cambiarlos es trabajo de protocolo y debe cumplir la spec
 - **Rutas**: `/manifest.json`, `/catalog/...`, `/meta/...`, `/stream/...`, más
   `/proxy/m3u8` + `/proxy/seg` (proxy de reescritura HLS) y los endpoints `/debug*`.
   Toda respuesta JSON pasa por `json()` y lleva cabeceras CORS.
-- **Esquema de IDs** (4 prefijos, `idPrefixes: ["dorama:", "dsub:", "kplay:", "dflix:"]`):
+- **Esquema de IDs** (5 prefijos, `idPrefixes: ["dorama:", "dsub:", "kplay:", "dflix:", "pandrama:"]`):
   - `dorama:{slug}` / `dsub:{slug}` — meta de serie.
   - `dorama:{slug}-1x{N}` / `dsub:{slug}-1x{N}` — streams de episodio
     (validado con `/-\d+x\d+$/`, página fuente `/episodes/{slug}-1xN/`).
@@ -25,6 +25,7 @@ Contratos estables. Cambiarlos es trabajo de protocolo y debe cumplir la spec
   - `kplay:ep:{epSlug}` / `kplay:movie:{slug}` — streams de episodio/película
     (páginas `/episodios/{epSlug}/` y `/peliculas/{slug}/`).
   - `dflix:{slug}` — meta; `dflix:{slug}-1x{N}` — streams/episodios.
+  - `pandrama:{id}:{slug}` — meta; `pandrama:{titleId}:ep:{videoId}` — streams de episodio.
 - **Los objetos stream llevan `title` O `description`, nunca ambos**: stremio-core
   (el núcleo Rust detrás de Android + Web) deserializa `title` como alias serde de
   `description`, así que un objeto con ambos falla como campo duplicado y el cliente
