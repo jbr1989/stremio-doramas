@@ -56,8 +56,12 @@ Contratos estables. Cambiarlos es trabajo de protocolo y debe cumplir la spec
   de una lectura de KV) y cache negativa `epmap:v1nx:{site}:{titleKey}` (1h;
   el timeout de resolución NO la escribe). Presupuesto: el resolve entero va
   en carrera contra 12s y solo corre en el camino de fallo (404), así que el
-  camino feliz no paga nada. doramasflix (`dflix`) NO participa: usa GraphQL
-  con ids sintéticos propios.
+  camino feliz no paga nada. doramasflix (`dflix`) SÍ participa, con un adapter
+  propio NO-DooPlay: la búsqueda es su GraphQL `searchFullDoramas` (por nombre,
+  variable `String!`) en vez de HTML, y su `fetchEpisodes` reusa
+  `getDoramasflixMeta` (sin TMDB) porque sus slugs de episodio se recomponen
+  aritméticamente como `{serieSlug}-{s}x{e}` (detalle: `detailEpisode` valida
+  la existencia real después del resolve).
 - **Extracción manual-first**: fetch HTTP directo más parse/unpack dentro del
   Worker — sin puente de navegador headless (el puente Render y el import de
   `@cloudflare/puppeteer` causaron caídas/crashes 1101 y ya no existen). La única

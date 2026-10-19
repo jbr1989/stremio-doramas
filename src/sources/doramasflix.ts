@@ -1,6 +1,7 @@
 import { Env } from "../types";
 import { CHROME_UA, decodeEntities, fetchTmdb, netFetch, toMetaPreview } from "../utils";
 import { extractMp4upload } from "../extractors";
+import { resolveEpisodeSlug, searchVariants } from "./slugmap";
 
 const GRAPHQL_ENDPOINT = "https://user-api.seriesapi.co/graphql";
 const DORAMASFLIX_BASE = "https://doramasflix.in";
@@ -222,6 +223,95 @@ function decodeEmbedUrl(url: string): string {
   return url;
 }
 
+const EPISODE_DETAIL_QUERY = `
+  query EpisodeDetailSlug($slug: String!) {
+    detailEpisode(filter: { slug: $slug }) {
+      _id
+      name
+      slug
+      episode_number
+      season_number
+    }
+  }
+`;
+
+/** `_id` + `slug` del episodio por slug sintético ({serieSlug}-{s}x{e}) —
+ * o null si el slug no existe en su BD (detailEpisode null) o la GraphQL
+ * falla/transcurre con error. Null NO distingue not-found de error: el
+ * llamador decide si resuelve o termina. */
+async function getEpisodeBySlug(
+  epSlug: string
+): Promise<{ id: string; slug: string } | null> {
+  try {
+    const data = await fetchGql(EPISODE_DETAIL_QUERY, { slug: epSlug });
+    const ep = data?.detailEpisode;
+    return ep?._id ? { id: ep._id, slug: ep.slug } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Resuelve el epSlug propio de doramasflix para un epSlug venido de otro
+ * sitio (mapping por título, ver slugmap.ts). dflix no tiene HTML que raspar:
+ * la búsqueda es su GraphQL `searchFullDoramas` (por nombre, ya existente en
+ * el catálogo) y el id del episodio se RECOMPOne aritméticamente con el
+ * serieSlug de su BD: sus slugs de episodio siguen el patrón
+ * `{serieSlug}-{s}x{e}` (el mismo que genera getDoramasflixMeta). */
+export async function resolveDflixEpisodeSlug(
+  epSlug: string,
+  env: Env
+): Promise<string | null> {
+  const SEARCH_QUERY = `
+    query SearchFullDoramas($input: String!, $page: Int, $perPage: Int) {
+      searchFullDoramas(input: $input, page: $page, perPage: $perPage) {
+        items { _id slug }
+      }
+    }
+  `;
+  return resolveEpisodeSlug(
+    {
+      site: "dflix",
+      searchSeries: (title) =>
+        (async () => {
+          const slugs = new Set<string>();
+          for (const v of searchVariants(title)) {
+            const data = await fetchGql(SEARCH_QUERY, {
+              input: v,
+              page: 1,
+              perPage: 20,
+            });
+            for (const it of data?.searchFullDoramas?.items || [])
+              if (it?.slug) slugs.add(it.slug);
+          }
+          return [...slugs];
+        })(),
+      fetchEpisodes: (seriesSlug) =>
+        (async () => {
+          // detailDorama (query del meta) trae seasons {season_number,
+          // number_of_episodes}: de ahí sale el mapa completo SxE → slug con
+          // el mismo criterio que getDoramasflixMeta usa para sus videos.
+          const detail = await getDoramasflixMeta(
+            `dflix:${seriesSlug}`,
+            "", // sin TMDB: solo se necesitan las seasons
+            env
+          );
+          const videos = (detail.meta as any)?.videos || [];
+          const list: { s: number; e: number; epSlug: string }[] = [];
+          for (const v of videos)
+            if (v?.season && v?.episode)
+              list.push({
+                s: v.season,
+                e: v.episode,
+                epSlug: `${seriesSlug}-${v.season}x${v.episode}`,
+              });
+          return list;
+        })(),
+    },
+    epSlug,
+    env
+  );
+}
+
 export async function getDoramasflixStreams(
   rawId: string,
   env: Env,
@@ -229,27 +319,21 @@ export async function getDoramasflixStreams(
 ) {
   const epSlug = rawId.replace("dflix:", "");
 
-  const epDetailQuery = `
-    query EpisodeDetailSlug($slug: String!) {
-      detailEpisode(filter: { slug: $slug }) {
-        _id
-        name
-        slug
-        episode_number
-        season_number
-      }
+  const found = await getEpisodeBySlug(epSlug);
+  let epId = found?.id || "";
+  if (!epId) {
+    // Slug venido de otro sitio (o fallo transitorio): resolver por título y
+    // recomponer el id dflix (dflix:{serieSlug}-{s}x{e}) para reintentar. El
+    // re-intent vale aunque coincida el slug: barato (1 GraphQL) y cubre el
+    // caso de la primera query muerta por red.
+    const resolved = await resolveDflixEpisodeSlug(epSlug, env);
+    if (resolved) {
+      if (resolved !== epSlug)
+        console.log(`[dflix] slug resuelto: ${epSlug} → ${resolved}`);
+      const found2 = await getEpisodeBySlug(resolved);
+      epId = found2?.id || "";
     }
-  `;
-
-  let epData: any;
-  try {
-    epData = await fetchGql(epDetailQuery, { slug: epSlug });
-  } catch (e) {
-    console.error(`Error fetching Doramasflix episode detail: ${e}`);
-    return { streams: [] };
   }
-
-  const epId = epData?.detailEpisode?._id;
   if (!epId) return { streams: [] };
 
   const linksQuery = `
