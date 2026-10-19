@@ -45,6 +45,11 @@ import {
   getPandramaMeta,
   getPandramaStreams,
 } from "./sources/pandrama";
+import {
+  getDoramaYtCatalog,
+  getDoramaYtMeta,
+  getDoramaYtStreams,
+} from "./sources/doramasyt";
 
 async function getCatalog(
   catalogId: string,
@@ -62,6 +67,8 @@ async function getCatalog(
     return getTudoramaCatalog(extra, env);
   if (catalogId.startsWith("pandrama"))
     return getPandramaCatalog(extra, env);
+  if (catalogId.startsWith("doramasyt"))
+    return getDoramaYtCatalog(extra, env);
   return getDoramasflixCatalog(extra, env);
 }
 
@@ -74,6 +81,7 @@ async function getMeta(id: string, tmdbKey: string, env?: Env) {
   if (id.startsWith("dflix:")) return getDoramasflixMeta(id, tmdbKey, env);
   if (id.startsWith("tudorama:")) return getTudoramaMeta(id, tmdbKey, env);
   if (id.startsWith("pandrama:")) return getPandramaMeta(id, tmdbKey, env);
+  if (id.startsWith("dyt:")) return getDoramaYtMeta(id, tmdbKey, env);
   return { meta: null };
 }
 
@@ -85,6 +93,8 @@ async function getStreams(rawId: string, env: Env, request: Request) {
     epSlug = rawId.slice("dsub:".length);
   } else if (rawId.startsWith("dflix:")) {
     epSlug = rawId.slice("dflix:".length);
+  } else if (rawId.startsWith("dyt:")) {
+    epSlug = rawId.slice("dyt:".length);
   } else if (rawId.startsWith("tudorama:")) {
     epSlug = rawId.slice("tudorama:".length);
   } else if (rawId.startsWith("kplay:")) {
@@ -139,6 +149,12 @@ async function getStreams(rawId: string, env: Env, request: Request) {
     tasks.push(getPandramaStreams(rawId, env, request));
   } else if (epSlug) {
     tasks.push(getPandramaStreams(`pandrama:${epSlug}`, env, request));
+  }
+
+  if (rawId.startsWith("dyt:")) {
+    tasks.push(getDoramaYtStreams(rawId, env, request));
+  } else if (epSlug) {
+    tasks.push(getDoramaYtStreams(`dyt:${epSlug}`, env, request));
   }
 
   const results = await Promise.allSettled(tasks);
