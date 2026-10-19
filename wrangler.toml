@@ -1,5 +1,5 @@
 # Must match the Worker's name in the Cloudflare dashboard — the deployed
-# service is "123456" (https://123456.vegettoson83.workers.dev). A different
+# service is "stremio-doramas" (https://stremio-doramas.jbr1989-b26.workers.dev). A different
 # name here makes a manual `wrangler deploy` create a second Worker at a new
 # URL instead of updating the live one.
 name = "stremio-doramas"
