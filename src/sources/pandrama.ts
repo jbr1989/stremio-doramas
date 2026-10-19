@@ -4,6 +4,13 @@ import { extractMp4upload } from "../extractors";
 
 const PANDRAMA_BASE = "https://www.pandrama.tv";
 
+// /explorar filtrado por mainType id 2 ("Drama"), orden por vistas del día.
+// Excluye server-side "Shorts" (id 4) y películas (id 1). Pagina con &page=N
+// (Laravel: per_page=48, next_page, total).
+const PANDRAMA_EXPLORE_DAILY =
+  "/explorar?filters=W3sia2V5IjoibWFpblR5cGVzIiwidmFsdWUiOlsyXSwib3BlcmF0b3IiOiJoYXNBbGwifV0=&order=views_day:desc";
+const PANDRAMA_PAGE_SIZE = 48;
+
 export async function fetchPandramaData(path: string, env?: Env): Promise<any | null> {
   const url = path.startsWith("http") ? path : `${PANDRAMA_BASE}${path.startsWith("/") ? "" : "/"}${path}`;
   const proxyBase = env?.FETCH_PROXY_URL?.trim();
@@ -59,6 +66,14 @@ function normalizePoster(rawPoster?: string): string {
   return `${PANDRAMA_BASE}/${rawPoster.replace(/^\//, "")}`;
 }
 
+// Defensa por si la fuente vuelve a mezclar shorts: main_type llega como
+// "Shorts" (catálogo) o "shorts" (búsqueda), así que se compara en minúsculas.
+function isPandramaShort(item: any): boolean {
+  const types = Array.isArray(item?.main_types) ? item.main_types : [];
+  if (types.some((t: any) => String(t?.name || "").toLowerCase() === "shorts")) return true;
+  return String(item?.main_type || "").toLowerCase() === "shorts";
+}
+
 export async function getPandramaCatalog(
   extra: Record<string, string>,
   env?: Env
@@ -67,7 +82,8 @@ export async function getPandramaCatalog(
   if (q) {
     const data = await fetchPandramaData(`/search/${encodeURIComponent(q)}`, env);
     const results = data?.loaders?.searchPage?.results || [];
-    const metas = results.map((item: any) =>
+    const items = results.filter((item: any) => !isPandramaShort(item));
+    const metas = items.map((item: any) =>
       toMetaPreview({
         id: `pandrama:${item.id}:${item.slug || "dorama"}`,
         name: decodeEntities(item.name || "Dorama"),
@@ -77,8 +93,11 @@ export async function getPandramaCatalog(
     return { metas };
   }
 
-  const data = await fetchPandramaData("/channel/agregado-recientemente", env);
-  const items = data?.loaders?.channelPage?.channel?.content?.data || [];
+  const page = Math.floor(Number(extra.skip || 0) / PANDRAMA_PAGE_SIZE) + 1;
+  const data = await fetchPandramaData(`${PANDRAMA_EXPLORE_DAILY}&page=${page}`, env);
+  const items = (data?.loaders?.channelPage?.channel?.content?.data || []).filter(
+    (item: any) => !isPandramaShort(item)
+  );
   const metas = items.map((item: any) =>
     toMetaPreview({
       id: `pandrama:${item.id}:${item.slug || "dorama"}`,
