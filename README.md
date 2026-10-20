@@ -14,7 +14,7 @@ Addon de Stremio para ver **doramas en español** (sub español/latino), corrien
 | `dsub:` | [doramedplay.net](https://doramedplay.net) | `src/sources/doramas.ts` | WordPress + tema DooPlay | ✅ Funcional |
 | `kplay:` | [kdramasplay.com](https://kdramasplay.com) | `src/sources/kdramasplay.ts` | WordPress + tema DooPlay | ⚠️ Episodios sin streams (ver problema conocido) |
 | `dflix:` | [doramasflix.in](https://doramasflix.in) | `src/sources/doramasflix.ts` | App propia (GraphQL) | ✅ Funcional |
-| `tudorama:` | [tudorama.com](https://tudorama.com) | `src/sources/tudorama.ts` | WordPress + tema WStream | ✅ Funcional |
+| `tudorama:` | [tudorama.com](https://tudorama.com) | `src/sources/tudorama.ts` | WordPress + tema WStream | ⚠️ Miniaturas/pósters en blanco en Stremio Web (ver problema conocido) |
 | `pandrama:` | [pandrama.tv](https://www.pandrama.tv) | `src/sources/pandrama.ts` | App propia (Laravel + React) | ✅ Funcional |
 
 Todas exponen catálogo (directorio + búsqueda), meta con episodios (pósteres vía TMDB) y streams.
@@ -88,6 +88,34 @@ streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|do7
 - Redesplegar **ambos** servicios: el Worker (push a `main`) **y** el proyecto de Deno Deploy (la allowlist vive en su edge; un push del Worker no la actualiza).
 - Si el edge de Deno también recibe el challenge de Cloudflare de do7go/playmogo, la playlist no se resolverá: ahí haría falta Cloudflare Browser Rendering como último recurso.
 - Limpiar la caché KV afectada: `/cache-clear?key=stream:v3:kplay:ep:{slug}` (las entradas viejas guardan el fallback `externalUrl`).
+
+## ⚠️ Problema conocido, sin tratar de momento: tudorama oculta sus imágenes por Referer
+
+**Síntoma** (oct. 2026): en Stremio Web, los capítulos de `tudorama:` aparecen
+sin miniaturas y las imágenes de la fuente (`/serie/{slug}` y catálogo) tampoco
+cargan. Los metas están bien (in-vivo: `/meta/series/tudorama:…` sirve
+`thumbnail` en el 100% de los episodios) — lo que falla es la **descarga** de la
+imagen en el navegador.
+
+**Causa raíz verificada**: tudorama.com aplica **hotlink protection por
+Referer** a todas sus imágenes (miniaturas de episodio, pósters del catálogo,
+póster del meta). La misma URL devuelve:
+
+| Referer | Resultado |
+|---|---|
+| `https://app.stremio.com/` (Stremio Web) | **403** |
+| ninguna | 200 |
+| `tudorama.com` (propio sitio) | 200 |
+
+El resto de hosts del addon no bloquean por Referer (doramaslat, doramedplay,
+shortpixel, TMDB — todos 200 con Referer de Stremio), así que las miniaturas
+funcionan en Stremio Web para los otros prefijos (`dorama:`, `dsub:`, `kplay:`,
+`dflix:`, `pandrama:`).
+
+**Decisión (oct. 2026)**: documentado y **no se hace nada de momento**. En
+Stremio Desktop el problema suele no darse; la miniatura tiene fallback al
+póster solo si el dato del episodio viene vacío, no si falla la descarga
+cliente-side.
 
 ## Fuentes futuras (investigadas, pendientes de integrar)
 

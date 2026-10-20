@@ -153,6 +153,34 @@ export async function getKplayMeta(
   }
   episodes.sort((a, b) => a.s - b.s || a.e - b.e);
 
+  // Miniaturas de episodio:  misma grilla DooPlay que doramas.ts
+  // (<div class='imagen'><img src="thumb"></div> ... <a href=".../episodios/epSlug-SxE/">),
+  // la <img> del propio <li> precede al href.
+  const thumbs = new Map<string, string>();
+  const pushThumb = (epSlug: string, raw: string) => {
+    if (thumbs.has(epSlug)) return;
+    if (/dooplay\/assets\/img\/no\/dt_/.test(raw)) return;
+    const thumb = raw.startsWith("http")
+      ? raw
+      : raw.startsWith("//")
+      ? `https:${raw}`
+      : raw.startsWith("/")
+      ? `${KPLAY_BASE}${raw}`
+      : "";
+    if (thumb) thumbs.set(epSlug, thumb);
+  };
+  // preferencia data-src + nunca "data:" (igual que doramas.ts)
+  const imgFromTag = (attrs: string): string =>
+    [attrs.match(/data-src=["']([^"']+)["']/i)?.[1] || "",
+     attrs.match(/(?:^|\s)src=["']([^"']+)["']/i)?.[1] || ""]
+      .find((u) => u && !u.startsWith("data:")) || "";
+  for (const m of html.matchAll(
+    /<img\b([^>]*)>[\s\S]{0,220}?\/episodios\/([a-z0-9-]+-(\d+)x(\d+))\/["']/gi
+  )) {
+    const raw = imgFromTag(m[1]);
+    if (raw) pushThumb(m[2], raw);
+  }
+
   return {
     meta: {
       id,
@@ -168,6 +196,7 @@ export async function getKplayMeta(
         title: `T${ep.s} · Episodio ${ep.e}`,
         season: ep.s,
         episode: ep.e,
+        thumbnail: thumbs.get(ep.slug) || poster,
       })),
     },
   };

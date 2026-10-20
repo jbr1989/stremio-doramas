@@ -218,6 +218,9 @@ export async function getDoramasflixMeta(
         title: ep.title,
         season: ep.season,
         episode: ep.episode,
+        // dflix no expone still por episodio: su listEpisodes exigiría 1
+        // llamada GraphQL por capítulo — caemos al póster de la serie.
+        thumbnail: poster,
       })),
     },
   };
