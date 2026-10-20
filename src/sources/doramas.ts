@@ -178,6 +178,40 @@ export async function getDoramaMeta(
   }
   episodes.sort((a, b) => a.s - b.s || a.e - b.e);
 
+  // Miniaturas de episodio. En la grilla DooPlay cada <li> va
+  // <div class='imagen'><img src="thumb"></div><div class='numerando'>S - E</div>
+  // <div class='episodiotitle'><a href=".../episodes/epSlug-SxE/"> — la <img> del
+  // propio <li> precede al href (≤ ~150 chars, comillas dobles o simples), así
+  // que emparejamos img → primer href tras ella. Cero requests extra.
+  const thumbs = new Map<string, string>();
+  const pushThumb = (epSlug: string, raw: string) => {
+    if (thumbs.has(epSlug)) return;
+    // dt_backdrop/dt_poster es la imagen "sin imagen" del tema DooPlay —
+    // si la instalación no genera stills por episodio, repite ese placeholder.
+    if (/dooplay\/assets\/img\/no\/dt_/.test(raw)) return;
+    const thumb = raw.startsWith("http")
+      ? raw
+      : raw.startsWith("//")
+      ? `https:${raw}`
+      : raw.startsWith("/")
+      ? `${src.base}${raw}`
+      : "";
+    if (thumb) thumbs.set(epSlug, thumb);
+  };
+  // En lazy-load la <img> trae src='data:image/svg…' señuelo y la URL real en
+  // data-src: capturamos el tag completo y preferimos data-src; descartamos
+  // cualquier "data:" y usamos src llano solo si es URL http real.
+  const imgFromTag = (attrs: string): string =>
+    [attrs.match(/data-src=["']([^"']+)["']/i)?.[1] || "",
+     attrs.match(/(?:^|\s)src=["']([^"']+)["']/i)?.[1] || ""]
+      .find((u) => u && !u.startsWith("data:")) || "";
+  for (const m of html.matchAll(
+    /<img\b([^>]*)>[\s\S]{0,220}?\/episodes\/([a-z0-9-]+-(\d+)x(\d+))\/["']/gi
+  )) {
+    const raw = imgFromTag(m[1]);
+    if (raw) pushThumb(m[2], raw);
+  }
+
   const tmdb = await fetchTmdb(name, tmdbKey);
   return {
     meta: {
@@ -194,6 +228,7 @@ export async function getDoramaMeta(
         title: `T${ep.s} · Episodio ${ep.e}`,
         season: ep.s,
         episode: ep.e,
+        thumbnail: thumbs.get(ep.slug) || poster,
       })),
     },
   };

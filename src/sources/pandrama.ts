@@ -188,6 +188,9 @@ export async function getPandramaMeta(
         title: `T${s} · Episodio ${e}`,
         season: s,
         episode: e,
+        // El bootstrapData trae el still de TMDB por episodio; si falta, usa
+        // el póster de la serie.
+        thumbnail: normalizePoster(ep.poster) || poster,
       });
     });
   } else if (titleObj.primary_video?.id) {

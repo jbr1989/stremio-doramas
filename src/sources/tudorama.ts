@@ -177,6 +177,34 @@ export async function getTudoramaMeta(
 
   episodes.sort((a, b) => a.s - b.s || a.e - b.e);
 
+  // Miniaturas de episodio. Cada <li class="lep"> va:
+  // <div class="lep__thumbnail"><img src="thumb"></div><div class="lep__body">…
+  // <div class="lep__play">… <a href=".../ver/{slug}-s{S}x{E}/"> — la <img> del
+  // propio <li> precede al href (≤ ~390 chars entre spans y botón de play).
+  const thumbs = new Map<string, string>();
+  const pushThumb = (epSlug: string, raw: string) => {
+    if (thumbs.has(epSlug)) return;
+    const thumb = raw.startsWith("http")
+      ? raw
+      : raw.startsWith("//")
+      ? `https:${raw}`
+      : raw.startsWith("/")
+      ? `${TUDORAMA_BASE}${raw}`
+      : "";
+    if (thumb) thumbs.set(epSlug, thumb);
+  };
+  // preferencia data-src + nunca "data:" (igual que doramas.ts)
+  const imgFromTag = (attrs: string): string =>
+    [attrs.match(/data-src=["']([^"']+)["']/i)?.[1] || "",
+     attrs.match(/(?:^|\s)src=["']([^"']+)["']/i)?.[1] || ""]
+      .find((u) => u && !u.startsWith("data:")) || "";
+  for (const m of html.matchAll(
+    /<img\b([^>]*)>[\s\S]{0,420}?href=["'](?:https?:\/\/tudorama\.com)?\/ver\/([a-z0-9-]+)-s(\d+)x(\d+)\/["']/gi
+  )) {
+    const raw = imgFromTag(m[1]);
+    if (raw) pushThumb(`${m[2]}-s${m[3]}x${m[4]}`, raw);
+  }
+
   const tmdb = await fetchTmdb(name, tmdbKey);
   return {
     meta: {
@@ -193,6 +221,7 @@ export async function getTudoramaMeta(
         title: `T${ep.s} · Episodio ${ep.e}`,
         season: ep.s,
         episode: ep.e,
+        thumbnail: thumbs.get(ep.slug) || poster,
       })),
     },
   };
