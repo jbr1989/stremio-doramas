@@ -1,5 +1,5 @@
 import { Env } from "../types";
-import { CHROME_HEADERS, CHROME_UA, decodeEntities, fetchTmdb, netFetch, toMetaPreview } from "../utils";
+import { CHROME_HEADERS, CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchTmdb, hostFromEmbed, makeStreamDeduper, netFetch, STREAMWISH_HOSTS_RE, toMetaPreview } from "../utils";
 import { extractMp4upload } from "../extractors";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
 
@@ -44,18 +44,6 @@ export async function fetchTudorama(
   return Promise.any(racers);
 }
 
-export function cleanTudoramaTitle(s: string): string {
-  let t = decodeEntities(s).replace(/^\s*Ver\s+/i, "");
-  t = t.split(/\s+[–—|]\s+/)[0];
-  t = t.split(
-    /\s+(?:subtitulad[oa]|doblad[oa]|online|en\s+hd|sub\s+(?:esp|sp)\w*|castellano|latino)\b/i
-  )[0];
-  return t
-    .replace(/\s*\((?:en\s+emisi[oó]n|finalizado)\)\s*$/i, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 export function parseTudoramaCards(html: string) {
   const results: { id: string; name: string; poster: string }[] = [];
   const seen = new Set<string>();
@@ -70,7 +58,7 @@ export function parseTudoramaCards(html: string) {
       : "";
     results.push({
       id: `${TUDORAMA_PREFIX}:${slug}`,
-      name: cleanTudoramaTitle(rawName) || slug,
+      name: cleanTitle(rawName) || slug,
       poster,
     });
   };
@@ -125,7 +113,7 @@ export async function getTudoramaMeta(
   const html = await fetchTudorama(`${TUDORAMA_BASE}/serie/${slug}/`, env);
 
   const name =
-    cleanTudoramaTitle(
+    cleanTitle(
       html.match(/<meta[^>]+property="og:title"[^>]+content=["']([^"']+)["']/i)?.[1] ||
         html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1] ||
         html.match(/<title>([\s\S]*?)<\/title>/i)?.[1] ||
@@ -358,21 +346,8 @@ export async function getTudoramaStreams(
     }
   }
 
-  const denoBase = (env.FETCH_PROXY_URL || "")
-    .trim()
-    .replace(/\/fetch\/?$/, "")
-    .replace(/\/$/, "");
-
-  const streams: any[] = [];
-  const seenUrl = new Set<string>();
-
-  const add = (s: any) => {
-    const k = s.url || s.externalUrl;
-    if (k && !seenUrl.has(k)) {
-      seenUrl.add(k);
-      streams.push(s);
-    }
-  };
+  const denoBase = denoBaseFromEnv(env);
+  const { add, streams } = makeStreamDeduper();
 
   // Resolve cdn.tudorama.com wrapper links if necessary
   const resolvedEmbeds = await Promise.all(
@@ -403,8 +378,7 @@ export async function getTudoramaStreams(
     const embed = item.embedUrl;
     if (!embed) continue;
 
-    const host =
-      embed.match(/https?:\/\/(?:www\.)?([a-z0-9-]+)\./i)?.[1] || item.name || "host";
+    const host = hostFromEmbed(embed, item.name);
 
     const ext = () =>
       add({
@@ -413,11 +387,7 @@ export async function getTudoramaStreams(
         title: `🌐 ${host} — ${TUDORAMA_LABEL}`,
       });
 
-    if (
-      /streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|do7go|playmogo/i.test(
-        embed
-      )
-    ) {
+    if (STREAMWISH_HOSTS_RE.test(embed)) {
       if (denoBase) {
         add({
           url: `${denoBase}/streamwish?url=${encodeURIComponent(embed)}`,

@@ -1,6 +1,7 @@
 import { Env } from "../types";
-import { CHROME_HEADERS, CHROME_UA, decodeEntities, fetchTmdb, netFetch, toMetaPreview } from "../utils";
+import { CHROME_HEADERS, CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchTmdb, hostFromEmbed, makeStreamDeduper, netFetch, STREAMWISH_HOSTS_RE, toMetaPreview } from "../utils";
 import { extractMp4upload } from "../extractors";
+import { dooPlayerAjaxEmbed } from "./dooplay";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
 
 export interface DoramaSource {
@@ -59,18 +60,6 @@ export async function fetchDorama(
   return Promise.any(racers);
 }
 
-export function cleanDoramaTitle(s: string): string {
-  let t = decodeEntities(s).replace(/^\s*Ver\s+/i, "");
-  t = t.split(/\s+[–—|]\s+/)[0];
-  t = t.split(
-    /\s+(?:subtitulad[oa]|doblad[oa]|online|en\s+hd|sub\s+(?:esp|sp)\w*|castellano|latino)\b/i
-  )[0];
-  return t
-    .replace(/\s*\((?:en\s+emisi[oó]n|finalizado)\)\s*$/i, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 export function parseDoramaCards(html: string, src: DoramaSource) {
   const results: { id: string; name: string; poster: string }[] = [];
   const seen = new Set<string>();
@@ -84,7 +73,7 @@ export function parseDoramaCards(html: string, src: DoramaSource) {
       : "";
     results.push({
       id: `${src.prefix}:${slug}`,
-      name: cleanDoramaTitle(rawName) || slug,
+      name: cleanTitle(rawName) || slug,
       poster,
     });
   };
@@ -139,7 +128,7 @@ export async function getDoramaMeta(
   const slug = id.slice(src.prefix.length + 1);
   const html = await fetchDorama(`${src.base}/tvshows/${slug}/`, env);
   const name =
-    cleanDoramaTitle(
+    cleanTitle(
       html.match(/<meta[^>]+property="og:title"[^>]+content="([^"]+)"/i)?.[1] ||
         html.match(/<title>([\s\S]*?)<\/title>/i)?.[1] ||
         slug
@@ -232,41 +221,6 @@ export async function getDoramaMeta(
       })),
     },
   };
-}
-
-export async function resolveDoramaEmbed(
-  src: DoramaSource,
-  post: string,
-  nume: string,
-  type: string,
-  env?: Env
-): Promise<string | null> {
-  try {
-    const r = await netFetch("direct", `${src.base}/wp-admin/admin-ajax.php`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        "X-Requested-With": "XMLHttpRequest",
-        Referer: `${src.base}/`,
-        "User-Agent": CHROME_UA,
-      },
-      body: `action=doo_player_ajax&post=${encodeURIComponent(
-        post
-      )}&nume=${encodeURIComponent(nume)}&type=${encodeURIComponent(type)}`,
-      signal: AbortSignal.timeout(9000),
-    });
-    if (!r.ok) return null;
-    const data: any = await r.json();
-    const embed = typeof data?.embed_url === "string" ? data.embed_url : "";
-    if (!embed) return null;
-    let embedSrc =
-      embed.match(/<iframe[^>]+src=["']([^"']+)["']/i)?.[1] || embed.trim();
-    embedSrc = embedSrc.replace(/\\\//g, "/");
-    if (embedSrc.startsWith("//")) embedSrc = `https:${embedSrc}`;
-    return /^https?:\/\//i.test(embedSrc) ? embedSrc : null;
-  } catch {
-    return null;
-  }
 }
 
 /** Resuelve el epSlug propio de un sitio DooPlay (dorama=doramaslat, dsub=
@@ -363,29 +317,15 @@ export async function getDoramaStreams(
   }
   if (options.length === 0) return { streams: [] };
 
-  const denoBase = (env.FETCH_PROXY_URL || "")
-    .trim()
-    .replace(/\/fetch\/?$/, "")
-    .replace(/\/$/, "");
-  const streams: any[] = [];
-  const seenUrl = new Set<string>();
-  const add = (s: any) => {
-    const k = s.url || s.externalUrl;
-    if (k && !seenUrl.has(k)) {
-      seenUrl.add(k);
-      streams.push(s);
-    }
-  };
+  const denoBase = denoBaseFromEnv(env);
+  const { add, streams } = makeStreamDeduper();
 
   const embeds = await Promise.all(
-    options.map((o) =>
-      resolveDoramaEmbed(src, o.post, o.nume, o.type, env)
-    )
+    options.map((o) => dooPlayerAjaxEmbed(src.base, o.post, o.nume, o.type))
   );
   for (const embed of embeds) {
     if (!embed) continue;
-    const host =
-      embed.match(/https?:\/\/(?:www\.)?([a-z0-9-]+)\./i)?.[1] || "host";
+    const host = hostFromEmbed(embed);
     const ext = () =>
       add({
         externalUrl: embed,
@@ -393,13 +333,9 @@ export async function getDoramaStreams(
         title: `🌐 ${host} — ${src.label}`,
       });
 
-    if (
-      // Espejos de StreamWish admitidos — mantén sincronizado con deno/fetch.ts
-      // (allowlist de /streamwish) y con las otras fuentes.
-      /streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|do7go|playmogo/i.test(
-        embed
-      )
-    ) {
+    // STREAMWISH_HOSTS_RE: espejos de StreamWish admitidos — mantén
+    // sincronizado con deno/fetch.ts (allowlist de /streamwish).
+    if (STREAMWISH_HOSTS_RE.test(embed)) {
       if (denoBase)
         add({
           url: `${denoBase}/streamwish?url=${encodeURIComponent(embed)}`,

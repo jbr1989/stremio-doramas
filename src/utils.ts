@@ -373,3 +373,64 @@ export function decodeEntities(s: string): string {
     .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)))
     .replace(/&([a-z]+);/gi, (m, e) => ENTITIES[e] ?? m);
 }
+
+// ─── helpers compartidos por las fuentes ────────────────────────────────────
+
+/** Limpieza común de títulos de los sitios DooPlay/WP: quita un "Ver " inicial,
+ * corta en " – / — / |" y desecha las colas del tema ("subtitulado", "doblado",
+ * "online", "en hd", "castellano", "latino", "(en emisión)", "(finalizado)").
+ * Antes vivía copiado ×5 como cleanTudoramaTitle, cleanKplayTitle,
+ * cleanDoramaYtTitle, cleanDoramasflixTitle y cleanDoramaTitle. */
+export function cleanTitle(s: string): string {
+  let t = decodeEntities(s).replace(/^\s*Ver\s+/i, "");
+  t = t.split(/\s+[–—|]\s+/)[0];
+  t = t.split(
+    /\s+(?:subtitulad[oa]|doblad[oa]|online|en\s+hd|sub\s+(?:esp|sp)\w*|castellano|latino)\b/i
+  )[0];
+  return t
+    .replace(/\s*\((?:en\s+emisi[oó]n|finalizado)\)\s*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Hosts/mirrors de StreamWish admitidos por el relay Deno (/streamwish).
+ * Mantener sincronizada con la allowlist de /streamwish en deno/fetch.ts. */
+export const STREAMWISH_HOSTS_RE =
+  /streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|do7go|playmogo/i;
+
+/** Host plano de un embed para el título del stream:
+ * "streamwish" ← https://streamwish.to/e/abc. */
+export function hostFromEmbed(embed: string, fallback = "host"): string {
+  return embed.match(/https?:\/\/(?:www\.)?([a-z0-9-]+)\./i)?.[1] || fallback;
+}
+
+/** Base del relay Deno derivada de FETCH_PROXY_URL:
+ * https://<algo>.deno.dev/fetch → https://<algo>.deno.dev. Antes copiado ×7
+ * (las 6 fuentes + /debug-streamwish en index.ts). */
+export function denoBaseFromEnv(env?: Env): string {
+  return (env?.FETCH_PROXY_URL || "")
+    .trim()
+    .replace(/\/fetch\/?$/, "")
+    .replace(/\/$/, "");
+}
+
+/** Fábrica del deduper de streams compartido: ignora las repeticiones por
+ * url/externalUrl. Uso: `const { add, streams } = makeStreamDeduper();`.
+ * Antes copiado ×6 como `const add = (s: any) => …` (pandrama lo usaba vía
+ * `seen`) + el filtrado final de getStreams en index.ts. */
+export function makeStreamDeduper() {
+  const streams: any[] = [];
+  const seen = new Set<string>();
+  const add = (s: {
+    url?: string;
+    externalUrl?: string;
+    [k: string]: unknown;
+  }) => {
+    const k = s.url || s.externalUrl;
+    if (k && !seen.has(k)) {
+      seen.add(k);
+      streams.push(s);
+    }
+  };
+  return { add, streams };
+}

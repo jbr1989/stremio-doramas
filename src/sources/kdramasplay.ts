@@ -1,21 +1,10 @@
 import { Env } from "../types";
-import { CHROME_UA, decodeEntities, fetchHtml, fetchTmdb, netFetch, toMetaPreview } from "../utils";
+import { CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchHtml, fetchTmdb, hostFromEmbed, makeStreamDeduper, netFetch, STREAMWISH_HOSTS_RE, toMetaPreview } from "../utils";
 import { extractHexload, extractMp4upload } from "../extractors";
+import { dooPlayerAjaxEmbed } from "./dooplay";
 import { resolveEpisodeSlug, searchVariants, type SiteAdapter } from "./slugmap";
 
 export const KPLAY_BASE = "https://kdramasplay.com";
-
-export function cleanKplayTitle(s: string): string {
-  let t = decodeEntities(s).replace(/^\s*Ver\s+/i, "");
-  t = t.split(/\s+[–—|]\s+/)[0];
-  t = t.split(
-    /\s+(?:subtitulad[oa]|doblad[oa]|online|en\s+hd|sub\s+(?:esp|sp)\w*|castellano|latino)\b/i
-  )[0];
-  return t
-    .replace(/\s*\((?:en\s+emisi[oó]n|finalizado)\)\s*$/i, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 export function parseKplayCards(html: string) {
   const results: { id: string; name: string; poster: string }[] = [];
@@ -30,7 +19,7 @@ export function parseKplayCards(html: string) {
       : "";
     results.push({
       id: `kplay:${type}:${slug}`,
-      name: cleanKplayTitle(rawName) || slug,
+      name: cleanTitle(rawName) || slug,
       poster,
     });
   };
@@ -94,7 +83,7 @@ export async function getKplayMeta(
   }
 
   const name =
-    cleanKplayTitle(
+    cleanTitle(
       html.match(/<meta[^>]+property="og:title"[^>]+content="([^"]+)"/i)?.[1] ||
         html.match(/<title>([\s\S]*?)<\/title>/i)?.[1] ||
         slug
@@ -302,41 +291,6 @@ export async function resolveKplayEpisodeSlug(
   );
 }
 
-export async function resolveKplayEmbed(
-  post: string,
-  nume: string,
-  type: string,
-  env?: Env
-): Promise<string | null> {
-  try {
-    const r = await netFetch("direct", `${KPLAY_BASE}/wp-admin/admin-ajax.php`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        "X-Requested-With": "XMLHttpRequest",
-        Referer: `${KPLAY_BASE}/`,
-        "User-Agent": CHROME_UA,
-      },
-      body: `action=doo_player_ajax&post=${encodeURIComponent(
-        post
-      )}&nume=${encodeURIComponent(nume)}&type=${encodeURIComponent(type)}`,
-      signal: AbortSignal.timeout(9000),
-    });
-    if (!r.ok) return null;
-    const data: any = await r.json();
-    const embed = typeof data?.embed_url === "string" ? data.embed_url : "";
-    if (!embed) return null;
-    let embedSrc =
-      embed.match(/<iframe[^>]+src=["']([^"']+)["']/i)?.[1] || embed.trim();
-    embedSrc = embedSrc.replace(/\\\//g, "/");
-    if (embedSrc.startsWith("//")) embedSrc = `https:${embedSrc}`;
-    return /^https?:\/\//i.test(embedSrc) ? embedSrc : null;
-  } catch (ex) {
-    console.error(`Error resolving Kplay embed: ${ex}`);
-    return null;
-  }
-}
-
 export async function getKplayStreams(
   rawId: string,
   env: Env,
@@ -383,30 +337,18 @@ export async function getKplayStreams(
   }
   if (options.length === 0) return { streams: [] };
 
-  const denoBase = (env.FETCH_PROXY_URL || "")
-    .trim()
-    .replace(/\/fetch\/?$/, "")
-    .replace(/\/$/, "");
-  const streams: any[] = [];
-  const seenUrl = new Set<string>();
-  const add = (s: any) => {
-    const k = s.url || s.externalUrl;
-    if (k && !seenUrl.has(k)) {
-      seenUrl.add(k);
-      streams.push(s);
-    }
-  };
+  const denoBase = denoBaseFromEnv(env);
+  const { add, streams } = makeStreamDeduper();
 
   const embeds = await Promise.all(
     options.map((o) =>
-      resolveKplayEmbed(o.post, o.nume, o.type, env)
+      dooPlayerAjaxEmbed(KPLAY_BASE, o.post, o.nume, o.type, "kplay")
     )
   );
 
   for (const embed of embeds) {
     if (!embed) continue;
-    const host =
-      embed.match(/https?:\/\/(?:www\.)?([a-z0-9-]+)\./i)?.[1] || "host";
+    const host = hostFromEmbed(embed);
     const ext = () =>
       add({
         externalUrl: embed,
@@ -414,14 +356,10 @@ export async function getKplayStreams(
         title: `🌐 ${host} — KDramas Play`,
       });
 
-    if (
-      // Espejos de StreamWish admitidos — mantén sincronizado con deno/fetch.ts
-      // (allowlist de /streamwish) y con las otras fuentes. Incluye do7go/playmogo
-      // (espejo actual de kdramasplay).
-      /streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|do7go|playmogo/i.test(
-        embed
-      )
-    ) {
+    // STREAMWISH_HOSTS_RE: espejos de StreamWish admitidos — mantén
+    // sincronizado con deno/fetch.ts (allowlist de /streamwish). Incluye
+    // do7go/playmogo (espejo actual de kdramasplay).
+    if (STREAMWISH_HOSTS_RE.test(embed)) {
       if (denoBase)
         add({
           url: `${denoBase}/streamwish?url=${encodeURIComponent(embed)}`,

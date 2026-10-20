@@ -1,21 +1,9 @@
 import { Env } from "../types";
-import { CHROME_UA, decodeEntities, fetchHtml, fetchTmdb, netFetch, toMetaPreview } from "../utils";
+import { CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchHtml, fetchTmdb, hostFromEmbed, makeStreamDeduper, netFetch, STREAMWISH_HOSTS_RE, toMetaPreview } from "../utils";
 import { extractHexload, extractMp4upload } from "../extractors";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
 
 export const DORAMASYT_BASE = "https://www.doramasyt.com";
-
-export function cleanDoramaYtTitle(s: string): string {
-  let t = decodeEntities(s).replace(/^\s*Ver\s+/i, "");
-  t = t.split(/\s+[–—|]\s+/)[0];
-  t = t.split(
-    /\s+(?:subtitulad[oa]|doblad[oa]|online|en\s+hd|sub\s+(?:esp|sp)\w*|castellano|latino)\b/i
-  )[0];
-  return t
-    .replace(/\s*\((?:en\s+emisi[oó]n|finalizado)\)\s*$/i, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 export function parseDoramaYtCards(html: string) {
   const results: { id: string; name: string; poster: string }[] = [];
@@ -31,7 +19,7 @@ export function parseDoramaYtCards(html: string) {
       : "";
     results.push({
       id: `dyt:${slug}`,
-      name: cleanDoramaYtTitle(rawName) || slug,
+      name: cleanTitle(rawName) || slug,
       poster,
     });
   };
@@ -108,7 +96,7 @@ export async function getDoramaYtMeta(
   }
 
   const name =
-    cleanDoramaYtTitle(
+    cleanTitle(
       html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1] ||
         html.match(/<meta[^>]+property="og:title"[^>]+content="([^"]+)"/i)?.[1] ||
         html.match(/<title>([\s\S]*?)<\/title>/i)?.[1] ||
@@ -249,10 +237,7 @@ export async function getDoramaYtStreams(
 
   if (playerTokens.length === 0) return { streams: [] };
 
-  const denoBase = (env.FETCH_PROXY_URL || "")
-    .trim()
-    .replace(/\/fetch\/?$/, "")
-    .replace(/\/$/, "");
+  const denoBase = denoBaseFromEnv(env);
 
   const embeds = await Promise.all(
     playerTokens.map(async (p) => {
@@ -277,20 +262,11 @@ export async function getDoramaYtStreams(
     })
   );
 
-  const streams: any[] = [];
-  const seenUrl = new Set<string>();
-  const add = (s: any) => {
-    const k = s.url || s.externalUrl;
-    if (k && !seenUrl.has(k)) {
-      seenUrl.add(k);
-      streams.push(s);
-    }
-  };
+  const { add, streams } = makeStreamDeduper();
 
   for (const embed of embeds) {
     if (!embed) continue;
-    const host =
-      embed.match(/https?:\/\/(?:www\.)?([a-z0-9-]+)\./i)?.[1] || "host";
+    const host = hostFromEmbed(embed);
     const ext = () =>
       add({
         externalUrl: embed,
@@ -298,11 +274,7 @@ export async function getDoramaYtStreams(
         title: `🌐 ${host} — DoramasYT`,
       });
 
-    if (
-      /streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|do7go|playmogo/i.test(
-        embed
-      )
-    ) {
+    if (STREAMWISH_HOSTS_RE.test(embed)) {
       if (denoBase)
         add({
           url: `${denoBase}/streamwish?url=${encodeURIComponent(embed)}`,

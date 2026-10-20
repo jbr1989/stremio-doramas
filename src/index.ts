@@ -7,6 +7,8 @@ import {
   cacheGet,
   cacheSet,
   browserRenderingReady,
+  denoBaseFromEnv,
+  makeStreamDeduper,
   netFetch,
   renderPage,
   isCfChallenge,
@@ -173,22 +175,15 @@ async function getStreams(rawId: string, env: Env, request: Request) {
   }
 
   const results = await Promise.allSettled(tasks);
-  const combinedStreams: any[] = [];
-  const seenKey = new Set<string>();
+  const { add, streams } = makeStreamDeduper();
 
   for (const res of results) {
     if (res.status === "fulfilled" && Array.isArray(res.value?.streams)) {
-      for (const st of res.value.streams) {
-        const key = st.url || st.externalUrl;
-        if (key && !seenKey.has(key)) {
-          seenKey.add(key);
-          combinedStreams.push(st);
-        }
-      }
+      for (const st of res.value.streams) add(st);
     }
   }
 
-  return { streams: combinedStreams };
+  return { streams };
 }
 
 export default {
@@ -329,10 +324,7 @@ export default {
         });
       const t0 = Date.now();
       const streamUrl = await extractStreamwish(testUrl);
-      const denoBase = (env.FETCH_PROXY_URL || "")
-        .trim()
-        .replace(/\/fetch\/?$/, "")
-        .replace(/\/$/, "");
+      const denoBase = denoBaseFromEnv(env);
       const denoUrl = denoBase
         ? `${denoBase}/streamwish?url=${encodeURIComponent(testUrl)}`
         : null;

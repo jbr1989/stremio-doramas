@@ -4,8 +4,11 @@ import {
   cacheSet,
   CHROME_UA,
   decodeEntities,
+  denoBaseFromEnv,
   fetchTmdb,
+  makeStreamDeduper,
   netFetch,
+  STREAMWISH_HOSTS_RE,
   toMetaPreview,
 } from "../utils";
 import { extractMp4upload } from "../extractors";
@@ -276,21 +279,9 @@ export async function getPandramaStreams(
     altVideos.push(epPage.current_video);
   }
 
-  const denoBase = (env.FETCH_PROXY_URL || "")
-    .trim()
-    .replace(/\/fetch\/?$/, "")
-    .replace(/\/$/, "");
+  const denoBase = denoBaseFromEnv(env);
 
-  const streams: any[] = [];
-  const seen = new Set<string>();
-
-  const add = (s: any) => {
-    const k = s.url || s.externalUrl;
-    if (k && !seen.has(k)) {
-      seen.add(k);
-      streams.push(s);
-    }
-  };
+  const { add, streams } = makeStreamDeduper();
 
   for (const v of altVideos) {
     let src = v.src || "";
@@ -319,12 +310,8 @@ export async function getPandramaStreams(
       continue;
     }
 
-    // StreamWish or mirrors
-    if (
-      /streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|do7go|playmogo/i.test(
-        src
-      )
-    ) {
+    // StreamWish or mirrors (STREAMWISH_HOSTS_RE — sincronizado con deno/fetch.ts)
+    if (STREAMWISH_HOSTS_RE.test(src)) {
       if (denoBase) {
         add({
           url: `${denoBase}/streamwish?url=${encodeURIComponent(src)}`,

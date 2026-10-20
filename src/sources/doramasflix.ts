@@ -1,5 +1,5 @@
 import { Env } from "../types";
-import { CHROME_UA, decodeEntities, fetchTmdb, netFetch, toMetaPreview } from "../utils";
+import { CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchTmdb, hostFromEmbed, makeStreamDeduper, netFetch, STREAMWISH_HOSTS_RE, toMetaPreview } from "../utils";
 import { extractMp4upload } from "../extractors";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
 
@@ -53,18 +53,6 @@ async function fetchGql(
   throw new Error(`Doramasflix GraphQL fallo en todos los orígenes — ${errors.join(" | ")}`);
 }
 
-export function cleanDoramasflixTitle(s: string): string {
-  let t = decodeEntities(s).replace(/^\s*Ver\s+/i, "");
-  t = t.split(/\s+[–—|]\s+/)[0];
-  t = t.split(
-    /\s+(?:subtitulad[oa]|doblad[oa]|online|en\s+hd|sub\s+(?:esp|sp)\w*|castellano|latino)\b/i
-  )[0];
-  return t
-    .replace(/\s*\((?:en\s+emisi[oó]n|finalizado)\)\s*$/i, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
 export async function getDoramasflixCatalog(
   extra: Record<string, string>,
   env?: Env
@@ -91,7 +79,7 @@ export async function getDoramasflixCatalog(
       const poster = item.poster_path
         ? `https://image.tmdb.org/t/p/w342${item.poster_path}`
         : "";
-      const name = cleanDoramasflixTitle(item.name || item.name_es || item.slug);
+      const name = cleanTitle(item.name || item.name_es || item.slug);
       return toMetaPreview({
         id: `dflix:${item.slug}`,
         name,
@@ -120,7 +108,7 @@ export async function getDoramasflixCatalog(
     const poster = item.poster_path
       ? `https://image.tmdb.org/t/p/w342${item.poster_path}`
       : "";
-    const name = cleanDoramasflixTitle(item.name || item.name_es || item.slug);
+    const name = cleanTitle(item.name || item.name_es || item.slug);
     return toMetaPreview({
       id: `dflix:${item.slug}`,
       name,
@@ -163,7 +151,7 @@ export async function getDoramasflixMeta(
     return { meta: null };
   }
 
-  const name = cleanDoramasflixTitle(detail.name || detail.name_es || slug);
+  const name = cleanTitle(detail.name || detail.name_es || slug);
   const poster = detail.poster_path
     ? `https://image.tmdb.org/t/p/w500${detail.poster_path}`
     : "";
@@ -385,29 +373,16 @@ export async function getDoramasflixStreams(
   }
 
 
-  const denoBase = (env.FETCH_PROXY_URL || "")
-    .trim()
-    .replace(/\/fetch\/?$/, "")
-    .replace(/\/$/, "");
+  const denoBase = denoBaseFromEnv(env);
 
-  const streams: any[] = [];
-  const seenUrl = new Set<string>();
-
-  const add = (s: any) => {
-    const k = s.url || s.externalUrl;
-    if (k && !seenUrl.has(k)) {
-      seenUrl.add(k);
-      streams.push(s);
-    }
-  };
+  const { add, streams } = makeStreamDeduper();
 
   for (const item of rawLinks) {
     if (!item.link) continue;
     const decodedEmbed = decodeEmbedUrl(item.link);
     if (!decodedEmbed) continue;
 
-    const host =
-      decodedEmbed.match(/https?:\/\/(?:www\.)?([a-z0-9-]+)\./i)?.[1] || "host";
+    const host = hostFromEmbed(decodedEmbed);
 
     const ext = () =>
       add({
@@ -416,13 +391,9 @@ export async function getDoramasflixStreams(
         title: `🌐 ${host} — Doramasflix`,
       });
 
-    if (
-      // Espejos de StreamWish admitidos — mantén sincronizado con deno/fetch.ts
-      // (allowlist de /streamwish) y con las otras fuentes.
-      /streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|do7go|playmogo/i.test(
-        decodedEmbed
-      )
-    ) {
+    // STREAMWISH_HOSTS_RE: espejos de StreamWish admitidos — mantén
+    // sincronizado con deno/fetch.ts (allowlist de /streamwish).
+    if (STREAMWISH_HOSTS_RE.test(decodedEmbed)) {
       if (denoBase) {
         add({
           url: `${denoBase}/streamwish?url=${encodeURIComponent(decodedEmbed)}`,
