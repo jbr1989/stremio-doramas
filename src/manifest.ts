@@ -9,7 +9,7 @@ export const MANIFEST = {
   resources: ["catalog", "meta", "stream"],
   types: ["series", "movie"],
   catalogs: [
-    { type: "series", id: "all-directory", name: "Todos los Doramas", extra: [{ name: "search", isRequired: false }, { name: "skip", isRequired: false }] },
+    { type: "series", id: "alldoramas-directory", name: "Todos los Doramas", extra: [{ name: "search", isRequired: false }, { name: "skip", isRequired: false }] },
     { type: "series", id: "doramaslat-directory", name: "Doramas Latino — Directorio", extra: [{ name: "search", isRequired: false }, { name: "skip", isRequired: false }] },
     { type: "series", id: "doramedplay-directory", name: "Doramas Sub — Directorio", extra: [{ name: "search", isRequired: false }, { name: "skip", isRequired: false }] },
     { type: "series", id: "kplay-directory", name: "KDramas Play — Directorio", extra: [{ name: "search", isRequired: false }, { name: "skip", isRequired: false }] },

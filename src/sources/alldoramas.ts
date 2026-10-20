@@ -63,7 +63,7 @@ function normKey(name: string): string {
     .replace(/[^a-z0-9]+/g, "");
 }
 
-export async function getAllCatalog(
+export async function getAllAlldoramasCatalog(
   extra: Record<string, string>,
   env?: Env
 ) {
@@ -82,7 +82,7 @@ export async function getAllCatalog(
         const res = await src.fetch(perExtra, env);
         return (res.metas || []).filter((m) => m?.id && m?.name);
       } catch (e) {
-        console.log(`[all] fuente ${src.name} falló (página ${page}): ${e}`);
+        console.log(`[alldoramas] fuente ${src.name} falló (página ${page}): ${e}`);
         return [];
       }
     })
