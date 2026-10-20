@@ -1,0 +1,117 @@
+import { Env } from "../types";
+import { cleanTitle } from "../utils";
+import { getDoramaCatalog, DORAMA_SOURCES } from "./doramas";
+import { getKplayCatalog } from "./kdramasplay";
+import { getDoramasflixCatalog } from "./doramasflix";
+import { getTudoramaCatalog } from "./tudorama";
+import { getPandramaCatalog } from "./pandrama";
+import { getDoramaYtCatalog } from "./doramasyt";
+
+// ─── Catálogo consolidado "Todos los Doramas" ───────────────────────────────
+// Orquesta los catálogos ya existentes en paralelo, fusiona, y de-duplica por
+// título normalizado. Es la "opción A" (página espejo): el skip del catálogo
+// se traduce en página N de cada fuente. No hace scraping nuevo — solo
+// orquesta las getXCatalog que ya aceptan {search}/{skip}.
+//
+// El id ganador de cada título determina desde qué sitio se saca la /meta
+// (poster/descripción); los streams salen igual por el fan-out de getStreams
+// (slugmap + epmap), que es independiente del id elegido.
+
+// Stremio avanza skip de 100 en 100 al paginar un catálogo.
+const PAGE_SIZE = 100;
+
+type SourceSpec = {
+  name: string;
+  /** Tamaño de página upstream de la fuente (el que su getXCatalog usa
+   * internamente para convertir skip → página). */
+  page: number;
+  fetch: (
+    extra: Record<string, string>,
+    env?: Env
+  ) => Promise<{ metas?: any[] }>;
+};
+
+// Orden = prioridad de fusion: el primer hit de un título gana. dflix
+// primero (GraphQL, estructura estable); pandrama al final (su orden
+// "views_day" cambia a diario, aporta variedad al final de la lista).
+const SOURCES: SourceSpec[] = [
+  { name: "dflix", page: 20, fetch: (e, env) => getDoramasflixCatalog(e, env) },
+  {
+    name: "dorama",
+    page: 45,
+    fetch: (e, env) => getDoramaCatalog(DORAMA_SOURCES.dorama, e, env),
+  },
+  {
+    name: "dsub",
+    page: 45,
+    fetch: (e, env) => getDoramaCatalog(DORAMA_SOURCES.dsub, e, env),
+  },
+  { name: "dyt", page: 24, fetch: (e, env) => getDoramaYtCatalog(e, env) },
+  { name: "tudorama", page: 24, fetch: (e, env) => getTudoramaCatalog(e, env) },
+  { name: "kplay", page: 24, fetch: (e, env) => getKplayCatalog(e, env) },
+  { name: "pandrama", page: 48, fetch: (e, env) => getPandramaCatalog(e, env) },
+];
+
+/** Clave de dedup: cleanTitle ya limpia "Ver", "subtitulado", colas del tema;
+ * aquí se baja a minúsculas sin acentos ni puntuación. Los ids de dedup NO
+ * se usan (cada fuente nombra con slugs propios — la inversión del slugmap). */
+function normKey(name: string): string {
+  return cleanTitle(name)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+export async function getAllCatalog(
+  extra: Record<string, string>,
+  env?: Env
+) {
+  const q = (extra.search || "").trim();
+  const page = Math.floor(parseInt(extra.skip || "0", 10) / PAGE_SIZE) + 1;
+
+  // 1) Despacho en paralelo. Búsqueda: {search} plano para todas. Directorio:
+  //    a cada fuente el skip que produce SU página N. Fallo de una fuente
+  //    ≠ catálogo muerto: se registra y sigue con el resto.
+  const perSource = await Promise.all(
+    SOURCES.map(async (src) => {
+      const perExtra: Record<string, string> = q
+        ? { search: q }
+        : { skip: String((page - 1) * src.page) };
+      try {
+        const res = await src.fetch(perExtra, env);
+        return (res.metas || []).filter((m) => m?.id && m?.name);
+      } catch (e) {
+        console.log(`[all] fuente ${src.name} falló (página ${page}): ${e}`);
+        return [];
+      }
+    })
+  );
+
+  // 2) Fusión intercalada (round-robin): en cada índice entra el item de cada
+  //    fuente, primer hit gana. Segundo objetivo: heredar un poster de un
+  //    duplicado cuando el ganador viene sin poster.
+  const seen = new Map<string, { meta: any; posterFallback?: string }>();
+  const maxLen = Math.max(...perSource.map((l) => l.length), 0);
+  for (let i = 0; i < maxLen; i++) {
+    for (const list of perSource) {
+      const meta = list[i];
+      if (!meta) continue;
+      const key = normKey(meta.name);
+      if (!key) continue;
+      const hit = seen.get(key);
+      if (!hit) {
+        seen.set(key, { meta });
+      } else if (!hit.meta.poster && meta.poster) {
+        hit.posterFallback ??= meta.poster;
+      }
+    }
+  }
+
+  const metas = [...seen.values()].map(({ meta, posterFallback }) => ({
+    ...meta,
+    poster: meta.poster || posterFallback || "",
+  }));
+
+  return { metas };
+}
