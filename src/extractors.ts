@@ -1,7 +1,9 @@
 import {
   CHROME_UA,
   fetchHtml,
+  hostFromEmbed,
   netFetch,
+  STREAMWISH_HOSTS_RE,
 } from "./utils";
 
 export function unpackPacker(source: string): string | null {
@@ -223,4 +225,146 @@ export function findMediaUrl(html: string): { url: string; isHls: boolean } | nu
   );
   if (mp4) return { url: mp4, isHls: false };
   return null;
+}
+
+// ─── clasificación de embeds compartida por las fuentes ─────────────────────
+
+/** Clasifica un embed y añade el stream correspondiente al deduper compartido
+ * (makeStreamDeduper en utils.ts). Cubre las ramas idénticas que antes estaban
+ * copiadas en el loop de get{Source}Streams de tudorama / kdramasplay /
+ * doramasyt / doramas(doramaslat, doramedplay) / doramasflix: streamwish
+ * (HLS por el relay Deno), savefiles/streamhls, mp4upload, hexload, pixeldrain
+ * y el fallback externalUrl final.
+ *
+ * Devuelve true si el embed matcheó un host conocido y se añadió su stream;
+ * false si cayó al fallback externalUrl (embed desconocido o extractor sin
+ * URL). pandrama NO la usa: su loop trae HLS directo y titles por serverName
+ * propios. */
+export async function addEmbedStreams(args: {
+  /** URL del embed a clasificar. */
+  embed: string;
+  /** Slug del episodio — filename de los behaviorHints (xxx.mp4 / xxx.m3u8). */
+  epSlug: string;
+  /** Nombre de la fuente ("KDramas Play") para name/title de los streams. */
+  label: string;
+  /** Prefijo de la fuente ("kplay") para los bingeGroups. */
+  prefix: string;
+  /** Base del relay Deno ("" deshabilita las ramas /streamwish y /savefiles). */
+  denoBase: string;
+  /** Deduper compartido de la llamada en curso. */
+  add: (s: any) => void;
+  /** Fallback del host en el título external (tudorama usa item.name). */
+  hostFallback?: string;
+}): Promise<boolean> {
+  const { embed, epSlug, label, prefix, denoBase, add, hostFallback } = args;
+  const ext = () =>
+    add({
+      externalUrl: embed,
+      name: `${label} 🌐`,
+      title: `🌐 ${hostFromEmbed(embed, hostFallback)} — ${label}`,
+    });
+
+  // STREAMWISH_HOSTS_RE (mirrors de StreamWish): HLS por el relay Deno.
+  if (STREAMWISH_HOSTS_RE.test(embed)) {
+    if (denoBase) {
+      add({
+        url: `${denoBase}/streamwish?url=${encodeURIComponent(embed)}`,
+        name: `${label} HLS`,
+        title: `▶ streamwish — ${label}`,
+        behaviorHints: {
+          notWebReady: false,
+          filename: `${epSlug}.m3u8`,
+          bingeGroup: `${prefix}-streamwish`,
+        },
+      });
+    } else {
+      ext();
+    }
+    return true;
+  }
+
+  // savefiles/streamhls → HLS firmado al relay Deno. El strip de "embed-"/
+  // ".html" lo necesita doramasyt; en los demás códigos es no-op.
+  if (/savefiles\.com|streamhls\.to/i.test(embed)) {
+    const code = embed
+      .split(/savefiles\.com\/|streamhls\.to\//)
+      .pop()
+      ?.replace(/^e\//, "")
+      .replace(/^embed-/, "")
+      .replace(/\.html$/, "")
+      .split(/[/?]/)[0]
+      ?.trim();
+    if (denoBase && code && code.length > 3) {
+      add({
+        url: `${denoBase}/savefiles?code=${encodeURIComponent(code)}`,
+        name: `${label} HLS`,
+        title: `▶ savefiles — ${label}`,
+        behaviorHints: {
+          notWebReady: false,
+          filename: `${epSlug}.m3u8`,
+          bingeGroup: `${prefix}-savefiles`,
+        },
+      });
+    } else {
+      ext();
+    }
+    return true;
+  }
+
+  if (embed.includes("mp4upload.com")) {
+    const u = await extractMp4upload(embed);
+    if (u) {
+      add({
+        url: u,
+        name: `${label} MP4`,
+        title: `▶ mp4upload — ${label}`,
+        behaviorHints: {
+          notWebReady: false,
+          filename: `${epSlug}.mp4`,
+          bingeGroup: `${prefix}-mp4upload`,
+        },
+      });
+      return true;
+    }
+    ext();
+    return false;
+  }
+
+  if (embed.includes("hexload.com")) {
+    const u = await extractHexload(embed);
+    if (u) {
+      add({
+        url: u,
+        name: `${label} MP4`,
+        title: `▶ hexload — ${label}`,
+        behaviorHints: {
+          notWebReady: false,
+          filename: `${epSlug}.mp4`,
+          bingeGroup: `${prefix}-hexload`,
+        },
+      });
+      return true;
+    }
+    ext();
+    return false;
+  }
+
+  // Directo conocido (solo kdramasplay lo tenía; inofensivo para las demás).
+  if (embed.includes("pixeldrain.com")) {
+    const idM = embed.match(/pixeldrain\.com\/(?:u|l)\/([a-zA-Z0-9]+)/);
+    if (idM) {
+      add({
+        url: `https://pixeldrain.com/api/file/${idM[1]}`,
+        name: `${label} MP4`,
+        title: `▶ pixeldrain — ${label}`,
+        behaviorHints: { notWebReady: false, filename: `${epSlug}.mp4` },
+      });
+      return true;
+    }
+    ext();
+    return false;
+  }
+
+  ext();
+  return false;
 }

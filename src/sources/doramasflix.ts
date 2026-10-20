@@ -1,6 +1,6 @@
 import { Env } from "../types";
-import { CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchTmdb, hostFromEmbed, makeStreamDeduper, netFetch, STREAMWISH_HOSTS_RE, toMetaPreview } from "../utils";
-import { extractMp4upload } from "../extractors";
+import { CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
+import { addEmbedStreams } from "../extractors";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
 
 const GRAPHQL_ENDPOINT = "https://user-api.seriesapi.co/graphql";
@@ -381,52 +381,14 @@ export async function getDoramasflixStreams(
     if (!item.link) continue;
     const decodedEmbed = decodeEmbedUrl(item.link);
     if (!decodedEmbed) continue;
-
-    const host = hostFromEmbed(decodedEmbed);
-
-    const ext = () =>
-      add({
-        externalUrl: decodedEmbed,
-        name: "Doramasflix 🌐",
-        title: `🌐 ${host} — Doramasflix`,
-      });
-
-    // STREAMWISH_HOSTS_RE: espejos de StreamWish admitidos — mantén
-    // sincronizado con deno/fetch.ts (allowlist de /streamwish).
-    if (STREAMWISH_HOSTS_RE.test(decodedEmbed)) {
-      if (denoBase) {
-        add({
-          url: `${denoBase}/streamwish?url=${encodeURIComponent(decodedEmbed)}`,
-          name: "Doramasflix HLS",
-          title: `▶ streamwish — Doramasflix`,
-          behaviorHints: {
-            notWebReady: false,
-            filename: `${epSlug}.m3u8`,
-            bingeGroup: "dflix-streamwish",
-          },
-        });
-      } else ext();
-      continue;
-    }
-
-    if (decodedEmbed.includes("mp4upload.com")) {
-      const u = await extractMp4upload(decodedEmbed);
-      if (u) {
-        add({
-          url: u,
-          name: "Doramasflix MP4",
-          title: `▶ mp4upload — Doramasflix`,
-          behaviorHints: {
-            notWebReady: false,
-            filename: `${epSlug}.mp4`,
-            bingeGroup: "dflix-mp4upload",
-          },
-        });
-        continue;
-      }
-    }
-
-    ext();
+    await addEmbedStreams({
+      embed: decodedEmbed,
+      epSlug,
+      label: "Doramasflix",
+      prefix: "dflix",
+      denoBase,
+      add,
+    });
   }
 
   return { streams };

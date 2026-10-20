@@ -1,6 +1,6 @@
 import { Env } from "../types";
-import { CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchHtml, fetchTmdb, hostFromEmbed, makeStreamDeduper, netFetch, STREAMWISH_HOSTS_RE, toMetaPreview } from "../utils";
-import { extractHexload, extractMp4upload } from "../extractors";
+import { CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchHtml, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
+import { addEmbedStreams } from "../extractors";
 import { dooPlayerAjaxEmbed } from "./dooplay";
 import { resolveEpisodeSlug, searchVariants, type SiteAdapter } from "./slugmap";
 
@@ -348,98 +348,14 @@ export async function getKplayStreams(
 
   for (const embed of embeds) {
     if (!embed) continue;
-    const host = hostFromEmbed(embed);
-    const ext = () =>
-      add({
-        externalUrl: embed,
-        name: "KDramas Play 🌐",
-        title: `🌐 ${host} — KDramas Play`,
-      });
-
-    // STREAMWISH_HOSTS_RE: espejos de StreamWish admitidos — mantén
-    // sincronizado con deno/fetch.ts (allowlist de /streamwish). Incluye
-    // do7go/playmogo (espejo actual de kdramasplay).
-    if (STREAMWISH_HOSTS_RE.test(embed)) {
-      if (denoBase)
-        add({
-          url: `${denoBase}/streamwish?url=${encodeURIComponent(embed)}`,
-          name: "KDramas Play HLS",
-          title: `▶ streamwish — KDramas Play`,
-          behaviorHints: {
-            notWebReady: false,
-            filename: `${slug}.m3u8`,
-            bingeGroup: "kplay-streamwish",
-          },
-        });
-      else ext();
-      continue;
-    }
-    if (/savefiles\.com|streamhls\.to/i.test(embed)) {
-      const code = embed
-        .split(/savefiles\.com\/|streamhls\.to\//)
-        .pop()
-        ?.replace(/^e\//, "")
-        .split(/[/?]/)[0]
-        ?.trim();
-      if (denoBase && code && code.length > 3)
-        add({
-          url: `${denoBase}/savefiles?code=${encodeURIComponent(code)}`,
-          name: "KDramas Play HLS",
-          title: "▶ savefiles — KDramas Play",
-          behaviorHints: {
-            notWebReady: false,
-            filename: `${slug}.m3u8`,
-            bingeGroup: "kplay-savefiles",
-          },
-        });
-      else ext();
-      continue;
-    }
-    if (embed.includes("mp4upload.com")) {
-      const u = await extractMp4upload(embed);
-      if (u) {
-        add({
-          url: u,
-          name: "KDramas Play MP4",
-          title: "▶ mp4upload — KDramas Play",
-          behaviorHints: {
-            notWebReady: false,
-            filename: `${slug}.mp4`,
-            bingeGroup: "kplay-mp4upload",
-          },
-        });
-        continue;
-      }
-    }
-    if (embed.includes("hexload.com")) {
-      const u = await extractHexload(embed);
-      if (u) {
-        add({
-          url: u,
-          name: "KDramas Play MP4",
-          title: "▶ hexload — KDramas Play",
-          behaviorHints: {
-            notWebReady: false,
-            filename: `${slug}.mp4`,
-            bingeGroup: "kplay-hexload",
-          },
-        });
-        continue;
-      }
-    }
-    if (embed.includes("pixeldrain.com")) {
-      const idM = embed.match(/pixeldrain\.com\/(?:u|l)\/([a-zA-Z0-9]+)/);
-      if (idM) {
-        add({
-          url: `https://pixeldrain.com/api/file/${idM[1]}`,
-          name: "KDramas Play MP4",
-          title: "▶ pixeldrain — KDramas Play",
-          behaviorHints: { notWebReady: false, filename: `${slug}.mp4` },
-        });
-        continue;
-      }
-    }
-    ext();
+    await addEmbedStreams({
+      embed,
+      epSlug: slug,
+      label: "KDramas Play",
+      prefix: "kplay",
+      denoBase,
+      add,
+    });
   }
   return { streams };
 }

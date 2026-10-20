@@ -1,6 +1,6 @@
 import { Env } from "../types";
-import { CHROME_HEADERS, CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchTmdb, hostFromEmbed, makeStreamDeduper, netFetch, STREAMWISH_HOSTS_RE, toMetaPreview } from "../utils";
-import { extractMp4upload } from "../extractors";
+import { CHROME_HEADERS, CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
+import { addEmbedStreams } from "../extractors";
 import { dooPlayerAjaxEmbed } from "./dooplay";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
 
@@ -325,48 +325,14 @@ export async function getDoramaStreams(
   );
   for (const embed of embeds) {
     if (!embed) continue;
-    const host = hostFromEmbed(embed);
-    const ext = () =>
-      add({
-        externalUrl: embed,
-        name: `${src.label} 🌐`,
-        title: `🌐 ${host} — ${src.label}`,
-      });
-
-    // STREAMWISH_HOSTS_RE: espejos de StreamWish admitidos — mantén
-    // sincronizado con deno/fetch.ts (allowlist de /streamwish).
-    if (STREAMWISH_HOSTS_RE.test(embed)) {
-      if (denoBase)
-        add({
-          url: `${denoBase}/streamwish?url=${encodeURIComponent(embed)}`,
-          name: `${src.label} HLS`,
-          title: `▶ streamwish — ${src.label}`,
-          behaviorHints: {
-            notWebReady: false,
-            filename: `${epSlug}.m3u8`,
-            bingeGroup: `${src.prefix}-streamwish`,
-          },
-        });
-      else ext();
-      continue;
-    }
-    if (embed.includes("mp4upload.com")) {
-      const u = await extractMp4upload(embed);
-      if (u) {
-        add({
-          url: u,
-          name: `${src.label} MP4`,
-          title: `▶ mp4upload — ${src.label}`,
-          behaviorHints: {
-            notWebReady: false,
-            filename: `${epSlug}.mp4`,
-            bingeGroup: `${src.prefix}-mp4upload`,
-          },
-        });
-        continue;
-      }
-    }
-    ext();
+    await addEmbedStreams({
+      embed,
+      epSlug,
+      label: src.label,
+      prefix: src.prefix,
+      denoBase,
+      add,
+    });
   }
   return { streams };
 }

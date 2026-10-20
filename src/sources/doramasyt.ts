@@ -1,6 +1,6 @@
 import { Env } from "../types";
-import { CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchHtml, fetchTmdb, hostFromEmbed, makeStreamDeduper, netFetch, STREAMWISH_HOSTS_RE, toMetaPreview } from "../utils";
-import { extractHexload, extractMp4upload } from "../extractors";
+import { CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchHtml, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
+import { addEmbedStreams } from "../extractors";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
 
 export const DORAMASYT_BASE = "https://www.doramasyt.com";
@@ -266,89 +266,14 @@ export async function getDoramaYtStreams(
 
   for (const embed of embeds) {
     if (!embed) continue;
-    const host = hostFromEmbed(embed);
-    const ext = () =>
-      add({
-        externalUrl: embed,
-        name: "DoramasYT 🌐",
-        title: `🌐 ${host} — DoramasYT`,
-      });
-
-    if (STREAMWISH_HOSTS_RE.test(embed)) {
-      if (denoBase)
-        add({
-          url: `${denoBase}/streamwish?url=${encodeURIComponent(embed)}`,
-          name: "DoramasYT HLS",
-          title: `▶ streamwish — DoramasYT`,
-          behaviorHints: {
-            notWebReady: false,
-            filename: `${epSlug}.m3u8`,
-            bingeGroup: "dyt-streamwish",
-          },
-        });
-      else ext();
-      continue;
-    }
-
-    if (/savefiles\.com|streamhls\.to/i.test(embed)) {
-      const code = embed
-        .split(/savefiles\.com\/|streamhls\.to\//)
-        .pop()
-        ?.replace(/^e\//, "")
-        .replace(/^embed-/, "")
-        .replace(/\.html$/, "")
-        .split(/[/?]/)[0]
-        ?.trim();
-      if (denoBase && code && code.length > 3)
-        add({
-          url: `${denoBase}/savefiles?code=${encodeURIComponent(code)}`,
-          name: "DoramasYT HLS",
-          title: "▶ savefiles — DoramasYT",
-          behaviorHints: {
-            notWebReady: false,
-            filename: `${epSlug}.m3u8`,
-            bingeGroup: "dyt-savefiles",
-          },
-        });
-      else ext();
-      continue;
-    }
-
-    if (embed.includes("mp4upload.com")) {
-      const u = await extractMp4upload(embed);
-      if (u) {
-        add({
-          url: u,
-          name: "DoramasYT MP4",
-          title: "▶ mp4upload — DoramasYT",
-          behaviorHints: {
-            notWebReady: false,
-            filename: `${epSlug}.mp4`,
-            bingeGroup: "dyt-mp4upload",
-          },
-        });
-        continue;
-      }
-    }
-
-    if (embed.includes("hexload.com")) {
-      const u = await extractHexload(embed);
-      if (u) {
-        add({
-          url: u,
-          name: "DoramasYT MP4",
-          title: "▶ hexload — DoramasYT",
-          behaviorHints: {
-            notWebReady: false,
-            filename: `${epSlug}.mp4`,
-            bingeGroup: "dyt-hexload",
-          },
-        });
-        continue;
-      }
-    }
-
-    ext();
+    await addEmbedStreams({
+      embed,
+      epSlug,
+      label: "DoramasYT",
+      prefix: "dyt",
+      denoBase,
+      add,
+    });
   }
 
   return { streams };

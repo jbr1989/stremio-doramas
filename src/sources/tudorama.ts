@@ -1,6 +1,6 @@
 import { Env } from "../types";
-import { CHROME_HEADERS, CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchTmdb, hostFromEmbed, makeStreamDeduper, netFetch, STREAMWISH_HOSTS_RE, toMetaPreview } from "../utils";
-import { extractMp4upload } from "../extractors";
+import { CHROME_HEADERS, CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
+import { addEmbedStreams } from "../extractors";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
 
 export const TUDORAMA_BASE = "https://tudorama.com";
@@ -377,52 +377,15 @@ export async function getTudoramaStreams(
   for (const item of resolvedEmbeds) {
     const embed = item.embedUrl;
     if (!embed) continue;
-
-    const host = hostFromEmbed(embed, item.name);
-
-    const ext = () =>
-      add({
-        externalUrl: embed,
-        name: `${TUDORAMA_LABEL} 🌐`,
-        title: `🌐 ${host} — ${TUDORAMA_LABEL}`,
-      });
-
-    if (STREAMWISH_HOSTS_RE.test(embed)) {
-      if (denoBase) {
-        add({
-          url: `${denoBase}/streamwish?url=${encodeURIComponent(embed)}`,
-          name: `${TUDORAMA_LABEL} HLS`,
-          title: `▶ streamwish — ${TUDORAMA_LABEL}`,
-          behaviorHints: {
-            notWebReady: false,
-            filename: `${epSlug}.m3u8`,
-            bingeGroup: `${TUDORAMA_PREFIX}-streamwish`,
-          },
-        });
-      } else {
-        ext();
-      }
-      continue;
-    }
-
-    if (embed.includes("mp4upload.com")) {
-      const u = await extractMp4upload(embed);
-      if (u) {
-        add({
-          url: u,
-          name: `${TUDORAMA_LABEL} MP4`,
-          title: `▶ mp4upload — ${TUDORAMA_LABEL}`,
-          behaviorHints: {
-            notWebReady: false,
-            filename: `${epSlug}.mp4`,
-            bingeGroup: `${TUDORAMA_PREFIX}-mp4upload`,
-          },
-        });
-        continue;
-      }
-    }
-
-    ext();
+    await addEmbedStreams({
+      embed,
+      epSlug,
+      label: TUDORAMA_LABEL,
+      prefix: TUDORAMA_PREFIX,
+      denoBase,
+      add,
+      hostFallback: item.name,
+    });
   }
 
   return { streams };
