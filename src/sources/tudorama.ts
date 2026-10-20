@@ -1,6 +1,7 @@
 import { Env } from "../types";
 import { CHROME_HEADERS, CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
 import { addEmbedStreams } from "../extractors";
+import { imgFromTag } from "./dooplay";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
 
 export const TUDORAMA_BASE = "https://tudorama.com";
@@ -181,11 +182,7 @@ export async function getTudoramaMeta(
       : "";
     if (thumb) thumbs.set(epSlug, thumb);
   };
-  // preferencia data-src + nunca "data:" (igual que doramas.ts)
-  const imgFromTag = (attrs: string): string =>
-    [attrs.match(/data-src=["']([^"']+)["']/i)?.[1] || "",
-     attrs.match(/(?:^|\s)src=["']([^"']+)["']/i)?.[1] || ""]
-      .find((u) => u && !u.startsWith("data:")) || "";
+  // preferencia data-src + nunca "data:" → imgFromTag (dooplay.ts)
   for (const m of html.matchAll(
     /<img\b([^>]*)>[\s\S]{0,420}?href=["'](?:https?:\/\/tudorama\.com)?\/ver\/([a-z0-9-]+)-s(\d+)x(\d+)\/["']/gi
   )) {

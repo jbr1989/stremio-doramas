@@ -1,7 +1,7 @@
 import { Env } from "../types";
 import { CHROME_HEADERS, CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
 import { addEmbedStreams } from "../extractors";
-import { dooPlayerAjaxEmbed } from "./dooplay";
+import { dooPlayerAjaxEmbed, imgFromTag } from "./dooplay";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
 
 export interface DoramaSource {
@@ -188,12 +188,8 @@ export async function getDoramaMeta(
     if (thumb) thumbs.set(epSlug, thumb);
   };
   // En lazy-load la <img> trae src='data:image/svg…' señuelo y la URL real en
-  // data-src: capturamos el tag completo y preferimos data-src; descartamos
-  // cualquier "data:" y usamos src llano solo si es URL http real.
-  const imgFromTag = (attrs: string): string =>
-    [attrs.match(/data-src=["']([^"']+)["']/i)?.[1] || "",
-     attrs.match(/(?:^|\s)src=["']([^"']+)["']/i)?.[1] || ""]
-      .find((u) => u && !u.startsWith("data:")) || "";
+  // data-src — capturamos el tag completo y resolvemos con imgFromTag
+  // (dooplay.ts): preferencia data-src, nunca "data:", src llano solo http.
   for (const m of html.matchAll(
     /<img\b([^>]*)>[\s\S]{0,220}?\/episodes\/([a-z0-9-]+-(\d+)x(\d+))\/["']/gi
   )) {

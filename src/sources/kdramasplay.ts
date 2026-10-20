@@ -1,7 +1,7 @@
 import { Env } from "../types";
 import { CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchHtml, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
 import { addEmbedStreams } from "../extractors";
-import { dooPlayerAjaxEmbed } from "./dooplay";
+import { dooPlayerAjaxEmbed, imgFromTag } from "./dooplay";
 import { resolveEpisodeSlug, searchVariants, type SiteAdapter } from "./slugmap";
 
 export const KPLAY_BASE = "https://kdramasplay.com";
@@ -158,11 +158,7 @@ export async function getKplayMeta(
       : "";
     if (thumb) thumbs.set(epSlug, thumb);
   };
-  // preferencia data-src + nunca "data:" (igual que doramas.ts)
-  const imgFromTag = (attrs: string): string =>
-    [attrs.match(/data-src=["']([^"']+)["']/i)?.[1] || "",
-     attrs.match(/(?:^|\s)src=["']([^"']+)["']/i)?.[1] || ""]
-      .find((u) => u && !u.startsWith("data:")) || "";
+  // preferencia data-src + nunca "data:" → imgFromTag (dooplay.ts)
   for (const m of html.matchAll(
     /<img\b([^>]*)>[\s\S]{0,220}?\/episodios\/([a-z0-9-]+-(\d+)x(\d+))\/["']/gi
   )) {
