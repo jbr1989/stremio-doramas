@@ -9,6 +9,7 @@ import {
   browserRenderingReady,
   denoBaseFromEnv,
   makeStreamDeduper,
+  MOBILE_UA,
   netFetch,
   renderPage,
   isCfChallenge,
@@ -271,8 +272,7 @@ export default {
       const embedUrl = url.searchParams.get("url");
       if (!embedUrl) return new Response("Missing url", { status: 400 });
       const hdrs = {
-        "User-Agent":
-          "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
+        "User-Agent": MOBILE_UA,
         Referer: "https://doramasflix.in/",
         Origin: "https://doramasflix.in",
         Accept: "text/html,application/xhtml+xml,*/*;q=0.8",
@@ -456,8 +456,7 @@ export default {
           headers: {
             Referer: referer,
             Origin: new URL(referer).origin,
-            "User-Agent":
-              "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
+            "User-Agent": MOBILE_UA,
           },
           signal: AbortSignal.timeout(15000),
         });
@@ -505,8 +504,7 @@ export default {
           headers: {
             Referer: referer,
             Origin: new URL(referer).origin,
-            "User-Agent":
-              "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
+            "User-Agent": MOBILE_UA,
           },
         });
         if (!r.ok)

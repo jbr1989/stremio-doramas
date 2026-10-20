@@ -2,6 +2,7 @@ import {
   CHROME_UA,
   fetchHtml,
   hostFromEmbed,
+  MOBILE_UA,
   netFetch,
   STREAMWISH_HOSTS_RE,
 } from "./utils";
@@ -45,8 +46,7 @@ export async function extractHexload(embedUrl: string) {
     if (!fileId) return null;
     const embedR = await netFetch("direct", embedUrl, {
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
+        "User-Agent": MOBILE_UA,
         Referer: "https://latanime.org/",
       },
       signal: AbortSignal.timeout(8000),
@@ -55,8 +55,7 @@ export async function extractHexload(embedUrl: string) {
     const r = await netFetch("direct", "https://hexload.com/download", {
       method: "POST",
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
+        "User-Agent": MOBILE_UA,
         Referer: embedUrl,
         Origin: "https://hexload.com",
         "Content-Type": "application/x-www-form-urlencoded",
@@ -91,8 +90,7 @@ export async function extractSavefiles(embedUrl: string) {
     const dlR = await netFetch("direct", `https://streamhls.to/dl`, {
       method: "POST",
       headers: {
-        "User-Agent":
-          "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
+        "User-Agent": MOBILE_UA,
         Referer: embedPageUrl,
         Origin: "https://streamhls.to",
         "Content-Type": "application/x-www-form-urlencoded",
