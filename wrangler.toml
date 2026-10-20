@@ -19,8 +19,7 @@ TMDB_KEY     = ""
 # Non-Cloudflare HTML fetch proxy (deno/fetch.ts on Deno Deploy). latanime.org
 # blocks Cloudflare Worker egress; this relays its HTML from Deno's edge. See
 # deno/README.md to deploy your own, then set the URL here (+ /fetch).
-FETCH_PROXY_URL = "http://localhost:8000/fetch"
-# FETCH_PROXY_URL = "https://stremio-doramas.jbr1989.deno.net/fetch"
+FETCH_PROXY_URL = "https://stremio-doramas.jbr1989.deno.net/fetch"
 # Cloudflare Browser Rendering (optional). Set CF_ACCOUNT_ID here and the
 # token as a secret:  wrangler secret put CF_API_TOKEN
 # Token needs the "Browser Rendering: Edit" permission. Leave blank to keep
