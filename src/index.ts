@@ -55,12 +55,15 @@ import {
   getDoramaYtStreams,
   canonicalDytSlug,
 } from "./sources/doramasyt";
+import { getAllAlldoramasCatalog } from "./sources/alldoramas";
 
 async function getCatalog(
   catalogId: string,
   extra: Record<string, string>,
   env?: Env
 ) {
+  if (catalogId.startsWith("alldoramas"))
+    return getAllAlldoramasCatalog(extra, env);
   if (catalogId.startsWith("doramaslat"))
     return getDoramaCatalog(DORAMA_SOURCES.dorama, extra, env);
   if (catalogId.startsWith("doramedplay"))
@@ -390,7 +393,9 @@ export default {
         await cacheSet(
           cacheKey,
           result,
-          TTL.catalog,
+          // El consolidado cuesta ~7 requests por página: se cachea 1h en
+          // vez de los 10 min estándar.
+          catalogId.startsWith("alldoramas") ? 60 * 60 : TTL.catalog,
           env.STREAM_CACHE
         );
         return json(result);
