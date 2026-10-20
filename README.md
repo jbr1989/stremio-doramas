@@ -91,14 +91,20 @@ streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|do7
 
 ## Fuentes futuras (investigadas, pendientes de integrar)
 
-| Sitio | Tecnología | Hallazgos | Esfuerzo |
-|---|---|---|---|
-| **[doramasyt.com](https://www.doramasyt.com)** | App propia (no WP), carga dinámica | Episodios `/ver/{slug}-episodio-N`; servidores DooD, StreamTape, Filemoon → requiere extractores nuevos (DooD/StreamTape son duros; Filemoon viable). | Alto |
-| **[seriesbl.net](https://seriesbl.net)** | WordPress + DooPlay | Patrón DooPlay estándar: basta añadir una entrada a `DORAMA_SOURCES`. Nicho: series/pelis Boys Love. | Bajo |
+| Sitio | Tecnología | Hallazgos y Análisis de Viabilidad | Esfuerzo | Viabilidad |
+|---|---|---|---|---|
+| **[seriesbl.net](https://seriesbl.net)** | WordPress + tema DooPlay | **Alta**. Sigue el patrón DooPlay estándar: episodios en `/episode/{slug}-1x{N}/` y endpoint `/wp-admin/admin-ajax.php` (`action=doo_player_ajax`). Integración directa reutilizando la infraestructura DooPlay existente. Contenido especializado en Boys Love (BL) y dramas asiáticos LGBTQ+. | Bajo | ✅ Alta |
+| **[doramasyt.com](https://www.doramasyt.com)** | App propia (Laravel + React) | **Media/Compleja**. Carga dinámica con episodios en `/ver/{slug}-episodio-N`. Los reproductores en `data-player` usan objetos JSON cifrados con la clave de Laravel (payload AES `iv`/`value`/`mac`). Protegido por Cloudflare Challenge. Servidores: StreamWish, Filemoon, DooD, StreamTape. | Alto | ⚠️ Media |
+| **[doramasflix.co](https://doramasflix.co)** | Next.js / GraphQL | **Informativa (Espejo)**. Variante/espejo de la plataforma `dflix` (`doramasflix.in`). Comparte backend o estructura GraphQL/Next.js. Es preferible mantenerlo como failover de cabeceras en `dflix` en lugar de una fuente independiente. | Bajo | ℹ️ Espejo de `dflix` |
+| **[estrenosdoramas](https://estrenosdoramas.net)** (`.net`, `.org`, `.us`, `.cc`) | Sitio web tradicional | **Inviable**. La gran mayoría de sus dominios históricos están caducados o aparcados en redes publicitarias (`router.parklogic.com` / parklogic domain squatting). Inestabilidad extrema de dominios. | Alto | ❌ Inviable |
+| **[doramasvip.com](https://doramasvip.com)** / **[doramasonline.org](https://doramasonline.org)** | Dominios aparcados | **Inviable**. Redirigen a páginas de parking publicitario (`router.parklogic.com`). No ofrecen servicio activo de streaming. | N/A | ❌ Inviable |
 
-Descartados: `doramedplay.com` (misma marca que doramedplay.net, ya integrada como `dsub:`), `doramasmp4.com` (muerto, redirige a la alianza antipiratería; **no confundir con `doramasmp4.io`, espejo vivo de la plataforma doramasflix** — ver arriba) y `doramasia.com` como fuente independiente (es espejo de la plataforma dflix, ver arriba; su contenido ya se sirve bajo `dflix:`).
+**Descartados / Redirecciones**:
+- `doramedplay.com`: Misma marca que `doramedplay.net` (ya integrada como `dsub:`).
+- `doramasmp4.com`: Dominio antiguo muerto (redirige a alianzas antipiratería). **No confundir con `doramasmp4.io`**, espejo activo de `dflix:` (ver sección de espejos).
+- `doramasia.com`: Espejo de la plataforma `dflix:` (ya cubierto por el failover de `dflix:`).
 
-Orden de integración sugerido: `doramasyt.com` → `seriesbl.net` (nicho). (El fix de `kplay` está aplicado — ver arriba.)
+**Orden de integración sugerido**: `seriesbl.net` (integración rápida por compatibilidad DooPlay) → `doramasyt.com` (requiere desencriptado Laravel + extractores de nuevos servidores).
 
 ## Añadir a Stremio
 
