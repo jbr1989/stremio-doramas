@@ -142,6 +142,9 @@ export async function getDoramaYtMeta(
       title: `T1 · Episodio ${i}`,
       season: 1,
       episode: i,
+      // doramasyt no expone stills por episodio (su listado real llega por
+      // AJAX con sesión) — caemos al póster de la serie.
+      thumbnail: tmdb?.poster || poster,
     });
   }
 
