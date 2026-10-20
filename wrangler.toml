@@ -31,3 +31,4 @@ CF_ACCOUNT_ID = "d955dcf5145dca9d036b7f70caae0f86"
 # (types.ts, index.ts, sources/*). El id no cambia.
 binding   = "STREAM_CACHE"
 id        = "3ab1c9ce707d4c5a84c4b369eb48254d"
+preview_id = "3ab1c9ce707d4c5a84c4b369eb48254d"
