@@ -28,7 +28,7 @@ const withGenre = (opts: string[]): CatalogExtra[] => [
 
 export const MANIFEST = {
   id: ADDON_ID,
-  version: "1.2.4",
+  version: "1.2.5",
   name: "Doramas",
   description: "Fuentes de Doramas en español y subtituladas",
   logo: "https://doramasflix.in/favicon.ico",

@@ -28,8 +28,10 @@ function anchorText(raw: string): string {
 
 /** Anclas de género (pares slug+texto) de un fragmento de HTML. `genreBase`
  * es la base de la taxonomía de género del sitio: "genero" (DooPlay hispano,
- * kdramasplay), "genre" (doramedplay) o "genres" (tudorama). Href relativos
- * y absolutos matchean igual (`[^"']*?` vacío o la base del sitio). */
+ * kdramasplay, doramasyt), "genre" (doramedplay) o "genres" (tudorama).
+ * Variaciones de los sitios que matchea: slash final opcional (DooPlay y
+ * tudorama lo traen, doramasyt NO — /genero/drama sin /) y query de
+ * paginación (?p=N en dyt). */
 function genreAnchorPairs(
   html: string,
   genreBase: string
@@ -38,7 +40,7 @@ function genreAnchorPairs(
   const seen = new Set<string>();
   for (const m of html.matchAll(
     new RegExp(
-      `href=["'][^"']*?/${genreBase}/([a-z0-9-]+)/["'][^>]*>([\\s\\S]{0,120}?)</a>`,
+      `href=["'][^"']*?/${genreBase}/([a-z0-9-]+)/?(?:\\?[^"']*)?["'][^>]*>([\\s\\S]{0,120}?)</a>`,
       "gi"
     )
   )) {
@@ -116,6 +118,26 @@ export function genresFromListItems(
     pairs.push({ slug: m[1], text: m[2] });
   }
   return pairLabels(pairs, source);
+}
+
+/** Géneros de una ficha DoramasYT (tema WStream/Bootstrap, NO DooPlay — vive
+ * aquí porque ya comparte este módulo con los demás extractores): la ficha
+ * pinta sus géneros como badges en `<div class="lh-lg"><small…>Géneros</small>
+ * <a href="…/genero/{slug}"><span class="badge">Label</span></a>…`. Se acota a
+ * ese bloque porque el FOOTER de la misma página linkea 12-13 archivos de
+ * género ("Por Tipo", "Géneros Populares") y contaminaría (verificado
+ * in-vivo: 3-4 en bloque vs 12-13 sueltos). Anclas sin slash final — las
+ * tolera genreAnchorPairs. */
+export function genresFromBadgeBlock(
+  html: string,
+  genreBase: string,
+  source: string
+): string[] {
+  const block = html.match(
+    /<div[^>]*class=["'][^"']*lh-lg[^"']*["'][^>]*>\s*<small[^>]*>G[eé]neros<\/small>([\s\S]*?)<\/div>/i
+  )?.[1];
+  if (!block) return [];
+  return pairLabels(genreAnchorPairs(block, genreBase), source);
 }
 
 /** Resuelve el iframe/embed del player DooPlay vía su `wp-admin/admin-ajax.php`
