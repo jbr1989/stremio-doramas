@@ -291,8 +291,7 @@ export async function getPandramaMeta(
 
 export async function getPandramaStreams(
   rawId: string,
-  env: Env,
-  request: Request
+  env: Env
 ) {
   let videoId: string | null = null;
   let epSlug = "";

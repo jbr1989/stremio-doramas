@@ -3,7 +3,7 @@ import { genreSlug } from "../genres";
 import { CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchHtml, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
 import { addEmbedStreams } from "../extractors";
 import { dooPlayerAjaxEmbed, genresFromDooPlay, imgFromTag } from "./dooplay";
-import { resolveEpisodeSlug, searchVariants, type SiteAdapter } from "./slugmap";
+import { resolveEpisodeSlug, searchVariants } from "./slugmap";
 
 export const KPLAY_BASE = "https://kdramasplay.com";
 
@@ -319,8 +319,7 @@ export async function resolveKplayEpisodeSlug(
 
 export async function getKplayStreams(
   rawId: string,
-  env: Env,
-  request: Request
+  env: Env
 ) {
   const parts = rawId.split(":");
   if (parts.length < 3) return { streams: [] };

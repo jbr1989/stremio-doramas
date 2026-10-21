@@ -55,8 +55,7 @@ async function fetchGql(
 }
 
 export async function getDoramasflixCatalog(
-  extra: Record<string, string>,
-  env?: Env
+  extra: Record<string, string>
 ) {
   const q = (extra.search || "").trim();
   if (q) {
@@ -164,8 +163,7 @@ export async function getDoramasflixCatalog(
 
 export async function getDoramasflixMeta(
   id: string,
-  tmdbKey: string,
-  env?: Env
+  tmdbKey: string
 ) {
   const slug = id.replace("dflix:", "");
   const query = `
@@ -368,8 +366,7 @@ export async function resolveDflixEpisodeSlug(
           // el mismo criterio que getDoramasflixMeta usa para sus videos.
           const detail = await getDoramasflixMeta(
             `dflix:${seriesSlug}`,
-            "", // sin TMDB: solo se necesitan las seasons
-            env
+            "" // sin TMDB: solo se necesitan las seasons
           );
           const videos = (detail.meta as any)?.videos || [];
           const list: { s: number; e: number; epSlug: string }[] = [];
@@ -390,8 +387,7 @@ export async function resolveDflixEpisodeSlug(
 
 export async function getDoramasflixStreams(
   rawId: string,
-  env: Env,
-  request: Request
+  env: Env
 ) {
   const epSlug = rawId.replace("dflix:", "");
 

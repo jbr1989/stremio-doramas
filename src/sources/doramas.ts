@@ -316,8 +316,7 @@ export async function resolveDooPlayEpisodeSlug(
 export async function getDoramaStreams(
   src: DoramaSource,
   rawId: string,
-  env: Env,
-  request: Request
+  env: Env
 ) {
   const epSlug = rawId.slice(src.prefix.length + 1);
   if (!/-\d+x\d+$/.test(epSlug)) return { streams: [] };

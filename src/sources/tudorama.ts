@@ -292,8 +292,7 @@ export async function resolveTudoramaEpisodeSlug(
 
 export async function getTudoramaStreams(
   rawId: string,
-  env: Env,
-  request: Request
+  env: Env
 ) {
   let epSlug = rawId.slice(TUDORAMA_PREFIX.length + 1);
 

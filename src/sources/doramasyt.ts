@@ -236,8 +236,7 @@ export async function resolveDytEpisodeSlug(
 
 export async function getDoramaYtStreams(
   rawId: string,
-  env: Env,
-  request: Request
+  env: Env
 ) {
   const epSlug = rawId.replace("dyt:", "");
   let html = "";

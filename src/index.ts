@@ -16,8 +16,6 @@ import {
   isCfChallenge,
 } from "./utils";
 import {
-  extractHexload,
-  extractMp4upload,
   extractSavefiles,
   extractMixdrop,
   extractStreamwish,
@@ -71,14 +69,14 @@ async function getCatalog(
     return getDoramaCatalog(DORAMA_SOURCES.dsub, extra, env);
   if (catalogId.startsWith("kplay")) return getKplayCatalog(extra, env);
   if (catalogId.startsWith("doramasflix"))
-    return getDoramasflixCatalog(extra, env);
+    return getDoramasflixCatalog(extra);
   if (catalogId.startsWith("tudorama"))
     return getTudoramaCatalog(extra, env);
   if (catalogId.startsWith("pandrama"))
     return getPandramaCatalog(extra, env);
   if (catalogId.startsWith("doramasyt"))
     return getDoramaYtCatalog(extra, env);
-  return getDoramasflixCatalog(extra, env);
+  return getDoramasflixCatalog(extra);
 }
 
 async function getMeta(id: string, tmdbKey: string, env?: Env) {
@@ -87,14 +85,14 @@ async function getMeta(id: string, tmdbKey: string, env?: Env) {
   if (id.startsWith("dsub:"))
     return getDoramaMeta(DORAMA_SOURCES.dsub, id, tmdbKey, env);
   if (id.startsWith("kplay:")) return getKplayMeta(id, tmdbKey, env);
-  if (id.startsWith("dflix:")) return getDoramasflixMeta(id, tmdbKey, env);
+  if (id.startsWith("dflix:")) return getDoramasflixMeta(id, tmdbKey);
   if (id.startsWith("tudorama:")) return getTudoramaMeta(id, tmdbKey, env);
   if (id.startsWith("pandrama:")) return getPandramaMeta(id, tmdbKey, env);
   if (id.startsWith("dyt:")) return getDoramaYtMeta(id, tmdbKey, env);
   return { meta: null };
 }
 
-async function getStreams(rawId: string, env: Env, request: Request) {
+async function getStreams(rawId: string, env: Env) {
   let epSlug = "";
   let pandramaVideoId = "";
   if (rawId.startsWith("dorama:")) {
@@ -138,45 +136,45 @@ async function getStreams(rawId: string, env: Env, request: Request) {
   const tasks: Promise<{ streams: any[] }>[] = [];
 
   if (rawId.startsWith("dorama:")) {
-    tasks.push(getDoramaStreams(DORAMA_SOURCES.dorama, rawId, env, request));
+    tasks.push(getDoramaStreams(DORAMA_SOURCES.dorama, rawId, env));
   } else if (epSlug) {
-    tasks.push(getDoramaStreams(DORAMA_SOURCES.dorama, `dorama:${epSlug}`, env, request));
+    tasks.push(getDoramaStreams(DORAMA_SOURCES.dorama, `dorama:${epSlug}`, env));
   }
 
   if (rawId.startsWith("dsub:")) {
-    tasks.push(getDoramaStreams(DORAMA_SOURCES.dsub, rawId, env, request));
+    tasks.push(getDoramaStreams(DORAMA_SOURCES.dsub, rawId, env));
   } else if (epSlug) {
-    tasks.push(getDoramaStreams(DORAMA_SOURCES.dsub, `dsub:${epSlug}`, env, request));
+    tasks.push(getDoramaStreams(DORAMA_SOURCES.dsub, `dsub:${epSlug}`, env));
   }
 
   if (rawId.startsWith("kplay:")) {
-    tasks.push(getKplayStreams(rawId, env, request));
+    tasks.push(getKplayStreams(rawId, env));
   } else if (epSlug) {
-    tasks.push(getKplayStreams(`kplay:ep:${epSlug}`, env, request));
+    tasks.push(getKplayStreams(`kplay:ep:${epSlug}`, env));
   }
 
   if (rawId.startsWith("dflix:")) {
-    tasks.push(getDoramasflixStreams(rawId, env, request));
+    tasks.push(getDoramasflixStreams(rawId, env));
   } else if (epSlug) {
-    tasks.push(getDoramasflixStreams(`dflix:${epSlug}`, env, request));
+    tasks.push(getDoramasflixStreams(`dflix:${epSlug}`, env));
   }
 
   if (rawId.startsWith("tudorama:")) {
-    tasks.push(getTudoramaStreams(rawId, env, request));
+    tasks.push(getTudoramaStreams(rawId, env));
   } else if (epSlug) {
-    tasks.push(getTudoramaStreams(`tudorama:${epSlug}`, env, request));
+    tasks.push(getTudoramaStreams(`tudorama:${epSlug}`, env));
   }
 
   if (rawId.startsWith("pandrama:")) {
-    tasks.push(getPandramaStreams(rawId, env, request));
+    tasks.push(getPandramaStreams(rawId, env));
   } else if (epSlug) {
-    tasks.push(getPandramaStreams(`pandrama:${epSlug}`, env, request));
+    tasks.push(getPandramaStreams(`pandrama:${epSlug}`, env));
   }
 
   if (rawId.startsWith("dyt:")) {
-    tasks.push(getDoramaYtStreams(rawId, env, request));
+    tasks.push(getDoramaYtStreams(rawId, env));
   } else if (epSlug) {
-    tasks.push(getDoramaYtStreams(`dyt:${epSlug}`, env, request));
+    tasks.push(getDoramaYtStreams(`dyt:${epSlug}`, env));
   }
 
   const results = await Promise.allSettled(tasks);
@@ -236,7 +234,7 @@ export default {
         });
       const t0 = Date.now();
       try {
-        const result = await getStreams(id, env, request);
+        const result = await getStreams(id, env);
         return json({
           id,
           totalMs: Date.now() - t0,
@@ -443,7 +441,7 @@ export default {
       if (cached) return json(cached);
       try {
         const { isDecoyUrl } = await import("./extractors");
-        const result = await getStreams(id, env, request);
+        const result = await getStreams(id, env);
         result.streams = result.streams.filter(
           (st: { url?: string; externalUrl?: string }) =>
             !isDecoyUrl(st.url || st.externalUrl || "")

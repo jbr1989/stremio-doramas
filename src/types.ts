@@ -16,17 +16,3 @@ export interface MetaPreview {
   poster: string;
   posterShape: string;
 }
-
-export interface StreamBehaviorHints {
-  notWebReady?: boolean;
-  filename?: string;
-  bingeGroup?: string;
-}
-
-export interface StreamItem {
-  url?: string;
-  externalUrl?: string;
-  name: string;
-  title: string;
-  behaviorHints?: StreamBehaviorHints;
-}

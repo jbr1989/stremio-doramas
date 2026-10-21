@@ -36,7 +36,7 @@ type SourceSpec = {
 // primero (GraphQL, estructura estable); pandrama al final (su orden
 // "views_day" cambia a diario, aporta variedad al final de la lista).
 const SOURCES: SourceSpec[] = [
-  { name: "dflix", page: 20, fetch: (e, env) => getDoramasflixCatalog(e, env) },
+  { name: "dflix", page: 20, fetch: (e) => getDoramasflixCatalog(e) },
   {
     name: "dorama",
     page: 45,
