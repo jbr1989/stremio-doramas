@@ -1,5 +1,5 @@
 import { Env } from "../types";
-import { genreSlug } from "../genres";
+import { genreLabelForMeta, genreSlug } from "../genres";
 import { CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
 import { addEmbedStreams } from "../extractors";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
@@ -185,6 +185,10 @@ export async function getDoramasflixMeta(
           season_number
           number_of_episodes
         }
+        genres {
+          slug
+          name
+        }
       }
     }
   `;
@@ -202,6 +206,25 @@ export async function getDoramasflixMeta(
     ? `https://image.tmdb.org/t/p/w1280${detail.backdrop_path}`
     : poster;
   const description = decodeEntities(detail.overview || "").trim();
+
+  // Géneros de la ficha: relation genres {slug, name} de la propia GraphQL
+  // (campo validado in-vivo contra la API de producción — los descartes
+  // genreSlug/genre/tags no existen en el tipo Dorama y matarían la query
+  // entera: MUST VALIDAR cualquier campo nuevo en una query de prueba antes
+  // de agregarlo aquí). Etiqueta: canónica ES de la lista maestra (dflix
+  // registra sus slugs, src/genres.ts) o el name de la API tal cual —
+  // DECISION DEL USUARIO para los no registrados — último recurso, slug
+  // humanizado. Las entradas con slug null (p.ej. "TV Movie" en listGenres)
+  // se saltan. Dedup por label con la orden de la API.
+  const genres: string[] = [];
+  const gSeen = new Set<string>();
+  for (const g of detail.genres || []) {
+    if (!g?.slug) continue;
+    const label = genreLabelForMeta("dflix", g.slug.toLowerCase(), g.name);
+    if (!label || gSeen.has(label)) continue;
+    gSeen.add(label);
+    genres.push(label);
+  }
 
   const episodes: { id: string; season: number; episode: number; title: string }[] = [];
   const seasons = detail.seasons || [];
@@ -244,6 +267,7 @@ export async function getDoramasflixMeta(
       description: tmdb?.description || description,
       posterShape: "poster",
       releaseInfo: tmdb?.year || "",
+      genres,
       videos: episodes.map((ep) => ({
         id: ep.id,
         title: ep.title,
