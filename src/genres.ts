@@ -50,7 +50,7 @@
 //              por la Opción B (dropdown vacío hoy, se llena solo si
 //              upstream etiqueta series).
 
-export type GenreSourceName =
+type GenreSourceName =
   | "dorama"
   | "dsub"
   | "kplay"
@@ -59,7 +59,7 @@ export type GenreSourceName =
   | "tudorama"
   | "dyt";
 
-export interface GenreEntry {
+interface GenreEntry {
   /** Label ES que ve el usuario en el dropdown de Stremio. */
   label: string;
   /** Slug de cada fuente que soporta este género. Fuente ausente = no lo
@@ -72,7 +72,7 @@ export interface GenreEntry {
 // Los slugs NO son idénticos entre sitios; cada valor fue confirmado contra el
 // sitio específico (pandrama: id de su value-list API; DooPlay: término de su
 // registry WP REST).
-export const MASTER_GENRES: GenreEntry[] = [
+const MASTER_GENRES: GenreEntry[] = [
   { label: "Romance", slugs: 
     { 
       dorama: "romance", 

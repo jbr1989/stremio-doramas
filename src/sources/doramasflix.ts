@@ -331,7 +331,7 @@ async function getEpisodeBySlug(
  * el catálogo) y el id del episodio se RECOMPOne aritméticamente con el
  * serieSlug de su BD: sus slugs de episodio siguen el patrón
  * `{serieSlug}-{s}x{e}` (el mismo que genera getDoramasflixMeta). */
-export async function resolveDflixEpisodeSlug(
+async function resolveDflixEpisodeSlug(
   epSlug: string,
   env: Env
 ): Promise<string | null> {

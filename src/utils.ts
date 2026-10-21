@@ -216,7 +216,7 @@ export function isCfChallenge(body: string): boolean {
 
 // The target page does not exist upstream (404/410): retrying it through
 // relay/proxies can never succeed, so fetchHtml short-circuits on this.
-export class SiteNotFoundError extends Error {
+class SiteNotFoundError extends Error {
   status: number;
   url: string;
   constructor(status: number, url: string) {
@@ -227,13 +227,13 @@ export class SiteNotFoundError extends Error {
   }
 }
 
-export function isSiteNotFound(e: unknown): e is SiteNotFoundError {
+function isSiteNotFound(e: unknown): e is SiteNotFoundError {
   return e instanceof SiteNotFoundError;
 }
 
 // Promise.any wraps the racers' rejections in an AggregateError; look through
 // it for a definitive 404/410 from any strategy.
-export function isAnySiteNotFound(e: unknown): boolean {
+function isAnySiteNotFound(e: unknown): boolean {
   if (isSiteNotFound(e)) return true;
   if (e instanceof AggregateError)
     return e.errors.some((inner) => isSiteNotFound(inner));

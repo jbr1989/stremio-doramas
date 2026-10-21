@@ -5,7 +5,7 @@ import { addEmbedStreams } from "../extractors";
 import { dooPlayerAjaxEmbed, genresFromDooPlay, imgFromTag } from "./dooplay";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
 
-export interface DoramaSource {
+interface DoramaSource {
   prefix: string;
   base: string;
   label: string;
@@ -29,7 +29,7 @@ export const DORAMA_SOURCES: Record<string, DoramaSource> = {
   },
 };
 
-export async function fetchDorama(
+async function fetchDorama(
   url: string,
   env?: Env,
   timeoutMs = 12000
@@ -262,7 +262,7 @@ export async function getDoramaMeta(
  * slugmap.ts). Antes solo dsub resolvía; hoy AMBOS participan: cuando el id
  * llega con prefijo kplay/dflix/dsub, doramaslat también busca su propio
  * slug de episodio en vez de 404-ear en silencio. */
-export async function resolveDooPlayEpisodeSlug(
+async function resolveDooPlayEpisodeSlug(
   src: DoramaSource,
   epSlug: string,
   env: Env

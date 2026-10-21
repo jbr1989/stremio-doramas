@@ -15,7 +15,7 @@ import { cacheGet, cacheSet } from "../utils";
 // Es genérico e inyectado (SiteAdapter) para evitar imports circulares: los
 // adapters viven en kdramasplay.ts (kplay) y doramas.ts (dsub).
 
-export interface SiteAdapter {
+interface SiteAdapter {
   /** id estable para las claves KV */
   site: string;
   /** buscar la serie por título; devuelve slugs de serie candidatos */
@@ -47,7 +47,7 @@ export function parseSxE(epSlug: string): { s: number; e: number } | null {
   return m ? { s: parseInt(m[1], 10), e: parseInt(m[2], 10) } : null;
 }
 
-export function titleFromEpSlug(epSlug: string): string {
+function titleFromEpSlug(epSlug: string): string {
   return epSlug.replace(/-\d+x\d+$/, "").replace(/-/g, " ").trim();
 }
 

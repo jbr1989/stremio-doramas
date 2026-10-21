@@ -5,9 +5,9 @@ import { addEmbedStreams } from "../extractors";
 import { dooPlayerAjaxEmbed, genresFromDooPlay, imgFromTag } from "./dooplay";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
 
-export const KPLAY_BASE = "https://kdramasplay.com";
+const KPLAY_BASE = "https://kdramasplay.com";
 
-export function parseKplayCards(html: string) {
+function parseKplayCards(html: string) {
   const results: { id: string; name: string; poster: string }[] = [];
   const seen = new Set<string>();
   const push = (type: "series" | "movie", slug: string, rawPoster: string, rawName: string) => {
@@ -228,7 +228,7 @@ export async function getKplayMeta(
  * que ya descargamos, así que cada resolución hace 1 fetch de página + 1-2
  * REST. El REST matchea por frase: si la frase completa no da nada se prueba
  * con la palabra más larga del título. */
-export async function resolveKplayEpisodeSlug(
+async function resolveKplayEpisodeSlug(
   epSlug: string,
   env: Env
 ): Promise<string | null> {

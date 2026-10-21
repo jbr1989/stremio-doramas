@@ -7,7 +7,7 @@ import {
   STREAMWISH_HOSTS_RE,
 } from "./utils";
 
-export function unpackPacker(source: string): string | null {
+function unpackPacker(source: string): string | null {
   const m = source.match(
     /}\s*\(\s*'(.*?)'\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*'(.*?)'\.split\('\|'\)/s
   );
@@ -40,7 +40,7 @@ export async function extractMp4upload(embedUrl: string) {
   }
 }
 
-export async function extractHexload(embedUrl: string) {
+async function extractHexload(embedUrl: string) {
   try {
     const fileId = embedUrl.split("embed-").pop()?.split(/[/?]/)[0];
     if (!fileId) return null;
@@ -157,7 +157,7 @@ export async function extractStreamwish(embedUrl: string): Promise<string | null
   }
 }
 
-export function decodeVoe(encoded: string): { url: string; isHls: boolean } | null {
+function decodeVoe(encoded: string): { url: string; isHls: boolean } | null {
   try {
     let v = encoded.replace(/[a-zA-Z]/g, (c) => {
       const base = c <= "Z" ? 65 : 97;
@@ -190,7 +190,7 @@ export function isDecoyUrl(u: string): boolean {
   return DECOY_RE.test(u) || DECOY_RE.test(d);
 }
 
-export function firstRealMatch(html: string, re: RegExp): string | null {
+function firstRealMatch(html: string, re: RegExp): string | null {
   for (const m of html.matchAll(
     new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g")
   )) {

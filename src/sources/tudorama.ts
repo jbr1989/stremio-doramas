@@ -5,11 +5,11 @@ import { addEmbedStreams } from "../extractors";
 import { genresFromListItems, imgFromTag } from "./dooplay";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
 
-export const TUDORAMA_BASE = "https://tudorama.com";
-export const TUDORAMA_LABEL = "TuDorama";
-export const TUDORAMA_PREFIX = "tudorama";
+const TUDORAMA_BASE = "https://tudorama.com";
+const TUDORAMA_LABEL = "TuDorama";
+const TUDORAMA_PREFIX = "tudorama";
 
-export async function fetchTudorama(
+async function fetchTudorama(
   url: string,
   env?: Env,
   timeoutMs = 12000
@@ -46,7 +46,7 @@ export async function fetchTudorama(
   return Promise.any(racers);
 }
 
-export function parseTudoramaCards(html: string) {
+function parseTudoramaCards(html: string) {
   const results: { id: string; name: string; poster: string }[] = [];
   const seen = new Set<string>();
 
@@ -243,7 +243,7 @@ export async function getTudoramaMeta(
   };
 }
 
-export async function resolveTudoramaEpisodeSlug(
+async function resolveTudoramaEpisodeSlug(
   epSlug: string,
   env: Env
 ): Promise<string | null> {

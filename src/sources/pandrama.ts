@@ -76,7 +76,7 @@ export async function pandramaEpCanonicalSlug(
   return slug;
 }
 
-export async function fetchPandramaData(path: string, env?: Env): Promise<any | null> {
+async function fetchPandramaData(path: string, env?: Env): Promise<any | null> {
   const url = path.startsWith("http") ? path : `${PANDRAMA_BASE}${path.startsWith("/") ? "" : "/"}${path}`;
   const proxyBase = env?.FETCH_PROXY_URL?.trim();
 

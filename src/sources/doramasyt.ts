@@ -5,9 +5,9 @@ import { addEmbedStreams } from "../extractors";
 import { genresFromBadgeBlock } from "./dooplay";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
 
-export const DORAMASYT_BASE = "https://www.doramasyt.com";
+const DORAMASYT_BASE = "https://www.doramasyt.com";
 
-export function parseDoramaYtCards(html: string) {
+function parseDoramaYtCards(html: string) {
   const results: { id: string; name: string; poster: string }[] = [];
   const seen = new Set<string>();
 
@@ -190,7 +190,7 @@ export function canonicalDytSlug(slug: string): string {
   return `${m[1]}-1x${parseInt(m[2], 10)}`;
 }
 
-export async function resolveDytEpisodeSlug(
+async function resolveDytEpisodeSlug(
   epSlug: string,
   env: Env
 ): Promise<string | null> {
