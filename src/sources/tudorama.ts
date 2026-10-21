@@ -2,7 +2,7 @@ import { Env } from "../types";
 import { genreSlug } from "../genres";
 import { CHROME_HEADERS, CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
 import { addEmbedStreams } from "../extractors";
-import { imgFromTag } from "./dooplay";
+import { genresFromListItems, imgFromTag } from "./dooplay";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
 
 export const TUDORAMA_BASE = "https://tudorama.com";
@@ -214,6 +214,12 @@ export async function getTudoramaMeta(
     if (raw) pushThumb(`${m[2]}-s${m[3]}x${m[4]}`, raw);
   }
 
+  // Géneros de la ficha: <li><a href="…/genres/{slug}/"> del sitio (las
+  // anclas sueltas son géneros de las cards "similares" — excluidas por
+  // exigir <li>; verificado in-vivo 3 vs 20). Label canónico (src/genres.ts)
+  // o texto del sitio tal cual (dooplay.ts).
+  const genres = genresFromListItems(html, "genres", TUDORAMA_PREFIX);
+
   const tmdb = await fetchTmdb(name, tmdbKey);
   return {
     meta: {
@@ -225,6 +231,7 @@ export async function getTudoramaMeta(
       description: tmdb?.description || description,
       posterShape: "poster",
       releaseInfo: tmdb?.year || "",
+      genres,
       videos: episodes.map((ep) => ({
         id: `${TUDORAMA_PREFIX}:${ep.slug.replace(/-s(\d+)x(\d+)$/, "-$1x$2")}`,
         title: `T${ep.s} · Episodio ${ep.e}`,

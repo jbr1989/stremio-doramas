@@ -383,3 +383,22 @@ export function genreSlug(
     source as GenreSourceName
   ];
 }
+
+/** Búsqueda inversa (slug → label) para el meta de una ficha: label canónico
+ * de la lista maestra si el slug está registrado para esa fuente; si no, el
+ * texto que pinta el propio sitio tal cual (decisión del usuario: los
+ * géneros no registrados se muestran tal cual — p. ej. kplay "comedy" →
+ * "Comedy"); último recurso, el slug humanizado ("war-politics" → "War
+ * politics"). Acepta `source` como string sin cast (prefijos de id). */
+export function genreLabelForMeta(
+  source: string,
+  slug: string,
+  siteText?: string
+): string {
+  return (
+    MASTER_GENRES.find((g) => g.slugs[source as GenreSourceName] === slug)
+      ?.label ||
+    (siteText || "").trim() ||
+    slug.replace(/-/g, " ").replace(/^\w/, (c) => c.toUpperCase())
+  );
+}

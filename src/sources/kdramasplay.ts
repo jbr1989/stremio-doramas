@@ -2,7 +2,7 @@ import { Env } from "../types";
 import { genreSlug } from "../genres";
 import { CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchHtml, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
 import { addEmbedStreams } from "../extractors";
-import { dooPlayerAjaxEmbed, imgFromTag } from "./dooplay";
+import { dooPlayerAjaxEmbed, genresFromDooPlay, imgFromTag } from "./dooplay";
 import { resolveEpisodeSlug, searchVariants, type SiteAdapter } from "./slugmap";
 
 export const KPLAY_BASE = "https://kdramasplay.com";
@@ -123,6 +123,12 @@ export async function getKplayMeta(
     .replace(/\s+/g, " ")
     .trim();
 
+  // Géneros de la ficha: bloque sgeneros del tema (server-rendered, base
+  // /genero/). Label canónico (src/genres.ts) o texto del sitio tal cual —
+  // kplay etiqueta en EN p.ej. "Comedy" (verificado in-vivo). Válida para
+  // movies y series: el bloque existe en ambas páginas DooPlay.
+  const genres = genresFromDooPlay(html, "genero", "kplay");
+
   const tmdb = await fetchTmdb(name, tmdbKey);
 
   if (type === "movie") {
@@ -136,6 +142,7 @@ export async function getKplayMeta(
         description: tmdb?.description || description,
         posterShape: "poster",
         releaseInfo: tmdb?.year || "",
+        genres,
         videos: [
           {
             id: `kplay:movie:${slug}`,
@@ -198,6 +205,7 @@ export async function getKplayMeta(
       description: tmdb?.description || description,
       posterShape: "poster",
       releaseInfo: tmdb?.year || "",
+      genres,
       videos: episodes.map((ep) => ({
         id: `kplay:ep:${ep.slug}`,
         title: `T${ep.s} · Episodio ${ep.e}`,

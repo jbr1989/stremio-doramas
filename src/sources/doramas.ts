@@ -2,7 +2,7 @@ import { Env } from "../types";
 import { genreSlug } from "../genres";
 import { CHROME_HEADERS, CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
 import { addEmbedStreams } from "../extractors";
-import { dooPlayerAjaxEmbed, imgFromTag } from "./dooplay";
+import { dooPlayerAjaxEmbed, genresFromDooPlay, imgFromTag } from "./dooplay";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
 
 export interface DoramaSource {
@@ -229,6 +229,11 @@ export async function getDoramaMeta(
     if (raw) pushThumb(m[2], raw);
   }
 
+  // Géneros de la ficha: bloque sgeneros del tema (server-rendered, cada
+  // sitio linkea su propia base: "genero"/"genre" — ver DoramaSource).
+  // Label canónico (src/genres.ts) o texto del sitio tal cual (dooplay.ts).
+  const genres = genresFromDooPlay(html, src.genreBase, src.prefix);
+
   const tmdb = await fetchTmdb(name, tmdbKey);
   return {
     meta: {
@@ -240,6 +245,7 @@ export async function getDoramaMeta(
       description: tmdb?.description || description,
       posterShape: "poster",
       releaseInfo: tmdb?.year || "",
+      genres,
       videos: episodes.map((ep) => ({
         id: `${src.prefix}:${ep.slug}`,
         title: `T${ep.s} · Episodio ${ep.e}`,

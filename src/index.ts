@@ -407,11 +407,13 @@ export default {
     const metaM = path.match(/^\/meta\/([^/]+)\/(.+)\.json$/);
     if (metaM) {
       const id = decodeURIComponent(metaM[2]);
-      const cached = await cacheGet(`meta:${id}`, env.STREAM_CACHE);
+      // v2: los metas ahora exponen `genres` (scrape de la ficha) — bump de
+      // clave para no servir metas cacheados sin géneros hasta su TTL.
+      const cached = await cacheGet(`meta:v2:${id}`, env.STREAM_CACHE);
       if (cached) return json(cached);
       try {
         const result = await getMeta(id, tmdbKey, env);
-        await cacheSet(`meta:${id}`, result, TTL.meta, env.STREAM_CACHE);
+        await cacheSet(`meta:v2:${id}`, result, TTL.meta, env.STREAM_CACHE);
         return json(result);
       } catch (e) {
         return json({ meta: null, error: String(e) });
