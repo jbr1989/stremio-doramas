@@ -1,4 +1,5 @@
 import { Env } from "../types";
+import { genreSlug } from "../genres";
 import { CHROME_HEADERS, CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
 import { addEmbedStreams } from "../extractors";
 import { imgFromTag } from "./dooplay";
@@ -92,6 +93,29 @@ export async function getTudoramaCatalog(
         await fetchTudorama(`${TUDORAMA_BASE}/?s=${encodeURIComponent(q)}`, env)
       ).map(toMetaPreview),
     };
+  }
+
+  // Género (label ES → slug vía la lista maestra canónica, src/genres.ts).
+  // Archivo /genres/{slug}/ — es la base que el propio sitio usa en sus fichas
+  // (su directorio vive en /genero/series/, distinta taxonomía) — paginado con
+  // /page/N/. Solo se exponen los slugs verificados con cards upstream; el
+  // catch devuelve vacío en vez de un error para Stremio.
+  const g = (extra.genre || "").trim();
+  if (g) {
+    const slug = genreSlug("tudorama", g);
+    if (!slug) return { metas: [] };
+    const gpage = Math.floor(parseInt(extra.skip || "0", 10) / 24) + 1;
+    const gpath =
+      gpage > 1
+        ? `${TUDORAMA_BASE}/genres/${slug}/page/${gpage}/`
+        : `${TUDORAMA_BASE}/genres/${slug}/`;
+    let ghtml = "";
+    try {
+      ghtml = await fetchTudorama(gpath, env);
+    } catch {
+      ghtml = "";
+    }
+    return { metas: ghtml ? parseTudoramaCards(ghtml).map(toMetaPreview) : [] };
   }
 
   const page = Math.floor(parseInt(extra.skip || "0", 10) / 24) + 1;

@@ -1,4 +1,5 @@
 import { Env } from "../types";
+import { genreSlug } from "../genres";
 import { CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchHtml, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
 import { addEmbedStreams } from "../extractors";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
@@ -67,6 +68,27 @@ export async function getDoramaYtCatalog(
         )
       : cards;
     return { metas: (filtered.length > 0 ? filtered : cards).map(toMetaPreview) };
+  }
+
+  // Género (label ES → slug vía la lista maestra canónica, src/genres.ts).
+  // doramasyt pagina sus archivos de género con ?p=N (el /page/N/ da 404 y
+  // ?page= redirige a ?p=): usamos ?p= directo.
+  const g = (extra.genre || "").trim();
+  if (g) {
+    const slug = genreSlug("dyt", g);
+    if (!slug) return { metas: [] };
+    const gpage = Math.floor(parseInt(extra.skip || "0", 10) / 24) + 1;
+    const gpath =
+      gpage > 1
+        ? `${DORAMASYT_BASE}/genero/${slug}?p=${gpage}`
+        : `${DORAMASYT_BASE}/genero/${slug}`;
+    let ghtml = "";
+    try {
+      ghtml = await fetchHtml(gpath, env);
+    } catch {
+      ghtml = "";
+    }
+    return { metas: parseDoramaYtCards(ghtml).map(toMetaPreview) };
   }
 
   const page = Math.floor(parseInt(extra.skip || "0", 10) / 24) + 1;

@@ -54,6 +54,11 @@ export async function getKplayCatalog(
       ).map(toMetaPreview),
     };
   }
+
+  // NOTA género: kdramasplay SÍ tiene archivos /genero/{slug}/, pero listan
+  // PELÍCULAS (12 fichas fijas, sin paginación real) — no se integran para no
+  // devolver películas en un catálogo de series. Detalle en src/genres.ts.
+
   const page = Math.floor(parseInt(extra.skip || "0", 10) / 24) + 1;
   const path = page > 1 ? `${KPLAY_BASE}/series/page/${page}/` : `${KPLAY_BASE}/series/`;
   return {
