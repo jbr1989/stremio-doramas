@@ -77,9 +77,9 @@ export async function getAllAlldoramasCatalog(
   const perSource = await Promise.all(
     SOURCES.map(async (src) => {
       // Género solo en fuentes que lo tienen en la lista maestra canónica
-      // (src/genres.ts): skip de las demás — dorama/dsub/kplay solo exponen
-      // películas en sus archivos de género y dflix no integra género aún;
-      // mezclarlas contaminaría la lista.
+      // (src/genres.ts): skip de las demás — dorama/dsub/kplay ahora SÍ
+      // integran género (Opción B: archivos de término upstream, aunque
+      // algunos devuelvan vacío hoy).
       if (extra.genre && !genreSlug(src.name, extra.genre)) return [];
       const perExtra: Record<string, string> = q
         ? { search: q }

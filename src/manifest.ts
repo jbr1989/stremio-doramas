@@ -7,8 +7,9 @@ export const ADDON_ID = "com.doramas.stremio";
 
 // Extras de catálogo: búsqueda y paginación estándar; el dropdown de género
 // se agrega con withGenre() únicamente donde el sitio lo soporta de verdad
-// (todo el detalle in-vivo en src/genres.ts). DoramasLat/DoramedPlay/KDramas
-// Play quedan sin género: sus archivos de género listan solo películas.
+// (criterio Opción B y detalle in-vivo en src/genres.ts): términos del
+// registry propio de cada sitio, expuestos aunque hoy devuelvan 0 series —
+// si upstream etiqueta series mañana, el filtro se llena solo.
 type CatalogExtra = {
   name: string;
   isRequired: boolean;
@@ -27,7 +28,7 @@ const withGenre = (opts: string[]): CatalogExtra[] => [
 
 export const MANIFEST = {
   id: ADDON_ID,
-  version: "1.2.2",
+  version: "1.2.3",
   name: "Doramas",
   description: "Fuentes de Doramas en español y subtituladas",
   logo: "https://doramasflix.in/favicon.ico",
@@ -44,19 +45,19 @@ export const MANIFEST = {
       type: "series",
       id: "doramaslat-directory",
       name: "Doramas Latino — Directorio",
-      extra: SEARCH_SKIP,
+      extra: withGenre(genreSourceOptions("dorama")),
     },
     {
       type: "series",
       id: "doramedplay-directory",
       name: "Doramas Sub — Directorio",
-      extra: SEARCH_SKIP,
+      extra: withGenre(genreSourceOptions("dsub")),
     },
     {
       type: "series",
       id: "kplay-directory",
       name: "KDramas Play — Directorio",
-      extra: SEARCH_SKIP,
+      extra: withGenre(genreSourceOptions("kplay")),
     },
     {
       type: "series",

@@ -1,4 +1,5 @@
 import { Env } from "../types";
+import { genreSlug } from "../genres";
 import { CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchHtml, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
 import { addEmbedStreams } from "../extractors";
 import { dooPlayerAjaxEmbed, imgFromTag } from "./dooplay";
@@ -55,9 +56,25 @@ export async function getKplayCatalog(
     };
   }
 
-  // NOTA género: kdramasplay SÍ tiene archivos /genero/{slug}/, pero listan
-  // PELÍCULAS (12 fichas fijas, sin paginación real) — no se integran para no
-  // devolver películas en un catálogo de series. Detalle en src/genres.ts.
+  // Género: archivo /genero/{slug}/ del propio sitio (términos del registry
+  // WP REST /wp-json/wp/v2/genres — ver src/genres.ts). Sin paginación real:
+  // ?page=2 repite página 1 exactamente (verificado romance y comedia) → se
+  // ignora skip y se sirve siempre página 1; el dedup del consolidado absorbe
+  // las repeticiones. Opción B: géneros con 0 series hoy devuelven vacío.
+  const g = (extra.genre || "").trim();
+  if (g) {
+    const gslug = genreSlug("kplay", g);
+    if (!gslug) return { metas: [] };
+    return {
+      metas: parseKplayCards(
+        await fetchHtml(`${KPLAY_BASE}/genero/${gslug}/`, env)
+      )
+        // El archivo de género mezcla /series/ y /peliculas/: filter a series
+        // — es un catálogo de type "series" y parseKplayCards etiqueta type.
+        .filter((r) => r.id.startsWith("kplay:series:"))
+        .map(toMetaPreview),
+    };
+  }
 
   const page = Math.floor(parseInt(extra.skip || "0", 10) / 24) + 1;
   const path = page > 1 ? `${KPLAY_BASE}/series/page/${page}/` : `${KPLAY_BASE}/series/`;
