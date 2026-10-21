@@ -31,7 +31,9 @@ export const MANIFEST = {
   version: "1.2.7",
   name: "Doramas",
   description: "Fuentes de Doramas en español y subtituladas",
-  logo: "https://doramasflix.in/favicon.ico",
+  // Fallback por si el manifest se consume fuera del handler (el dominio vivo
+  // en producción); en runtime index.ts reescribe logo al origin del request.
+  logo: "https://stremio-doramas.jbr1989-b26.workers.dev/logo.png",
   resources: ["catalog", "meta", "stream"],
   types: ["series", "movie"],
   catalogs: [
