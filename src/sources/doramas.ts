@@ -1,13 +1,17 @@
 import { Env } from "../types";
+import { genreSlug } from "../genres";
 import { CHROME_HEADERS, CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
 import { addEmbedStreams } from "../extractors";
-import { dooPlayerAjaxEmbed, imgFromTag } from "./dooplay";
+import { dooPlayerAjaxEmbed, genresFromDooPlay, imgFromTag } from "./dooplay";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
 
 export interface DoramaSource {
   prefix: string;
   base: string;
   label: string;
+  /** Base del archivo de género del sitio: "genero" (doramaslat) o "genre"
+   * (doramedplay). Conslutas: {base}/{genreBase}/{slug}/page/N/. */
+  genreBase: string;
 }
 
 export const DORAMA_SOURCES: Record<string, DoramaSource> = {
@@ -15,11 +19,13 @@ export const DORAMA_SOURCES: Record<string, DoramaSource> = {
     prefix: "dorama",
     base: "https://doramaslat.com",
     label: "Doramas Latino",
+    genreBase: "genero",
   },
   dsub: {
     prefix: "dsub",
     base: "https://doramedplay.net",
     label: "Doramas Sub",
+    genreBase: "genre",
   },
 };
 
@@ -107,6 +113,32 @@ export async function getDoramaCatalog(
       ).map(toMetaPreview),
     };
   }
+  // Género: archivo {genreBase}/{slug}/page/N/ del propio sitio (términos del
+  // registry WP REST /wp-json/wp/v2/genres — ver src/genres.ts). El archivo
+  // mezcla post types (60 posts/página: tvshows+peliculas, orden recientes):
+  // parseDoramaCards ya filtra solo /tvshows/ → cada página devuelve el
+  // subconjunto de series de ese género. Opción B: un género con 0 series
+  // etiquetadas hoy devuelve vacío y se llena solo cuando upstream etiquete.
+  const g = (extra.genre || "").trim();
+  if (g) {
+    const gslug = genreSlug(src.prefix, g);
+    if (!gslug) return { metas: [] };
+    // Página por skip: mismo divisor 45 que el catálogo /tvshows/ (all.ts
+    // declara page:45). El archivo real pagina 60 posts/página mezclados, así
+    // que la granularidad del skip es aproximada — aceptable: Stremio tolera
+    // páginas de largo variable y parciales.
+    const gpage = Math.floor(parseInt(extra.skip || "0", 10) / 45) + 1;
+    const gpath =
+      gpage > 1
+        ? `${src.base}/${src.genreBase}/${gslug}/page/${gpage}/`
+        : `${src.base}/${src.genreBase}/${gslug}/`;
+    return {
+      metas: parseDoramaCards(await fetchDorama(gpath, env), src).map(
+        toMetaPreview
+      ),
+    };
+  }
+
   const page = Math.floor(parseInt(extra.skip || "0", 10) / 45) + 1;
   const path =
     page > 1
@@ -197,6 +229,11 @@ export async function getDoramaMeta(
     if (raw) pushThumb(m[2], raw);
   }
 
+  // Géneros de la ficha: bloque sgeneros del tema (server-rendered, cada
+  // sitio linkea su propia base: "genero"/"genre" — ver DoramaSource).
+  // Label canónico (src/genres.ts) o texto del sitio tal cual (dooplay.ts).
+  const genres = genresFromDooPlay(html, src.genreBase, src.prefix);
+
   const tmdb = await fetchTmdb(name, tmdbKey);
   return {
     meta: {
@@ -208,6 +245,7 @@ export async function getDoramaMeta(
       description: tmdb?.description || description,
       posterShape: "poster",
       releaseInfo: tmdb?.year || "",
+      genres,
       videos: episodes.map((ep) => ({
         id: `${src.prefix}:${ep.slug}`,
         title: `T${ep.s} · Episodio ${ep.e}`,

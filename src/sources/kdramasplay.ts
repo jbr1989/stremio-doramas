@@ -1,7 +1,8 @@
 import { Env } from "../types";
+import { genreSlug } from "../genres";
 import { CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchHtml, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
 import { addEmbedStreams } from "../extractors";
-import { dooPlayerAjaxEmbed, imgFromTag } from "./dooplay";
+import { dooPlayerAjaxEmbed, genresFromDooPlay, imgFromTag } from "./dooplay";
 import { resolveEpisodeSlug, searchVariants, type SiteAdapter } from "./slugmap";
 
 export const KPLAY_BASE = "https://kdramasplay.com";
@@ -54,6 +55,27 @@ export async function getKplayCatalog(
       ).map(toMetaPreview),
     };
   }
+
+  // Género: archivo /genero/{slug}/ del propio sitio (términos del registry
+  // WP REST /wp-json/wp/v2/genres — ver src/genres.ts). Sin paginación real:
+  // ?page=2 repite página 1 exactamente (verificado romance y comedia) → se
+  // ignora skip y se sirve siempre página 1; el dedup del consolidado absorbe
+  // las repeticiones. Opción B: géneros con 0 series hoy devuelven vacío.
+  const g = (extra.genre || "").trim();
+  if (g) {
+    const gslug = genreSlug("kplay", g);
+    if (!gslug) return { metas: [] };
+    return {
+      metas: parseKplayCards(
+        await fetchHtml(`${KPLAY_BASE}/genero/${gslug}/`, env)
+      )
+        // El archivo de género mezcla /series/ y /peliculas/: filter a series
+        // — es un catálogo de type "series" y parseKplayCards etiqueta type.
+        .filter((r) => r.id.startsWith("kplay:series:"))
+        .map(toMetaPreview),
+    };
+  }
+
   const page = Math.floor(parseInt(extra.skip || "0", 10) / 24) + 1;
   const path = page > 1 ? `${KPLAY_BASE}/series/page/${page}/` : `${KPLAY_BASE}/series/`;
   return {
@@ -101,6 +123,12 @@ export async function getKplayMeta(
     .replace(/\s+/g, " ")
     .trim();
 
+  // Géneros de la ficha: bloque sgeneros del tema (server-rendered, base
+  // /genero/). Label canónico (src/genres.ts) o texto del sitio tal cual —
+  // kplay etiqueta en EN p.ej. "Comedy" (verificado in-vivo). Válida para
+  // movies y series: el bloque existe en ambas páginas DooPlay.
+  const genres = genresFromDooPlay(html, "genero", "kplay");
+
   const tmdb = await fetchTmdb(name, tmdbKey);
 
   if (type === "movie") {
@@ -114,6 +142,7 @@ export async function getKplayMeta(
         description: tmdb?.description || description,
         posterShape: "poster",
         releaseInfo: tmdb?.year || "",
+        genres,
         videos: [
           {
             id: `kplay:movie:${slug}`,
@@ -176,6 +205,7 @@ export async function getKplayMeta(
       description: tmdb?.description || description,
       posterShape: "poster",
       releaseInfo: tmdb?.year || "",
+      genres,
       videos: episodes.map((ep) => ({
         id: `kplay:ep:${ep.slug}`,
         title: `T${ep.s} · Episodio ${ep.e}`,

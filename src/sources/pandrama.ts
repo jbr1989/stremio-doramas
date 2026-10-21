@@ -1,4 +1,5 @@
 import { Env } from "../types";
+import { genreLabelForMeta, genreSlug } from "../genres";
 import {
   cacheGet,
   cacheSet,
@@ -15,11 +16,26 @@ import { extractMp4upload } from "../extractors";
 
 const PANDRAMA_BASE = "https://www.pandrama.tv";
 
-// /explorar filtrado por mainType id 2 ("Drama"), orden por vistas del día.
-// Excluye server-side "Shorts" (id 4) y películas (id 1). Pagina con &page=N
-// (Laravel: per_page=48, next_page, total).
-const PANDRAMA_EXPLORE_DAILY =
-  "/explorar?filters=W3sia2V5IjoibWFpblR5cGVzIiwidmFsdWUiOlsyXSwib3BlcmF0b3IiOiJoYXNBbGwifV0=&order=views_day:desc";
+// /explorar acepta filters=<encodeURIComponent(btoa(JSON))>. mainTypes id 2
+// es "Drama" (el tipo principal del sitio — todos los dramas asiáticos);
+// los géneros son IDS numéricos (value-lists API, src/genres.ts) con
+// operator hasAll. Excluye server-side "Shorts" (mainType 4) y películas
+// (mainType 1). Pagina con &page=N (Laravel: per_page=48, total).
+//
+// Formato confirmado in-vivo (oct. 2026): el propio SPA compone
+// encodeURIComponent(btoa(JSON.stringify(filters))) y el filtro de género
+// devuelve catálogos propios (romance/boys-love/animación verificados).
+function pandramaExplorePath(genres?: number[]): string {
+  const filters: { key: string; value: number[]; operator: "hasAll" }[] = [
+    { key: "mainTypes", value: [2], operator: "hasAll" },
+  ];
+  if (genres?.length) {
+    filters.push({ key: "genres", value: genres, operator: "hasAll" });
+  }
+  const b64 = encodeURIComponent(btoa(JSON.stringify(filters)));
+  return `${PANDRAMA_BASE}/explorar?filters=${b64}&order=views_day:desc`;
+}
+
 const PANDRAMA_PAGE_SIZE = 48;
 
 // El fan-out de src/index.ts consulta las demás fuentes con un slug canónico
@@ -142,8 +158,36 @@ export async function getPandramaCatalog(
     return { metas };
   }
 
+  // Género (label ES → id pandrama vía la lista maestra, src/genres.ts).
+  // El filtro genres=[id] hasAll devuelve el catálogo propio del género
+  // (validado in-vivo); paginado y shape de respuesta idénticos al directorio.
+  const g = (extra.genre || "").trim();
+  if (g) {
+    const genreId = genreSlug("pandrama", g);
+    if (!genreId) return { metas: [] };
+    const gpage = Math.floor(Number(extra.skip || 0) / PANDRAMA_PAGE_SIZE) + 1;
+    const data = await fetchPandramaData(
+      `${pandramaExplorePath([Number(genreId)])}&page=${gpage}`,
+      env
+    );
+    const items = (
+      data?.loaders?.channelPage?.channel?.content?.data || []
+    ).filter((item: any) => !isPandramaShort(item));
+    const metas = items.map((item: any) =>
+      toMetaPreview({
+        id: `pandrama:${item.id}:${item.slug || "dorama"}`,
+        name: decodeEntities(item.name || "Dorama"),
+        poster: normalizePoster(item.poster),
+      })
+    );
+    return { metas };
+  }
+
   const page = Math.floor(Number(extra.skip || 0) / PANDRAMA_PAGE_SIZE) + 1;
-  const data = await fetchPandramaData(`${PANDRAMA_EXPLORE_DAILY}&page=${page}`, env);
+  const data = await fetchPandramaData(
+    `${pandramaExplorePath()}&page=${page}`,
+    env
+  );
   const items = (data?.loaders?.channelPage?.channel?.content?.data || []).filter(
     (item: any) => !isPandramaShort(item)
   );
@@ -179,6 +223,28 @@ export async function getPandramaMeta(
   const poster = normalizePoster(titleObj.poster);
   const description = decodeEntities(titleObj.description || "");
   const episodesData = titlePage.episodes?.data || [];
+
+  // Géneros de la ficha: titlePage.title.genres llega inline en el propio
+  // bootstrapData con {id, name, display_name} (no hay scraping ni llamadas
+  // extra: el /api/v1/value-lists/genres existe pero es innecesario). La
+  // lista maestra registra los slugs pandrama como IDs numéricos
+  // (src/genres.ts), así que id=12 → "Acción y aventura" canónica mejor que
+  // el "Action & Adventure" de la API; los no registrados muestran su
+  // display_name tal cual (decisión del usuario). Dedup por label, en orden
+  // de llegada de la API.
+  const genres: string[] = [];
+  const gSeen = new Set<string>();
+  for (const g of titleObj.genres || []) {
+    if (!g?.id && g?.id !== 0) continue;
+    const label = genreLabelForMeta(
+      "pandrama",
+      String(g.id),
+      g.display_name || g.name
+    );
+    if (!label || gSeen.has(label)) continue;
+    gSeen.add(label);
+    genres.push(label);
+  }
 
   const videos: any[] = [];
   if (Array.isArray(episodesData) && episodesData.length > 0) {
@@ -217,6 +283,7 @@ export async function getPandramaMeta(
       description: tmdb?.description || description,
       posterShape: "poster",
       releaseInfo: tmdb?.year || (titleObj.year ? String(titleObj.year) : ""),
+      genres,
       videos,
     },
   };

@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { cleanTitle } from "../utils";
+import { genreSlug } from "../genres";
 import { getDoramaCatalog, DORAMA_SOURCES } from "./doramas";
 import { getKplayCatalog } from "./kdramasplay";
 import { getDoramasflixCatalog } from "./doramasflix";
@@ -75,8 +76,15 @@ export async function getAllAlldoramasCatalog(
   //    ≠ catálogo muerto: se registra y sigue con el resto.
   const perSource = await Promise.all(
     SOURCES.map(async (src) => {
+      // Género solo en fuentes que lo tienen en la lista maestra canónica
+      // (src/genres.ts): skip de las demás — dorama/dsub/kplay ahora SÍ
+      // integran género (Opción B: archivos de término upstream, aunque
+      // algunos devuelvan vacío hoy).
+      if (extra.genre && !genreSlug(src.name, extra.genre)) return [];
       const perExtra: Record<string, string> = q
         ? { search: q }
+        : extra.genre
+        ? { skip: String((page - 1) * src.page), genre: extra.genre }
         : { skip: String((page - 1) * src.page) };
       try {
         const res = await src.fetch(perExtra, env);

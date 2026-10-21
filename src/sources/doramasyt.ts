@@ -1,6 +1,8 @@
 import { Env } from "../types";
+import { genreSlug } from "../genres";
 import { CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchHtml, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
 import { addEmbedStreams } from "../extractors";
+import { genresFromBadgeBlock } from "./dooplay";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
 
 export const DORAMASYT_BASE = "https://www.doramasyt.com";
@@ -69,6 +71,27 @@ export async function getDoramaYtCatalog(
     return { metas: (filtered.length > 0 ? filtered : cards).map(toMetaPreview) };
   }
 
+  // Género (label ES → slug vía la lista maestra canónica, src/genres.ts).
+  // doramasyt pagina sus archivos de género con ?p=N (el /page/N/ da 404 y
+  // ?page= redirige a ?p=): usamos ?p= directo.
+  const g = (extra.genre || "").trim();
+  if (g) {
+    const slug = genreSlug("dyt", g);
+    if (!slug) return { metas: [] };
+    const gpage = Math.floor(parseInt(extra.skip || "0", 10) / 24) + 1;
+    const gpath =
+      gpage > 1
+        ? `${DORAMASYT_BASE}/genero/${slug}?p=${gpage}`
+        : `${DORAMASYT_BASE}/genero/${slug}`;
+    let ghtml = "";
+    try {
+      ghtml = await fetchHtml(gpath, env);
+    } catch {
+      ghtml = "";
+    }
+    return { metas: parseDoramaYtCards(ghtml).map(toMetaPreview) };
+  }
+
   const page = Math.floor(parseInt(extra.skip || "0", 10) / 24) + 1;
   const path = page > 1 ? `${DORAMASYT_BASE}/doramas?p=${page}` : `${DORAMASYT_BASE}/doramas`;
   let html = "";
@@ -120,6 +143,11 @@ export async function getDoramaYtMeta(
   const ep1Match = html.match(/\/ver\/([a-z0-9-]+-episodio-)1["'\s>]/i);
   const baseEpSlug = ep1Match ? ep1Match[1] : `${slug.replace(/-sub-espanol$/, "")}-episodio-`;
 
+  // Géneros de la ficha: badges del bloque lh-lg (server-rendered, base
+  // /genero/ sin slash final). Label canónico (src/genres.ts) o texto del
+  // sitio tal cual (dooplay.ts).
+  const genres = genresFromBadgeBlock(html, "genero", "dyt");
+
   const tmdb = await fetchTmdb(name, tmdbKey);
   const epCount = tmdb?.year ? 24 : 32;
 
@@ -146,6 +174,7 @@ export async function getDoramaYtMeta(
       description: tmdb?.description || description,
       posterShape: "poster",
       releaseInfo: tmdb?.year || "",
+      genres,
       videos,
     },
   };

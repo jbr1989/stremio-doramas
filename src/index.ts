@@ -1,5 +1,6 @@
 import { Env } from "./types";
 import { MANIFEST } from "./manifest";
+import { LOGO_PNG_BASE64 } from "./logo";
 import {
   CORS,
   json,
@@ -198,7 +199,22 @@ export default {
 
     if (request.method === "OPTIONS")
       return new Response(null, { headers: CORS });
-    if (path === "/" || path === "/manifest.json") return json(MANIFEST);
+    if (path === "/logo.png") {
+      const bytes = Uint8Array.from(atob(LOGO_PNG_BASE64), (c) =>
+        c.charCodeAt(0)
+      );
+      return new Response(bytes, {
+        headers: {
+          "Content-Type": "image/png",
+          "Cache-Control": "public, max-age=86400",
+          "Content-Length": String(bytes.length),
+        },
+      });
+    }
+    // El logo se sirve desde el propio addon: en local apunta al origin del
+    // request y en producción al workers.dev, sin depender de sitios externos.
+    if (path === "/" || path === "/manifest.json")
+      return json({ ...MANIFEST, logo: `${url.origin}/logo.png` });
 
     if (path === "/debug") {
       return json({
@@ -407,11 +423,13 @@ export default {
     const metaM = path.match(/^\/meta\/([^/]+)\/(.+)\.json$/);
     if (metaM) {
       const id = decodeURIComponent(metaM[2]);
-      const cached = await cacheGet(`meta:${id}`, env.STREAM_CACHE);
+      // v2: los metas ahora exponen `genres` (scrape de la ficha) — bump de
+      // clave para no servir metas cacheados sin géneros hasta su TTL.
+      const cached = await cacheGet(`meta:v2:${id}`, env.STREAM_CACHE);
       if (cached) return json(cached);
       try {
         const result = await getMeta(id, tmdbKey, env);
-        await cacheSet(`meta:${id}`, result, TTL.meta, env.STREAM_CACHE);
+        await cacheSet(`meta:v2:${id}`, result, TTL.meta, env.STREAM_CACHE);
         return json(result);
       } catch (e) {
         return json({ meta: null, error: String(e) });

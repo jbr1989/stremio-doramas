@@ -1,4 +1,5 @@
 import { Env } from "../types";
+import { genreLabelForMeta, genreSlug } from "../genres";
 import { CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
 import { addEmbedStreams } from "../extractors";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
@@ -89,6 +90,48 @@ export async function getDoramasflixCatalog(
     return { metas };
   }
 
+  // Género vía la GraphQL nativa del sitio (query paginationDorama — la MISMA
+  // que usa su página SSR /generos/{slug}; capturada del tráfico real y
+  // validada in-vivo: romance count=1658, drama 2451…). Paginación page/limit
+  // con perPage=24 (el valor del sitio). Sort default del backend
+  // (_ID_DESC — recientes), igual que el sitio.
+  const g = (extra.genre || "").trim();
+  if (g) {
+    const gslug = genreSlug("dflix", g);
+    if (!gslug) return { metas: [] };
+    const gpage = Math.floor(parseInt(extra.skip || "0", 10) / 24) + 1;
+    const gqlGenre = `
+      query PaginationDorama($limit: Int, $filter: FilterDoramasInput, $page: Int) {
+        paginationDorama(limit: $limit, filter: $filter, page: $page) {
+          items {
+            slug
+            name
+            name_es
+            poster_path
+          }
+        }
+      }
+    `;
+    const gdata = await fetchGql(gqlGenre, {
+      page: gpage,
+      limit: 24,
+      filter: { genreSlug: gslug, isTVShow: false },
+    });
+    const gitems = gdata?.paginationDorama?.items || [];
+    const gmetas = gitems.map((item: any) => {
+      const poster = item.poster_path
+        ? `https://image.tmdb.org/t/p/w342${item.poster_path}`
+        : "";
+      const name = cleanTitle(item.name || item.name_es || item.slug);
+      return toMetaPreview({
+        id: `dflix:${item.slug}`,
+        name,
+        poster,
+      });
+    });
+    return { metas: gmetas };
+  }
+
   const page = Math.floor(parseInt(extra.skip || "0", 10) / 20) + 1;
   const limit = 20 * page;
   const query = `
@@ -142,6 +185,10 @@ export async function getDoramasflixMeta(
           season_number
           number_of_episodes
         }
+        genres {
+          slug
+          name
+        }
       }
     }
   `;
@@ -159,6 +206,25 @@ export async function getDoramasflixMeta(
     ? `https://image.tmdb.org/t/p/w1280${detail.backdrop_path}`
     : poster;
   const description = decodeEntities(detail.overview || "").trim();
+
+  // Géneros de la ficha: relation genres {slug, name} de la propia GraphQL
+  // (campo validado in-vivo contra la API de producción — los descartes
+  // genreSlug/genre/tags no existen en el tipo Dorama y matarían la query
+  // entera: MUST VALIDAR cualquier campo nuevo en una query de prueba antes
+  // de agregarlo aquí). Etiqueta: canónica ES de la lista maestra (dflix
+  // registra sus slugs, src/genres.ts) o el name de la API tal cual —
+  // DECISION DEL USUARIO para los no registrados — último recurso, slug
+  // humanizado. Las entradas con slug null (p.ej. "TV Movie" en listGenres)
+  // se saltan. Dedup por label con la orden de la API.
+  const genres: string[] = [];
+  const gSeen = new Set<string>();
+  for (const g of detail.genres || []) {
+    if (!g?.slug) continue;
+    const label = genreLabelForMeta("dflix", g.slug.toLowerCase(), g.name);
+    if (!label || gSeen.has(label)) continue;
+    gSeen.add(label);
+    genres.push(label);
+  }
 
   const episodes: { id: string; season: number; episode: number; title: string }[] = [];
   const seasons = detail.seasons || [];
@@ -201,6 +267,7 @@ export async function getDoramasflixMeta(
       description: tmdb?.description || description,
       posterShape: "poster",
       releaseInfo: tmdb?.year || "",
+      genres,
       videos: episodes.map((ep) => ({
         id: ep.id,
         title: ep.title,
