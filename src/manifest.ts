@@ -5,10 +5,10 @@ import {
 
 export const ADDON_ID = "com.doramas.stremio";
 
-// Extras estándar por catálogo + dropdown de género solo en las fuentes cuyo
-// sitio expone archivos/listas de género de SERIES reales y verificados (todo
-// el detalle in-vivo en src/genres.ts). DoramasLat/DoramedPlay/KDramas Play
-// quedan sin género: sus archivos de género listan solo películas.
+// Extras de catálogo: búsqueda y paginación estándar; el dropdown de género
+// se agrega con withGenre() únicamente donde el sitio lo soporta de verdad
+// (todo el detalle in-vivo en src/genres.ts). DoramasLat/DoramedPlay/KDramas
+// Play quedan sin género: sus archivos de género listan solo películas.
 type CatalogExtra = {
   name: string;
   isRequired: boolean;
@@ -16,11 +16,6 @@ type CatalogExtra = {
   optionsLimit?: number;
 };
 
-// Extras estándar por catálogo: búsqueda y paginación. En el usuario final
-// solo pasan lo que la fuente soporta; el dropdown de género se agrega con
-// withGenre() únicamente donde el sitio lo soporta de verdad (mapas y pruebas
-// in-vivo en src/genres.ts). DoramasLat/DoramedPlay/KDramas Play quedan sin
-// género: sus archivos de género listan solo películas.
 const SEARCH_SKIP: CatalogExtra[] = [
   { name: "search", isRequired: false },
   { name: "skip", isRequired: false },
@@ -32,7 +27,7 @@ const withGenre = (opts: string[]): CatalogExtra[] => [
 
 export const MANIFEST = {
   id: ADDON_ID,
-  version: "1.2.1",
+  version: "1.2.2",
   name: "Doramas",
   description: "Fuentes de Doramas en español y subtituladas",
   logo: "https://doramasflix.in/favicon.ico",
@@ -67,7 +62,7 @@ export const MANIFEST = {
       type: "series",
       id: "doramasflix-directory",
       name: "Doramasflix — Directorio",
-      extra: SEARCH_SKIP,
+      extra: withGenre(genreSourceOptions("dflix")),
     },
     {
       type: "series",

@@ -1,4 +1,5 @@
 import { Env } from "../types";
+import { genreSlug } from "../genres";
 import { CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
 import { addEmbedStreams } from "../extractors";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
@@ -87,6 +88,48 @@ export async function getDoramasflixCatalog(
       });
     });
     return { metas };
+  }
+
+  // Género vía la GraphQL nativa del sitio (query paginationDorama — la MISMA
+  // que usa su página SSR /generos/{slug}; capturada del tráfico real y
+  // validada in-vivo: romance count=1658, drama 2451…). Paginación page/limit
+  // con perPage=24 (el valor del sitio). Sort default del backend
+  // (_ID_DESC — recientes), igual que el sitio.
+  const g = (extra.genre || "").trim();
+  if (g) {
+    const gslug = genreSlug("dflix", g);
+    if (!gslug) return { metas: [] };
+    const gpage = Math.floor(parseInt(extra.skip || "0", 10) / 24) + 1;
+    const gqlGenre = `
+      query PaginationDorama($limit: Int, $filter: FilterDoramasInput, $page: Int) {
+        paginationDorama(limit: $limit, filter: $filter, page: $page) {
+          items {
+            slug
+            name
+            name_es
+            poster_path
+          }
+        }
+      }
+    `;
+    const gdata = await fetchGql(gqlGenre, {
+      page: gpage,
+      limit: 24,
+      filter: { genreSlug: gslug, isTVShow: false },
+    });
+    const gitems = gdata?.paginationDorama?.items || [];
+    const gmetas = gitems.map((item: any) => {
+      const poster = item.poster_path
+        ? `https://image.tmdb.org/t/p/w342${item.poster_path}`
+        : "";
+      const name = cleanTitle(item.name || item.name_es || item.slug);
+      return toMetaPreview({
+        id: `dflix:${item.slug}`,
+        name,
+        poster,
+      });
+    });
+    return { metas: gmetas };
   }
 
   const page = Math.floor(parseInt(extra.skip || "0", 10) / 20) + 1;
