@@ -6,8 +6,8 @@ import {
 export const ADDON_ID = "com.doramas.stremio";
 
 // Extras estándar por catálogo + dropdown de género solo en las fuentes cuyo
-// sitio expone archivos de género de SERIES reales y verificados (mapas y
-// pruebas in-vivo en src/genres.ts). DoramasLat/DoramedPlay/KDramas Play
+// sitio expone archivos/listas de género de SERIES reales y verificados (todo
+// el detalle in-vivo en src/genres.ts). DoramasLat/DoramedPlay/KDramas Play
 // quedan sin género: sus archivos de género listan solo películas.
 type CatalogExtra = {
   name: string;
@@ -32,7 +32,7 @@ const withGenre = (opts: string[]): CatalogExtra[] => [
 
 export const MANIFEST = {
   id: ADDON_ID,
-  version: "1.2.0",
+  version: "1.2.1",
   name: "Doramas",
   description: "Fuentes de Doramas en español y subtituladas",
   logo: "https://doramasflix.in/favicon.ico",
@@ -78,8 +78,8 @@ export const MANIFEST = {
     {
       type: "series",
       id: "pandrama-directory",
-      name: "Pandrama — Today Popular",
-      extra: SEARCH_SKIP,
+      name: "Pandrama — Dramas Populares",
+      extra: withGenre(genreSourceOptions("pandrama")),
     },
     {
       type: "series",
