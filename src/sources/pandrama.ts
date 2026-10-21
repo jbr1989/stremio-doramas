@@ -1,5 +1,5 @@
 import { Env } from "../types";
-import { genreSlug } from "../genres";
+import { genreLabelForMeta, genreSlug } from "../genres";
 import {
   cacheGet,
   cacheSet,
@@ -224,6 +224,28 @@ export async function getPandramaMeta(
   const description = decodeEntities(titleObj.description || "");
   const episodesData = titlePage.episodes?.data || [];
 
+  // Géneros de la ficha: titlePage.title.genres llega inline en el propio
+  // bootstrapData con {id, name, display_name} (no hay scraping ni llamadas
+  // extra: el /api/v1/value-lists/genres existe pero es innecesario). La
+  // lista maestra registra los slugs pandrama como IDs numéricos
+  // (src/genres.ts), así que id=12 → "Acción y aventura" canónica mejor que
+  // el "Action & Adventure" de la API; los no registrados muestran su
+  // display_name tal cual (decisión del usuario). Dedup por label, en orden
+  // de llegada de la API.
+  const genres: string[] = [];
+  const gSeen = new Set<string>();
+  for (const g of titleObj.genres || []) {
+    if (!g?.id && g?.id !== 0) continue;
+    const label = genreLabelForMeta(
+      "pandrama",
+      String(g.id),
+      g.display_name || g.name
+    );
+    if (!label || gSeen.has(label)) continue;
+    gSeen.add(label);
+    genres.push(label);
+  }
+
   const videos: any[] = [];
   if (Array.isArray(episodesData) && episodesData.length > 0) {
     episodesData.forEach((ep: any) => {
@@ -261,6 +283,7 @@ export async function getPandramaMeta(
       description: tmdb?.description || description,
       posterShape: "poster",
       releaseInfo: tmdb?.year || (titleObj.year ? String(titleObj.year) : ""),
+      genres,
       videos,
     },
   };
