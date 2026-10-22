@@ -375,13 +375,24 @@ const ENTITIES: Record<string, string> = {
   ordm: "º",
 };
 
+const RE_NUM_ENTITY = /&#(\d+);/g;
+const RE_ALPHA_ENTITY = /&([a-z]+);/gi;
+
 export function decodeEntities(s: string): string {
+  if (!s || !s.includes("&")) return s;
   return s
-    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)))
-    .replace(/&([a-z]+);/gi, (m, e) => ENTITIES[e] ?? m);
+    .replace(RE_NUM_ENTITY, (_, n) => String.fromCharCode(parseInt(n, 10)))
+    .replace(RE_ALPHA_ENTITY, (m, e) => ENTITIES[e] ?? m);
 }
 
 // ─── helpers compartidos por las fuentes ────────────────────────────────────
+
+const RE_VER_PREFIX = /^\s*Ver\s+/i;
+const RE_DASH_DELIM = /\s+[–—|]\s+/;
+const RE_SUFFIX_DELIM =
+  /\s+(?:subtitulad[oa]|doblad[oa]|online|en\s+hd|sub\s+(?:esp|sp)\w*|castellano|latino)\b/i;
+const RE_EMISION_SUFFIX = /\s*\((?:en\s+emisi[oó]n|finalizado)\)\s*$/i;
+const RE_MULTIPLE_SPACES = /\s+/g;
 
 /** Limpieza común de títulos de los sitios DooPlay/WP: quita un "Ver " inicial,
  * corta en " – / — / |" y desecha las colas del tema ("subtitulado", "doblado",
@@ -389,14 +400,12 @@ export function decodeEntities(s: string): string {
  * Antes vivía copiado ×5 como cleanTudoramaTitle, cleanKplayTitle,
  * cleanDoramaYtTitle, cleanDoramasflixTitle y cleanDoramaTitle. */
 export function cleanTitle(s: string): string {
-  let t = decodeEntities(s).replace(/^\s*Ver\s+/i, "");
-  t = t.split(/\s+[–—|]\s+/)[0];
-  t = t.split(
-    /\s+(?:subtitulad[oa]|doblad[oa]|online|en\s+hd|sub\s+(?:esp|sp)\w*|castellano|latino)\b/i
-  )[0];
+  let t = decodeEntities(s).replace(RE_VER_PREFIX, "");
+  t = t.split(RE_DASH_DELIM)[0];
+  t = t.split(RE_SUFFIX_DELIM)[0];
   return t
-    .replace(/\s*\((?:en\s+emisi[oó]n|finalizado)\)\s*$/i, "")
-    .replace(/\s+/g, " ")
+    .replace(RE_EMISION_SUFFIX, "")
+    .replace(RE_MULTIPLE_SPACES, " ")
     .trim();
 }
 

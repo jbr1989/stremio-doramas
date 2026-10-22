@@ -360,17 +360,44 @@ const MASTER_GENRES: GenreEntry[] = [
   },
 ];
 
+// Pre-indexed lookup maps for fast O(1) access
+const SLUG_BY_SOURCE_LABEL = new Map<string, string>();
+const LABEL_BY_SOURCE_SLUG = new Map<string, string>();
+const OPTIONS_BY_SOURCE = new Map<string, string[]>();
+const MASTER_LABELS = MASTER_GENRES.map((g) => g.label);
+
+for (const g of MASTER_GENRES) {
+  for (const [source, slug] of Object.entries(g.slugs)) {
+    if (slug) {
+      const slugKey = `${source}:${g.label}`;
+      if (!SLUG_BY_SOURCE_LABEL.has(slugKey)) {
+        SLUG_BY_SOURCE_LABEL.set(slugKey, slug);
+      }
+
+      const labelKey = `${source}:${slug}`;
+      if (!LABEL_BY_SOURCE_SLUG.has(labelKey)) {
+        LABEL_BY_SOURCE_SLUG.set(labelKey, g.label);
+      }
+
+      let opts = OPTIONS_BY_SOURCE.get(source);
+      if (!opts) {
+        opts = [];
+        OPTIONS_BY_SOURCE.set(source, opts);
+      }
+      opts.push(g.label);
+    }
+  }
+}
+
 /** Labels de la lista maestra, en orden (dropdown del consolidado). */
 export function masterGenreLabels(): string[] {
-  return MASTER_GENRES.map((g) => g.label);
+  return MASTER_LABELS;
 }
 
 /** Labels de la lista maestra que una fuente específica soporta, en orden
  * (dropdown de un catálogo individual). */
 export function genreSourceOptions(source: string): string[] {
-  return MASTER_GENRES.filter((g) => genreSlug(source, g.label)).map(
-    (g) => g.label
-  );
+  return OPTIONS_BY_SOURCE.get(source) || [];
 }
 
 /** Slug de un género para una fuente, o undefined si la fuente no lo soporta.
@@ -379,9 +406,7 @@ export function genreSlug(
   source: string,
   label: string
 ): string | undefined {
-  return MASTER_GENRES.find((g) => g.label === label)?.slugs[
-    source as GenreSourceName
-  ];
+  return SLUG_BY_SOURCE_LABEL.get(`${source}:${label}`);
 }
 
 /** Búsqueda inversa (slug → label) para el meta de una ficha: label canónico
@@ -396,8 +421,7 @@ export function genreLabelForMeta(
   siteText?: string
 ): string {
   return (
-    MASTER_GENRES.find((g) => g.slugs[source as GenreSourceName] === slug)
-      ?.label ||
+    LABEL_BY_SOURCE_SLUG.get(`${source}:${slug}`) ||
     (siteText || "").trim() ||
     slug.replace(/-/g, " ").replace(/^\w/, (c) => c.toUpperCase())
   );
