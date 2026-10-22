@@ -61,9 +61,10 @@ Los tres sitios WordPress usan el tema **DooPlay**, cuyo patrón es idéntico:
 
 | Host / familia | Resolución | Vía |
 |---|---|---|
-| StreamWish y espejos (`streamwish`, `embedwish`, `wishfast`, `sfastwish`, `swishsrv`, `streamaly`, `streamis`, `flaswish`, `do7go`, `playmogo`) | HLS `.m3u8` | Proxy Deno `/streamwish` |
+| StreamWish y espejos (`streamwish`, `embedwish`, `wishfast`, `sfastwish`, `swishsrv`, `streamaly`, `streamis`, `flaswish`) | HLS `.m3u8` | Proxy Deno `/streamwish` |
+| Familia filelions "lulu" (`lulustream.com`, `luluvdo.com`) — hop entre dominios; master en CDN `cdn-tnmr.*` | HLS `.m3u8` | Mismo relay `/streamwish`; exige `Referer` = la URL del embed exacta + UA Chrome (el `/hls` reintentа con Chrome si el móvil da 403) |
 | `savefiles.com`, `streamhls.to` | HLS `.m3u8` | Proxy Deno `/savefiles` |
-| `mp4upload.com` | MP4 directo | `extractMp4upload` (`src/extractors.ts`) |
+| `mp4upload.com` | MP4 directo | `extractMp4upload` (`src/extractors.ts`) — descarta sin fetch los `embed-undef.html` (archivo borrado upstream) |
 | `hexload.com` | MP4 directo | `extractHexload` (`src/extractors.ts`) |
 | `pixeldrain.com` | MP4 directo | API pública de pixeldrain |
 | Cualquier otro | — | Fallback `externalUrl` (abrir en navegador) |

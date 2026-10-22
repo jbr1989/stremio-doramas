@@ -154,22 +154,32 @@ deno/fetch.ts (pasa el `Range` del cliente, sin timeout para no cortar el
 body; allowlist `doodMp4HostAllowed`). Sin denoBase queda como externalUrl.
 Sincronizado con la allowlist de /mp4 en deno/fetch.ts.
 
-## Allowlist de StreamWish (un solo contrato, 4 copias)
+## Allowlist de StreamWish (un contrato, 2 copias)
 
-La lista de espejos StreamWish es **una conexión única** que vive en 4 puntos y
-debe quedarse idéntica: la regex de `/streamwish` en `deno/fetch.ts` y la regex
-de routing de embeds en cada una de las 3 fuentes (`src/sources/doramas.ts`,
-`kdramasplay.ts`, `doramasflix.ts`):
+La regex canónica vive en `STREAMWISH_HOSTS_RE` (`src/utils.ts`) y las fuentes
+la comparten (directamente `pandrama.ts` o vía `addEmbedStreams`). Debe
+quedarse idéntica a la allowlist de `/streamwish` en `deno/fetch.ts`:
 
 ```
-streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|do7go|playmogo
+streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|lulustream|luluvdo|lulu\.st
 ```
+
+(`do7go|playmogo` salieron — son familia Dood, van por `/mp4` con
+`DOOD_HOSTS_RE`; `dsvplay` también es Dood.)
 
 Un host que el Worker enruta al proxy pero que Deno rechace muere con un 403
 silencioso (stream muerto sin log en el Worker) — históricamente pasó con
 `streamaly|streamis|flaswish` y fue la causa del bug de `kplay`. Si añades un
-host, complétalo en los 4 puntos en el mismo commit (el Worker y el Proxy se
+host, complétalo en las 2 copias en el mismo commit (el Worker y el Proxy se
 despliegan por separado).
+
+**Gates de la familia filelions (lulu)**, verificados con sondas reales:
+el master m3u8 vive en `cdn-tnmr.*` (también permitido en `hlsHostAllowed`
+del `/hls` de Deno), y variantes/segmentos exigen **Referer = la URL del
+embed exacta** (`https://luluvdo.com/e/<code>`) con **UA Chrome desktop** —
+por eso `handleStreamwish` pasa `r=<embed>` en el rewrite y `handleHls`
+reintenta con UA Chrome si el móvil recibe 403. Los espejos "clásicos" de
+StreamWish siguen con `Referer: streamwish.top` y UA móvil.
 
 ## Problema conocido (no "arreglar" a ciegas)
 

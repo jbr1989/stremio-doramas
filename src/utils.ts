@@ -452,9 +452,12 @@ export const CHALLENGE_HOSTS_RE =
   /(?:^|\.)(?:dsvplay\.com|do7go\.com|playmogo\.com)$/i;
 
 /** Hosts/mirrors de StreamWish admitidos por el relay Deno (/streamwish).
+ * Incluye la familia "filelions" (lulu) — embeds que hace hop entre dominios
+ * (lulustream→luluvdo) y sirve master.m3u8 en CDN cdn-tnmr.* (verificado en
+ * sondas reales: unresolved con extractStreamwish tal cual).
  * Mantener sincronizada con la allowlist de /streamwish en deno/fetch.ts. */
 export const STREAMWISH_HOSTS_RE =
-  /streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish/i;
+  /streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|lulustream|luluvdo|lulu\.st/i;
 
 /**.Hosts de la família Dood (do7go/playmogo/dood*): NO son StreamWish — sirven
  * un MP4 progresivo vía pass_md5 y el gate del MP4 es Referer (no IP-bound).
