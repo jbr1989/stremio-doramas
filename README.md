@@ -62,9 +62,10 @@ Los tres sitios WordPress usan el tema **DooPlay**, cuyo patrón es idéntico:
 
 | Host / familia | Resolución | Vía |
 |---|---|---|
-| StreamWish y espejos (`streamwish`, `embedwish`, `wishfast`, `sfastwish`, `swishsrv`, `streamaly`, `streamis`, `flaswish`, `do7go`, `playmogo`) | HLS `.m3u8` | Proxy Deno `/streamwish` |
+| StreamWish y espejos (`streamwish`, `embedwish`, `wishfast`, `sfastwish`, `swishsrv`, `streamaly`, `streamis`, `flaswish`) | HLS `.m3u8` | Proxy Deno `/streamwish` |
+| Familia filelions "lulu" (`lulustream.com`, `luluvdo.com`) — hop entre dominios; master en CDN `cdn-tnmr.*` | HLS `.m3u8` | Mismo relay `/streamwish`; exige `Referer` = la URL del embed exacta + UA Chrome (el `/hls` reintentа con Chrome si el móvil da 403) |
 | `savefiles.com`, `streamhls.to` | HLS `.m3u8` | Proxy Deno `/savefiles` |
-| `mp4upload.com` | MP4 directo | `extractMp4upload` (`src/extractors.ts`) |
+| `mp4upload.com` | MP4 directo | `extractMp4upload` (`src/extractors.ts`) — descarta sin fetch los `embed-undef.html` (archivo borrado upstream) |
 | `hexload.com` | MP4 directo | `extractHexload` (`src/extractors.ts`) |
 | `pixeldrain.com` | MP4 directo | API pública de pixeldrain |
 | Cualquier otro | — | Fallback `externalUrl` (abrir en navegador) |
@@ -181,7 +182,28 @@ si no, esto crea un segundo Worker en otra URL en vez de actualizar el real.
 - `/debug-host?url=<embed>` — trae la página de un embed y vuelca las URLs de medios
 - `/debug-mixdrop?url=<embed>` — resuelve un embed de Mixdrop
 - `/debug-render?url=<url>` — prueba de Cloudflare Browser Rendering
+- `/debug-dood?url=<embed>` — resuelve un embed de la familia Dood (do7go/playmogo/dood.*) a un MP4 provisional vía `pass_md5`; devuelve el MP4 final y la URL del relay Deno `/mp4`
+- `/debug-all` — chequea las 7 fuentes a la vez. Comportamiento estándar (dinámico): de cada catálogo propio toma las series recientes, las expande a `?n=` episodios vía meta (default 10) y llama al getter de cada fuente con esos IDs reales. Salida plana, una fila por episodio: `source/id/streamsCount/tipos/totalMs` + `sample` con cada stream (`servidor`/`tipo`/`name`/`url`); sin episodios solo muestra contexto del catálogo. `?ids=id1,id2` hace override manual. Streams crudos: sin caché ni filtro de señuelos.
 - `/cache-clear?key=<clave KV completa>` — limpia una entrada de caché
+
+### Hosts de reto (`CHALLENGE_HOSTS_RE`, src/utils.ts)
+
+Páginas de embed con challenge activo de Cloudflare contra TLS no-navegador.
+Para estos hosts `fetchHtml` **salta la cascada de proxies públicos** (que con
+ellos es pura pérdida: corsproxy 403 al instante, allorigins/codetabs timeout)
+e intenta directo con techo corto — más un render vía Browser Rendering si el
+secret `CF_API_TOKEN` está activo. Si falla, la opción queda como 🌐 external.
+
+| Host | Origen del embed | Evidencia |
+|---|---|---|
+| `dsvplay.com` | dyt (`/e/<code>`) | direct → THROW; codetabs/allorigins → timeout 8s; corsproxy → 403 (visto en `/debug-all` dyt) |
+| `do7go.com` | familia Dood (kplay/dyt/pandrama) | la página `/e/` desafía TLS no-navegador (probado con egress Deno/.NET/CF Worker); el `pass_md5` sí funciona GET directo server-side |
+| `playmogo.com` | familia Dood | mismo reto por infraestructura común con do7go |
+
+La lista es extensible: cualquier host que se descubra con el mismo patrón
+se añade al regex (`CHALLENGE_HOSTS_RE`) y automáticamente se beneficia del
+fast path. Relacionado: `extractMp4upload` descarta sin llamada de red los
+embeds `embed-undef.html` (página de mp4upload para archivo borrado upstream).
 
 ## Ejecución local
 

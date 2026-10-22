@@ -6,13 +6,14 @@ import {
   CHROME_UA,
   decodeEntities,
   denoBaseFromEnv,
+  DOOD_HOSTS_RE,
   fetchTmdb,
   makeStreamDeduper,
   netFetch,
   STREAMWISH_HOSTS_RE,
   toMetaPreview,
 } from "../utils";
-import { extractMp4upload } from "../extractors";
+import { extractDood, extractMp4upload } from "../extractors";
 
 const PANDRAMA_BASE = "https://www.pandrama.tv";
 
@@ -373,6 +374,39 @@ export async function getPandramaStreams(
         name: "Pandrama 🌐",
         title: `🌐 ${serverName} (HLS Directo) — Pandrama`,
       });
+      continue;
+    }
+
+    // Família Dood (do7go/playmogo/dood*): MP4 vía pass_md5, relay /mp4 en Deno
+    if (DOOD_HOSTS_RE.test(src)) {
+      const u = await extractDood(src, env);
+      if (u && denoBase) {
+        const doodOrigin = (() => {
+          try {
+            return new URL(src).origin;
+          } catch {
+            return "https://playmogo.com/";
+          }
+        })();
+        add({
+          url: `${denoBase}/mp4?url=${encodeURIComponent(u)}&r=${encodeURIComponent(
+            doodOrigin
+          )}`,
+          name: "Pandrama MP4",
+          title: `▶ dood (${serverName}) — Pandrama`,
+          behaviorHints: {
+            notWebReady: false,
+            filename: "episode.mp4",
+            bingeGroup: "pandrama-dood",
+          },
+        });
+      } else {
+        add({
+          externalUrl: src,
+          name: "Pandrama 🌐",
+          title: `🌐 ${serverName} — Pandrama`,
+        });
+      }
       continue;
     }
 

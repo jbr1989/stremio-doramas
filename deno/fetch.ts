@@ -120,7 +120,9 @@ async function handleFetch(target: string): Promise<Response> {
 // premilkyway.com is StreamWish's HLS CDN. Its playlist/segment tokens
 // are IP-bound, so they must be fetched from this same Deno IP that resolved the embed.
 function hlsHostAllowed(host: string): boolean {
-  return /(^|\.)(savefiles\.com|streamhls\.to|premilkyway\.com)$/i.test(host);
+  return /(^|\.)(savefiles\.com|streamhls\.to|premilkyway\.com)$/i.test(host) ||
+    // CDN de la familia filelions (lulu): cdn-tnmr.org / .1x / .1y — TLDs raros que rotan.
+    /cdn-tnmr/i.test(host);
 }
 
 const STREAMWISH_REFERER = "https://streamwish.top/";
@@ -185,30 +187,104 @@ async function handleStreamwish(embedUrl: string, selfBase: string): Promise<Res
   // Espejos de StreamWish admitidos. Mantén sincronizado con las regex de
   // src/sources/{doramas,kdramasplay,doramasflix}.ts — un host que el Worker
   // enruta aquí y no esté en esta allowlist muere con 403 silencioso.
-  try { host = new URL(embedUrl).hostname; ok = /streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|do7go|playmogo/i.test(host); } catch { /* invalid */ }
+  try { host = new URL(embedUrl).hostname; ok = /streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|lulustream|luluvdo|lulu\.st/i.test(host); } catch { /* invalid */ }
   if (!ok) {
     logErr("streamwish", `host no permitido / url inválida: ${trunc(embedUrl, 160)}`);
     return jsonError("host not allowed", 403);
   }
   const master = await resolveStreamwish(embedUrl);
   if (!master) return jsonError("could not resolve streamwish embed", 502);
+  // Referer Ha de pasar a los /hls descendentes. La familia filelions (lulu)
+  // exige Referer = la propia URL del embed (https://luluvdo.com/e/<code>)
+  // con UA Chrome para sus variantes/segmentos (verificado: origin/ o
+  // streamwish.top → 403); los espejos de StreamWish siguen con streamwish.top.
+  const isLulu = /lulustream|luluvdo|lulu\.st/i.test(embedUrl);
+  const hlsReferer = isLulu ? embedUrl : STREAMWISH_REFERER;
   const t0 = performance.now();
   try {
-    const r = await fetch(master, {
-      headers: { "User-Agent": CHROME_UA, "Referer": STREAMWISH_REFERER, "Origin": "https://streamwish.top" },
+    let masterRes = await fetch(master, {
+      headers: { "User-Agent": CHROME_UA, "Referer": hlsReferer, "Origin": new URL(hlsReferer).origin },
       signal: AbortSignal.timeout(12000),
     });
-    if (!r.ok) {
-      logErr("streamwish", `master FAIL → ${r.status} (${ms(t0)})`);
-      return jsonError(`upstream ${r.status}`, 502);
+    // Fallback sin Referer: el CDN de filelions (lulu/família) sirve el master
+    // sin referer (verificado) — no morir por cabeceras de una familia ajena.
+    if (!masterRes.ok) {
+      logErr("streamwish", `master con referer → ${masterRes.status}; reintento sin referer`);
+      masterRes = await fetch(master, {
+        headers: { "User-Agent": CHROME_UA },
+        signal: AbortSignal.timeout(12000),
+      });
     }
-    const text = await r.text();
-    log("streamwish", `master → ${r.status}, ${text.length}B reescrito (${ms(t0)})`);
-    return cors(rewriteM3u8(text, master, selfBase, STREAMWISH_REFERER), {
+    if (!masterRes.ok) {
+      logErr("streamwish", `master FAIL → ${masterRes.status} (${ms(t0)})`);
+      return jsonError(`upstream ${masterRes.status}`, 502);
+    }
+    const text = await masterRes.text();
+    log("streamwish", `master → ${masterRes.status}, ${text.length}B reescrito (${ms(t0)})`);
+    return cors(rewriteM3u8(text, master, selfBase, hlsReferer), {
       headers: { "Content-Type": "application/vnd.apple.mpegurl", "Cache-Control": "no-cache" },
     });
   } catch (e) {
     logErr("streamwish", `master THROW → ${errText(e)} (${ms(t0)})`);
+    return jsonError(String(e), 502);
+  }
+}
+
+// ─── Dood MP4 relay ─────────────────────────────────────────────────────────
+// A família Dood (do7go/playmogo/dood.*) sirve MP4 progresivo gateado por
+// Referer — NO es IP-bound, pero el player de Stremio no envía Referer.
+// Este relay lo añade y pasa Range para el seeking (respuesta 206 upstream).
+function doodMp4HostAllowed(host: string): boolean {
+  // CDN generoso: los MP4 de Dood viven en cloudatacdn.com y dominios
+  // doodcdn/dscdn/dl-*; también acepta CNAMEs con "dood" en el host.
+  return /(?:cloudatacdn|doodcdn|dscdn|dood)/i.test(host);
+}
+
+// GET /mp4?url=<mp4>&r=<referer> → re-sirve el MP4 con Referer y Range
+// passthrough (seeking). Sin señal de timeout: el body se streamea y puede
+// durar más que el fetch (cada Range del player es una petición aparte).
+async function handleDoodMp4(
+  mp4Url: string,
+  refererParam: string,
+  req: Request
+): Promise<Response> {
+  let host = "(inválida)";
+  let ok = false;
+  try { host = new URL(mp4Url).hostname; ok = doodMp4HostAllowed(host); } catch { /* invalid */ }
+  if (!ok) {
+    logErr("mp4", `host no permitido / url inválida: ${trunc(mp4Url, 160)}`);
+    return jsonError("host not allowed", 403);
+  }
+  if (!refererParam) refererParam = "https://playmogo.com/";
+  const referer = refererParam;
+  const t0 = performance.now();
+  try {
+    const headers: Record<string, string> = {
+      "User-Agent": CHROME_UA,
+      "Referer": referer,
+      "Origin": new URL(referer).origin,
+      "Accept": "*/*",
+    };
+    const range = req.headers.get("range");
+    if (range) headers["Range"] = range;
+    const r = await fetch(mp4Url, { headers, redirect: "follow" });
+    if (r.status !== 200 && r.status !== 206) {
+      logErr("mp4", `upstream ${r.status} ${trunc(mp4Url, 140)} (${ms(t0)})`);
+      return jsonError(`upstream ${r.status}`, 502);
+    }
+    const out = new Headers({
+      "Content-Type": r.headers.get("content-type") || "video/mp4",
+      "Accept-Ranges": r.headers.get("accept-ranges") || "bytes",
+      "Cache-Control": "no-cache",
+    });
+    const cr = r.headers.get("content-range");
+    if (cr) out.set("Content-Range", cr);
+    const cl = r.headers.get("content-length");
+    if (cl) out.set("Content-Length", cl);
+    log("mp4", `${range ? "206" : r.status} ${host} ${ms(t0)} (range=${range !== null})`);
+    return cors(r.body, { status: r.status, headers: out });
+  } catch (e) {
+    logErr("mp4", `THROW → ${errText(e)} (${ms(t0)})`);
     return jsonError(String(e), 502);
   }
 }
@@ -311,11 +387,19 @@ async function handleHls(rawUrl: string, referer: string, selfBase: string): Pro
     return jsonError("host not allowed", 403);
   }
   const t0 = performance.now();
+  const tryHeaders = (ua: string): Record<string, string> => ({
+    "User-Agent": ua,
+    "Referer": referer || STREAMHLS_REFERER,
+    "Origin": new URL(referer || STREAMHLS_REFERER).origin,
+  });
   try {
-    const r = await fetch(rawUrl, {
-      headers: { "User-Agent": MOBILE_UA, "Referer": referer || STREAMHLS_REFERER, "Origin": new URL(referer || STREAMHLS_REFERER).origin },
-      signal: AbortSignal.timeout(15000),
-    });
+    let r = await fetch(rawUrl, { headers: tryHeaders(MOBILE_UA), signal: AbortSignal.timeout(15000) });
+    // Reintento con UA Chrome: la CDN de filelions (lulu) rechaza el móvil
+    // aunque el Referer sea correcto (verificado; Chrome desktop sí pasa).
+    if (!r.ok) {
+      logErr("hls", `UA móvil → ${r.status}, reintento con Chrome: ${u.hostname}`);
+      r = await fetch(rawUrl, { headers: tryHeaders(CHROME_UA), signal: AbortSignal.timeout(15000) });
+    }
     if (!r.ok) {
       logErr("hls", `FAIL ${u.pathname} → ${r.status} (${ms(t0)})`);
       return new Response(`upstream ${r.status}`, { status: r.status, headers: { "Access-Control-Allow-Origin": "*" } });
@@ -363,16 +447,26 @@ async function handler(req: Request): Promise<Response> {
   if (url.pathname === "/streamwish") {
     return handleStreamwish((url.searchParams.get("url") || "").trim(), selfBase);
   }
+  if (url.pathname === "/mp4") {
+    return handleDoodMp4(
+      (url.searchParams.get("url") || "").trim(),
+      (url.searchParams.get("r") || "").trim(),
+      req
+    );
+  }
   if (url.pathname === "/hls") {
     return handleHls(url.searchParams.get("u") || "", url.searchParams.get("r") || "", selfBase);
   }
   const target = url.searchParams.get("url");
   if (!target) {
-    return cors(JSON.stringify({ ok: true, usage: "/fetch?url=… | /savefiles?code=… | /streamwish?url=… | /hls?u=…&r=…" }), {
+    return cors(JSON.stringify({ ok: true, usage: "/fetch?url=… | /savefiles?code=… | /streamwish?url=… | /hls?u=…&r=… | /mp4?url=…&r=…" }), {
       headers: { "Content-Type": "application/json" },
     });
   }
   return handleFetch(target);
 }
 
-Deno.serve(handler);
+Deno.serve(
+  { port: Number(Deno.env.get("PORT")) || 8000 },
+  handler
+);

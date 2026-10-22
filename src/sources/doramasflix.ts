@@ -451,6 +451,7 @@ export async function getDoramasflixStreams(
       prefix: "dflix",
       denoBase,
       add,
+      env,
     });
   }
 

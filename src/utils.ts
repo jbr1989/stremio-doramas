@@ -263,6 +263,44 @@ export async function fetchHtml(url: string, env?: Env): Promise<string> {
   };
 
   try {
+    // Hosts de reto: la cascada completo es desperdicio (403 al instante /
+    // timeouts de 8s en los proxies públicos). Directo con techo corto y, si
+    // hay Browser Rendering, render; si no pasa, falla rápido y el extractor
+    // caller devuelve null (la opción queda 🌐 external, como siempre).
+    const host = (() => {
+      try {
+        return new URL(url).hostname;
+      } catch {
+        return "";
+      }
+    })();
+    if (CHALLENGE_HOSTS_RE.test(host)) {
+      console.log(
+        `[fetchHtml] challenge host ${host}, fast path sin proxies: ${shortUrl(url)}`
+      );
+      if (env && browserRenderingReady(env)) {
+        const html = await renderPage(url, env, {
+          wait: "load",
+          timeoutMs: 16000,
+        });
+        if (html && html.length >= 500) {
+          clearTimeout(globalTimer);
+          console.log(`[fetchHtml] render (challenge) for ${url}`);
+          return html;
+        }
+      }
+      const html = await tryFetch(
+        "direct-challenge",
+        () =>
+          netFetch("direct", url, {
+            headers: CHROME_HEADERS,
+            signal: AbortSignal.timeout(4000),
+          })
+      );
+      clearTimeout(globalTimer);
+      return html;
+    }
+
     const proxyBase = env?.FETCH_PROXY_URL?.trim();
     const racers: Promise<string>[] = [
       tryFetch("direct", () =>
@@ -317,7 +355,7 @@ export async function fetchHtml(url: string, env?: Env): Promise<string> {
         const html = await tryFetch(name, () =>
           netFetch(name, proxyUrl, {
             headers: { "User-Agent": CHROME_UA },
-            signal: AbortSignal.timeout(8000),
+            signal: AbortSignal.timeout(6000),
           })
         );
         clearTimeout(globalTimer);
@@ -400,10 +438,35 @@ export function cleanTitle(s: string): string {
     .trim();
 }
 
+/** Hosts de reto: su página de embed rechaza TLS no-navegador (challenge
+ *  activo de Cloudflare). La cascada de proxies públicos es inútil contra
+ *  ellos (corsproxy 403 al instante, allorigins/codetabs timeout 8s ≈ 24s
+ *  perdidos por embed), así que fetchHtml va directo con techo corto y —
+ *  si hay Browser Rendering — hace render. Lista con su evidencia:
+ *  - dsvplay.com   embed dyt: direct THROW, codetabs/allorigins timeout 8s,
+ *                  corsproxy 403 (visto en /debug-all dyt).
+ *  - do7go.com / playmogo.com   familia Dood: la página /e/ desafía TLS
+ *                  no-navegador (probado con egress Deno/.NET/CF Worker);
+ *                  el pass_md5 funciona GET server-side directo. */
+export const CHALLENGE_HOSTS_RE =
+  /(?:^|\.)(?:dsvplay\.com|do7go\.com|playmogo\.com)$/i;
+
 /** Hosts/mirrors de StreamWish admitidos por el relay Deno (/streamwish).
+ * Incluye la familia "filelions" (lulu) — embeds que hace hop entre dominios
+ * (lulustream→luluvdo) y sirve master.m3u8 en CDN cdn-tnmr.* (verificado en
+ * sondas reales: unresolved con extractStreamwish tal cual).
  * Mantener sincronizada con la allowlist de /streamwish en deno/fetch.ts. */
 export const STREAMWISH_HOSTS_RE =
-  /streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|do7go|playmogo/i;
+  /streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|lulustream|luluvdo|lulu\.st/i;
+
+/**.Hosts de la família Dood (do7go/playmogo/dood*): NO son StreamWish — sirven
+ * un MP4 progresivo vía pass_md5 y el gate del MP4 es Referer (no IP-bound).
+ * Se resuelven con extractDood (src/extractors.ts) y se relayan por /mp4 en el
+ * proxy Deno. Mantener sincronizada con la allowlist de /mp4 en deno/fetch.ts. */
+export const DOOD_HOSTS_RE = /dood|do7go|playmogo|ds2play|dsvplay/i;
+
+/** Hosts de reto anti-bot (ver CHALLENGE_HOSTS_RE en README para la tabla con
+ *  evidencia): fetchHtml los salta directos con techo corto, sin proxies. */
 
 /** Host plano de un embed para el título del stream:
  * "streamwish" ← https://streamwish.to/e/abc. */

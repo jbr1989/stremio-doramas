@@ -4,8 +4,10 @@ import {
   hostFromEmbed,
   MOBILE_UA,
   netFetch,
+  DOOD_HOSTS_RE,
   STREAMWISH_HOSTS_RE,
 } from "./utils";
+import { Env } from "./types";
 
 function unpackPacker(source: string): string | null {
   const m = source.match(
@@ -28,6 +30,15 @@ function unpackPacker(source: string): string | null {
 }
 
 export async function extractMp4upload(embedUrl: string) {
+  // "embed-undef.html" es la página genérica de mp4upload para archivo
+  // eliminado upstream: no trae video y da igual cuántas veces la pidamos.
+  // Salir sin llamada de red (ahorra el GET y el ruido en el log).
+  if (/\/embed-undef\.html/i.test(embedUrl)) {
+    console.log(
+      `[extractMp4upload] embed undef (archivo borrado upstream): ${embedUrl}`
+    );
+    return null;
+  }
   try {
     const html = await fetchHtml(embedUrl);
     const m =
@@ -106,6 +117,58 @@ export async function extractSavefiles(embedUrl: string) {
     const m3u8Match = html.match(/https:\/\/[^"'\s\\]+\.m3u8[^"'\s\\]*/);
     if (m3u8Match) return m3u8Match[0];
     return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Extractor de la família Dood (do7go/playmogo/dood.*): MP4 progresivo.
+ *
+ * El embed (/e/<code>) trae server-side — sin JS ni Turnstile — la llamada
+ * `$.get('/pass_md5/<hash>/<code>', ...)` en texto claro. Ese GET devuelve
+ * texto plano con la base del CDN (ej. "https://xx.cloudatacdn.com/path/foo~")
+ * y el player le concatena 10 chars random + "?token=<code>&expiry=<ms>".
+ * El MP4 final solo exige `Referer` del propio host del embed (NO es
+ * IP-bound) — por eso relayarlo basta. */
+export async function extractDood(
+  embedUrl: string,
+  env?: Env
+): Promise<string | null> {
+  try {
+    const origin = (() => {
+      try {
+        return new URL(embedUrl).origin;
+      } catch {
+        return "https://playmogo.com";
+      }
+    })();
+    // Sin env la página /e/ suele caer en challenge CF (403); fetchHtml se
+    // encarga: directo → proxy Deno → Browser Rendering (si está seteado).
+    const html = await fetchHtml(embedUrl, env);
+    const m = html?.match(/\/pass_md5\/[A-Za-z0-9-]+\/[a-zA-Z0-9]+/);
+    const code = m?.[0].split("/").pop() || "";
+    if (!m || !code) return null;
+    const r = await netFetch("direct", `${origin}${m[0]}`, {
+      headers: {
+        "User-Agent": CHROME_UA,
+        Referer: `${origin}/`,
+        Accept: "*/*",
+      },
+      redirect: "follow",
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!r.ok) return null;
+    const base = (await r.text()).trim();
+    if (!base.startsWith("http") || base.length > 300) return null;
+    // makePlay() del player: 10 chars alfanuméricos + ?token=&expiry=
+    const chars =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let suffix = "";
+    for (let i = 0; i < 10; i++)
+      suffix += chars[Math.floor(Math.random() * chars.length)];
+    return `${base}${suffix}?token=${encodeURIComponent(
+      code
+    )}&expiry=${Date.now()}`;
   } catch {
     return null;
   }
@@ -253,14 +316,52 @@ export async function addEmbedStreams(args: {
   add: (s: any) => void;
   /** Fallback del host en el título external (tudorama usa item.name). */
   hostFallback?: string;
+  /** Env opcional: lo usa la ramas que pueden pasar por Browser Rendering. */
+  env?: Env;
 }): Promise<boolean> {
-  const { embed, epSlug, label, prefix, denoBase, add, hostFallback } = args;
+  const { embed, epSlug, label, prefix, denoBase, add, hostFallback, env } =
+    args;
   const ext = () =>
     add({
       externalUrl: embed,
       name: `${label} 🌐`,
       title: `🌐 ${hostFromEmbed(embed, hostFallback)} — ${label}`,
     });
+
+  // Família Dood (do7go/playmogo/dood*): MP4 progresivo vía pass_md5, gateado
+  // por Referer — se relayan por /mp4 en el proxy Deno (con Range passthrough).
+  if (DOOD_HOSTS_RE.test(embed)) {
+    const u = await extractDood(embed, env);
+    if (u) {
+      if (denoBase) {
+        add({
+          url: `${denoBase}/mp4?url=${encodeURIComponent(u)}&r=${encodeURIComponent(
+            (() => {
+              try {
+                return new URL(embed).origin;
+              } catch {
+                return "https://playmogo.com/";
+              }
+            })()
+          )}`,
+          name: `${label} MP4`,
+          title: `▶ dood — ${label}`,
+          behaviorHints: {
+            notWebReady: false,
+            filename: `${epSlug}.mp4`,
+            bingeGroup: `${prefix}-dood`,
+          },
+        });
+      } else {
+        // Sin proxy no hay Referer y Dood rechaza el directo: servir como
+        // external (abrir en web) para no meter streams muertos en el player.
+        ext();
+      }
+      return true;
+    }
+    ext();
+    return false;
+  }
 
   // STREAMWISH_HOSTS_RE (mirrors de StreamWish): HLS por el relay Deno.
   if (STREAMWISH_HOSTS_RE.test(embed)) {
