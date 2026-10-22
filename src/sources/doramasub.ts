@@ -1,14 +1,12 @@
 import { Env } from "../types";
 import { genreSlug } from "../genres";
 import {
-  CHROME_HEADERS,
   cleanTitle,
   decodeEntities,
   denoBaseFromEnv,
   fetchHtml,
   fetchTmdb,
   makeStreamDeduper,
-  netFetch,
   toMetaPreview,
 } from "../utils";
 import { addEmbedStreams } from "../extractors";
