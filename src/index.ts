@@ -508,6 +508,35 @@ export default {
       return json({ testUrl, streamUrl, ms: Date.now() - t0 });
     }
 
+    if (path === "/debug-dood") {
+      const testUrl = url.searchParams.get("url");
+      if (!testUrl)
+        return json({
+          error: "Missing ?url= (a dood family /e/ embed: do7go, playmogo, dood.*)",
+        });
+      const t0 = Date.now();
+      const { extractDood } = await import("./extractors");
+      const mp4 = await extractDood(testUrl, env);
+      const denoBase = denoBaseFromEnv(env);
+      const origin = (() => {
+        try {
+          return new URL(testUrl).origin;
+        } catch {
+          return "https://playmogo.com/";
+        }
+      })();
+      const proxyUrl = mp4 && denoBase
+        ? `${denoBase}/mp4?url=${encodeURIComponent(mp4)}&r=${encodeURIComponent(origin)}`
+        : null;
+      return json({
+        testUrl,
+        mp4Url: mp4 ? mp4.replace(/(\?.*)$/, "?…") : null,
+        proxyUrl,
+        browserRendering: browserRenderingReady(env) ? "enabled" : "disabled",
+        ms: Date.now() - t0,
+      });
+    }
+
     if (path === "/cache-clear") {
       const key = url.searchParams.get("key");
       if (key && env.STREAM_CACHE) {

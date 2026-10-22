@@ -403,7 +403,13 @@ export function cleanTitle(s: string): string {
 /** Hosts/mirrors de StreamWish admitidos por el relay Deno (/streamwish).
  * Mantener sincronizada con la allowlist de /streamwish en deno/fetch.ts. */
 export const STREAMWISH_HOSTS_RE =
-  /streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|do7go|playmogo/i;
+  /streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish/i;
+
+/**.Hosts de la família Dood (do7go/playmogo/dood*): NO son StreamWish — sirven
+ * un MP4 progresivo vía pass_md5 y el gate del MP4 es Referer (no IP-bound).
+ * Se resuelven con extractDood (src/extractors.ts) y se relayan por /mp4 en el
+ * proxy Deno. Mantener sincronizada con la allowlist de /mp4 en deno/fetch.ts. */
+export const DOOD_HOSTS_RE = /dood|do7go|playmogo|ds2play|dsvplay/i;
 
 /** Host plano de un embed para el título del stream:
  * "streamwish" ← https://streamwish.to/e/abc. */

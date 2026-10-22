@@ -365,6 +365,7 @@ export async function getDoramaStreams(
       prefix: src.prefix,
       denoBase,
       add,
+      env,
     });
   }
   return { streams };

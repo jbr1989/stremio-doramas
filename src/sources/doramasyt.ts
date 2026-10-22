@@ -301,6 +301,7 @@ export async function getDoramaYtStreams(
       prefix: "dyt",
       denoBase,
       add,
+      env,
     });
   }
 

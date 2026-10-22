@@ -180,6 +180,7 @@ si no, esto crea un segundo Worker en otra URL en vez de actualizar el real.
 - `/debug-host?url=<embed>` — trae la página de un embed y vuelca las URLs de medios
 - `/debug-mixdrop?url=<embed>` — resuelve un embed de Mixdrop
 - `/debug-render?url=<url>` — prueba de Cloudflare Browser Rendering
+- `/debug-dood?url=<embed>` — resuelve un embed de la familia Dood (do7go/playmogo/dood.*) a un MP4 provisional vía `pass_md5`; devuelve el MP4 final y la URL del relay Deno `/mp4`
 - `/debug-all` — chequea las 7 fuentes a la vez (una llamada, un episodio de muestra por fuente; `?ids=id1,id2` usa otros IDs). Devuelve por fuente: `streamsCount`, `totalMs`, reparto por tipo (hls/mp4/external) y todas las opciones con `servidor`, `tipo`, `name` y `url` (la URL reproducible para HLS/MP4, el link al embed para 🌐). Streams crudos: sin caché ni filtro de señuelos.
 - `/cache-clear?key=<clave KV completa>` — limpia una entrada de caché
 

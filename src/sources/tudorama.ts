@@ -412,6 +412,7 @@ export async function getTudoramaStreams(
       denoBase,
       add,
       hostFallback: item.name,
+      env,
     });
   }
 

@@ -127,6 +127,23 @@ dejes la variante vieja detrás:
   mezcla el fan-out de todas. Techo de 45 s por fuente. Los `sample` traen
   cada opción con `servidor` (de `debugServerOf`: `title` → `externalUrl` →
   hostname de `url`), `tipo` (`debugTipoOf`) y la `url` final.
+  `/debug-dood?url=` sondea la rama Dood de `extractDood`.
+
+## Familia Dood (do7go/playmogo/dood.*) — NO es StreamWish
+
+Son MP4 progresivos, no HLS. Verificado con el embed `/e/iw92kudnsi8r`:
+el HTML server-side del embed trae en claro la llamada
+`$.get('/pass_md5/<hash>/<code>')` (con expiry horneado); ese GET devuelve
+texto plano con la base del CDN (ej. `https://xx.cloudatacdn.com/path/foo~`) y
+el player le concatena 10 chars random + `?token=<code>&expiry=<ms>` (función
+`makePlay()`). El MP4 final **exige `Referer` del propio host del embed y NO
+es IP-bound** (con Referer responde 206 sin token query). Flujo:
+`extractDood` (src/extractors.ts, usa `fetchHtml` que cae a Browser Rendering
+si hay challenge) → rama `DOOD_HOSTS_RE` en `addEmbedStreams` y en el loop de
+pandrama → stream `url = ${denoBase}/mp4?url=…&r=<origin>` → relay `/mp4` en
+deno/fetch.ts (pasa el `Range` del cliente, sin timeout para no cortar el
+body; allowlist `doodMp4HostAllowed`). Sin denoBase queda como externalUrl.
+Sincronizado con la allowlist de /mp4 en deno/fetch.ts.
 
 ## Allowlist de StreamWish (un solo contrato, 4 copias)
 
