@@ -121,23 +121,65 @@ dejes la variante vieja detrás:
   `/debug-host?url=` / `/debug-mixdrop?url=` / `/debug-streamwish?url=` /
   `/debug-savefiles?code=` sondean un embed concreto — úsalos para diagnosticar
   fallos de extracción en el Worker desplegado.
+- `/debug-all` (src/index.ts, `DEBUG_SOURCES`) es el chequeo dinámico de las 7
+  fuentes: por fuente toma las series recientes de su propio catálogo
+  (`getCatalog`), las expande a episodios vía `getMeta` (los catálogos traen
+  ids de serie; `debugIsEpisodeId` valida el formato por fuente) y llama al
+  getter de esa fuente con esos IDs reales — a diferencia de
+  `/debug-extract`, que mezcla el fan-out de todas. Default `n=10`
+  episodios/fuente (≈5 series × 2 eps), expansión y checks con tope de
+  concurrencia (`DEBUG_CONCURRENCY=3`) y techo de 45 s por chequeo. Salida
+  plana: una fila por episodio con `sample` (`debugServerOf`: `title` →
+  `externalUrl` → hostname de `url`; `debugTipoOf`) siempre; `?ids=` hace
+  override manual. Cuidado en CF Workers free: ~100 subrequests/invocación de
+  este chequeo. Los hosts de la familia Cloudflare-challenge
+  (`CHALLENGE_HOSTS_RE` en utils.ts: dsvplay/do7go/playmogo) van por fast
+  path directo sin cascada de proxies; `extractMp4upload` descarta sin fetch
+  los `embed-undef.html` (archivo borrado upstream).
+  `/debug-dood?url=` sondea la rama Dood de `extractDood`.
 
-## Allowlist de StreamWish (un solo contrato, 4 copias)
+## Familia Dood (do7go/playmogo/dood.*) — NO es StreamWish
 
-La lista de espejos StreamWish es **una conexión única** que vive en 4 puntos y
-debe quedarse idéntica: la regex de `/streamwish` en `deno/fetch.ts` y la regex
-de routing de embeds en cada una de las 3 fuentes (`src/sources/doramas.ts`,
-`kdramasplay.ts`, `doramasflix.ts`):
+Son MP4 progresivos, no HLS. Verificado con el embed `/e/iw92kudnsi8r`:
+el HTML server-side del embed trae en claro la llamada
+`$.get('/pass_md5/<hash>/<code>')` (con expiry horneado); ese GET devuelve
+texto plano con la base del CDN (ej. `https://xx.cloudatacdn.com/path/foo~`) y
+el player le concatena 10 chars random + `?token=<code>&expiry=<ms>` (función
+`makePlay()`). El MP4 final **exige `Referer` del propio host del embed y NO
+es IP-bound** (con Referer responde 206 sin token query). Flujo:
+`extractDood` (src/extractors.ts, usa `fetchHtml` que cae a Browser Rendering
+si hay challenge) → rama `DOOD_HOSTS_RE` en `addEmbedStreams` y en el loop de
+pandrama → stream `url = ${denoBase}/mp4?url=…&r=<origin>` → relay `/mp4` en
+deno/fetch.ts (pasa el `Range` del cliente, sin timeout para no cortar el
+body; allowlist `doodMp4HostAllowed`). Sin denoBase queda como externalUrl.
+Sincronizado con la allowlist de /mp4 en deno/fetch.ts.
+
+## Allowlist de StreamWish (un contrato, 2 copias)
+
+La regex canónica vive en `STREAMWISH_HOSTS_RE` (`src/utils.ts`) y las fuentes
+la comparten (directamente `pandrama.ts` o vía `addEmbedStreams`). Debe
+quedarse idéntica a la allowlist de `/streamwish` en `deno/fetch.ts`:
 
 ```
-streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|do7go|playmogo
+streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|lulustream|luluvdo|lulu\.st
 ```
+
+(`do7go|playmogo` salieron — son familia Dood, van por `/mp4` con
+`DOOD_HOSTS_RE`; `dsvplay` también es Dood.)
 
 Un host que el Worker enruta al proxy pero que Deno rechace muere con un 403
 silencioso (stream muerto sin log en el Worker) — históricamente pasó con
 `streamaly|streamis|flaswish` y fue la causa del bug de `kplay`. Si añades un
-host, complétalo en los 4 puntos en el mismo commit (el Worker y el Proxy se
+host, complétalo en las 2 copias en el mismo commit (el Worker y el Proxy se
 despliegan por separado).
+
+**Gates de la familia filelions (lulu)**, verificados con sondas reales:
+el master m3u8 vive en `cdn-tnmr.*` (también permitido en `hlsHostAllowed`
+del `/hls` de Deno), y variantes/segmentos exigen **Referer = la URL del
+embed exacta** (`https://luluvdo.com/e/<code>`) con **UA Chrome desktop** —
+por eso `handleStreamwish` pasa `r=<embed>` en el rewrite y `handleHls`
+reintenta con UA Chrome si el móvil recibe 403. Los espejos "clásicos" de
+StreamWish siguen con `Referer: streamwish.top` y UA móvil.
 
 ## Problema conocido (no "arreglar" a ciegas)
 

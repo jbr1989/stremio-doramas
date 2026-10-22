@@ -380,6 +380,7 @@ export async function getKplayStreams(
       prefix: "kplay",
       denoBase,
       add,
+      env,
     });
   }
   return { streams };
