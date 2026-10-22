@@ -54,6 +54,12 @@ import {
   getDoramaYtStreams,
   canonicalDytSlug,
 } from "./sources/doramasyt";
+import {
+  getDoramaSubCatalog,
+  getDoramaSubMeta,
+  getDoramaSubStreams,
+  canonicalDoramaSubSlug,
+} from "./sources/doramasub";
 import { getAllAlldoramasCatalog } from "./sources/alldoramas";
 
 async function getCatalog(
@@ -76,6 +82,8 @@ async function getCatalog(
     return getPandramaCatalog(extra, env);
   if (catalogId.startsWith("doramasyt"))
     return getDoramaYtCatalog(extra, env);
+  if (catalogId.startsWith("doramasub"))
+    return getDoramaSubCatalog(extra, env);
   return getDoramasflixCatalog(extra);
 }
 
@@ -89,6 +97,7 @@ async function getMeta(id: string, tmdbKey: string, env?: Env) {
   if (id.startsWith("tudorama:")) return getTudoramaMeta(id, tmdbKey, env);
   if (id.startsWith("pandrama:")) return getPandramaMeta(id, tmdbKey, env);
   if (id.startsWith("dyt:")) return getDoramaYtMeta(id, tmdbKey, env);
+  if (id.startsWith("doramasub:")) return getDoramaSubMeta(id, tmdbKey, env);
   return { meta: null };
 }
 
@@ -105,6 +114,8 @@ async function getStreams(rawId: string, env: Env) {
     // DYT usa "titulo-episodio-N": a la forma canónica "titulo-1xN" para que
     // las demás fuentes (guardean sobre -\d+x\d+$) acepten el slug.
     epSlug = canonicalDytSlug(rawId.slice("dyt:".length));
+  } else if (rawId.startsWith("doramasub:")) {
+    epSlug = canonicalDoramaSubSlug(rawId.slice("doramasub:".length));
   } else if (rawId.startsWith("tudorama:")) {
     epSlug = rawId.slice("tudorama:".length);
   } else if (rawId.startsWith("kplay:")) {
@@ -175,6 +186,12 @@ async function getStreams(rawId: string, env: Env) {
     tasks.push(getDoramaYtStreams(rawId, env));
   } else if (epSlug) {
     tasks.push(getDoramaYtStreams(`dyt:${epSlug}`, env));
+  }
+
+  if (rawId.startsWith("doramasub:")) {
+    tasks.push(getDoramaSubStreams(rawId, env));
+  } else if (epSlug) {
+    tasks.push(getDoramaSubStreams(`doramasub:${epSlug}`, env));
   }
 
   const results = await Promise.allSettled(tasks);

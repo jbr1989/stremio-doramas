@@ -7,6 +7,7 @@ import { getDoramasflixCatalog } from "./doramasflix";
 import { getTudoramaCatalog } from "./tudorama";
 import { getPandramaCatalog } from "./pandrama";
 import { getDoramaYtCatalog } from "./doramasyt";
+import { getDoramaSubCatalog } from "./doramasub";
 
 // ─── Catálogo consolidado "Todos los Doramas" ───────────────────────────────
 // Orquesta los catálogos ya existentes en paralelo, fusiona, y de-duplica por
@@ -48,6 +49,7 @@ const SOURCES: SourceSpec[] = [
     fetch: (e, env) => getDoramaCatalog(DORAMA_SOURCES.dsub, e, env),
   },
   { name: "dyt", page: 24, fetch: (e, env) => getDoramaYtCatalog(e, env) },
+  { name: "doramasub", page: 24, fetch: (e, env) => getDoramaSubCatalog(e, env) },
   { name: "tudorama", page: 24, fetch: (e, env) => getTudoramaCatalog(e, env) },
   { name: "kplay", page: 24, fetch: (e, env) => getKplayCatalog(e, env) },
   { name: "pandrama", page: 48, fetch: (e, env) => getPandramaCatalog(e, env) },
