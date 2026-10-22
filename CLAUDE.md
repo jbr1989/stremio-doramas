@@ -121,6 +121,12 @@ dejes la variante vieja detrás:
   `/debug-host?url=` / `/debug-mixdrop?url=` / `/debug-streamwish?url=` /
   `/debug-savefiles?code=` sondean un embed concreto — úsalos para diagnosticar
   fallos de extracción en el Worker desplegado.
+- `/debug-all` (src/index.ts, `DEBUG_SAMPLES`) llama al getter de cada una de
+  las 7 fuentes con un episodio de muestra propio (`?ids=` cambia los IDs) y
+  atribuye el resultado por fuente — a diferencia de `/debug-extract`, que
+  mezcla el fan-out de todas. Techo de 45 s por fuente. Los `sample` traen
+  cada opción con `servidor` (de `debugServerOf`: `title` → `externalUrl` →
+  hostname de `url`), `tipo` (`debugTipoOf`) y la `url` final.
 
 ## Allowlist de StreamWish (un solo contrato, 4 copias)
 

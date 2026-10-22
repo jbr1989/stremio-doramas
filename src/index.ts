@@ -189,6 +189,96 @@ async function getStreams(rawId: string, env: Env) {
   return { streams };
 }
 
+// ---------------------------------------------------------------------------
+// /debug-all — chequeo de salud de las 7 fuentes en una sola llamada.
+// A diferencia de /debug-extract (getStreams = fan-out mezclado), aquí se
+// llama directo al getter de CADA fuente con su propio episodio de muestra,
+// para poder atribuir el resultado a la fuente que lo produjo.
+// ---------------------------------------------------------------------------
+
+/** Episodios de muestra conocidos, uno por fuente. Sobreescribibles con ?ids=. */
+const DEBUG_SAMPLES: string[] = [
+  "dorama:belleza-juvenil-doramas-latino-1x1",
+  "dsub:true-beauty-subtitulado-1x1",
+  "kplay:ep:make-me-tingle-1x1",
+  "dflix:built-in-love-1x1",
+  "tudorama:la-chispa-del-amor-1x1",
+  "pandrama:1:ep:150357",
+  "dyt:whats-wrong-with-secretary-kim-latino-sub-espanol-episodio-1",
+];
+
+const DEBUG_TIMEOUT_MS = 45000;
+
+type DebugCheck = {
+  source: string;
+  id: string;
+  run: () => Promise<{ streams: any[] }>;
+};
+
+/** Dado un stream id con prefijo `fuente:`, construye la llamada al getter de esa fuente. */
+function debugCheckFor(prefix: string, id: string, env: Env): DebugCheck | null {
+  if (prefix === "dorama")
+    return { source: prefix, id, run: () => getDoramaStreams(DORAMA_SOURCES.dorama, id, env) };
+  if (prefix === "dsub")
+    return { source: prefix, id, run: () => getDoramaStreams(DORAMA_SOURCES.dsub, id, env) };
+  if (prefix === "kplay") return { source: prefix, id, run: () => getKplayStreams(id, env) };
+  if (prefix === "dflix") return { source: prefix, id, run: () => getDoramasflixStreams(id, env) };
+  if (prefix === "tudorama") return { source: prefix, id, run: () => getTudoramaStreams(id, env) };
+  if (prefix === "pandrama") return { source: prefix, id, run: () => getPandramaStreams(id, env) };
+  if (prefix === "dyt") return { source: prefix, id, run: () => getDoramaYtStreams(id, env) };
+  return null;
+}
+
+/** Tipo de un stream individual: external (🌐, no reproducible), mp4 o hls. */
+function debugTipoOf(st: any): "hls" | "mp4" | "external" {
+  const file = String(st?.behaviorHints?.filename || "");
+  if (st?.externalUrl && !st?.url) return "external";
+  if (
+    file.endsWith(".mp4") ||
+    (typeof st?.url === "string" && /\.mp4(\?|$)/i.test(st.url))
+  )
+    return "mp4";
+  return "hls";
+}
+
+/** Host del servidor de un stream:
+ *  1. campo `title` ("▶ host — label" / "🌐 host — label"),
+ *  2. hostname del `externalUrl` (embed original),
+ *  3. hostname de `url` (ojo: en HLS puede ser el proxy Deno/Worker, no el origin). */
+function debugServerOf(st: any): string {
+  const title = String(st?.title || "");
+  const m = title.match(/(?:▶|🌐)\s*([^\s—]+)\s*—/);
+  if (m) return m[1];
+  if (st?.externalUrl) {
+    try {
+      return new URL(st.externalUrl).hostname;
+    } catch {}
+  }
+  if (typeof st?.url === "string") {
+    try {
+      return new URL(st.url).hostname;
+    } catch {}
+  }
+  return "?";
+}
+
+/** Clasifica los streams de una fuente en HLS/MP4/external según su filename/URL. */
+function debugClassify(streams: any[]) {
+  const tipos = { hls: 0, mp4: 0, external: 0 };
+  for (const st of streams || []) tipos[debugTipoOf(st)]++;
+  return tipos;
+}
+
+/** Techo por fuente para que un site colgado no bloquee el chequeo completo. */
+function withTimeout<T>(p: Promise<T>, ms: number, tag: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, rej) =>
+      setTimeout(() => rej(new Error(`${tag}: timeout ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -248,6 +338,62 @@ export default {
           error: String(e).slice(0, 300),
         });
       }
+    }
+
+    if (path === "/debug-all") {
+      const idsParam = url.searchParams.get("ids");
+      const wanted = idsParam
+        ? idsParam
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : DEBUG_SAMPLES;
+      const checks: DebugCheck[] = [];
+      const unknown: string[] = [];
+      for (const id of wanted) {
+        const prefix = id.split(":")[0];
+        const check = debugCheckFor(prefix, id, env);
+        if (check) checks.push(check);
+        else unknown.push(id);
+      }
+      const results = await Promise.all(
+        checks.map(async (c) => {
+          const t0 = Date.now();
+          try {
+            const r = await withTimeout(c.run(), DEBUG_TIMEOUT_MS, c.source);
+            const streams = Array.isArray(r?.streams) ? r.streams : [];
+            return {
+              source: c.source,
+              id: c.id,
+              totalMs: Date.now() - t0,
+              streamsCount: streams.length,
+              tipos: debugClassify(streams),
+              // Todas las opciones encontradas, atribuidas a su servidor y con la URL:
+              sample: streams.map((s) => ({
+                servidor: debugServerOf(s),
+                tipo: debugTipoOf(s),
+                name: s?.name || "",
+                url: s?.url || s?.externalUrl || "",
+              })),
+            };
+          } catch (e) {
+            return {
+              source: c.source,
+              id: c.id,
+              totalMs: Date.now() - t0,
+              streamsCount: 0,
+              tipos: { hls: 0, mp4: 0, external: 0 },
+              error: String(e).slice(0, 300),
+            };
+          }
+        })
+      );
+      return json({
+        ids: checks.map((c) => c.id),
+        unknown,
+        results,
+        hint: "streams crudos: sin caché KV ni filtro isDecoyUrl. Los externalUrl (🌐) no reproducen — solo HLS y MP4 cuentan como reproducibles.",
+      });
     }
 
     if (path === "/debug-render") {
