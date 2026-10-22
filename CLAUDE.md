@@ -121,12 +121,18 @@ dejes la variante vieja detrás:
   `/debug-host?url=` / `/debug-mixdrop?url=` / `/debug-streamwish?url=` /
   `/debug-savefiles?code=` sondean un embed concreto — úsalos para diagnosticar
   fallos de extracción en el Worker desplegado.
-- `/debug-all` (src/index.ts, `DEBUG_SAMPLES`) llama al getter de cada una de
-  las 7 fuentes con un episodio de muestra propio (`?ids=` cambia los IDs) y
-  atribuye el resultado por fuente — a diferencia de `/debug-extract`, que
-  mezcla el fan-out de todas. Techo de 45 s por fuente. Los `sample` traen
-  cada opción con `servidor` (de `debugServerOf`: `title` → `externalUrl` →
-  hostname de `url`), `tipo` (`debugTipoOf`) y la `url` final.
+- `/debug-all` (src/index.ts, `DEBUG_SOURCES`) es el chequeo dinámico de las 7
+  fuentes: por fuente toma las series recientes de su propio catálogo
+  (`getCatalog`), las expande a episodios vía `getMeta` (los catálogos traen
+  ids de serie; `debugIsEpisodeId` valida el formato por fuente) y llama al
+  getter de esa fuente con esos IDs reales — a diferencia de
+  `/debug-extract`, que mezcla el fan-out de todas. Default `n=10`
+  episodios/fuente (≈5 series × 2 eps), expansión y checks con tope de
+  concurrencia (`DEBUG_CONCURRENCY=3`) y techo de 45 s por chequeo. Salida
+  plana: una fila por episodio con `sample` (`debugServerOf`: `title` →
+  `externalUrl` → hostname de `url`; `debugTipoOf`) siempre; `?ids=` hace
+  override manual. Cuidado en CF Workers free: ~100 subrequests/invocación de
+  este chequeo.
   `/debug-dood?url=` sondea la rama Dood de `extractDood`.
 
 ## Familia Dood (do7go/playmogo/dood.*) — NO es StreamWish

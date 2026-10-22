@@ -192,28 +192,44 @@ async function getStreams(rawId: string, env: Env) {
 // ---------------------------------------------------------------------------
 // /debug-all — chequeo de salud de las 7 fuentes en una sola llamada.
 // A diferencia de /debug-extract (getStreams = fan-out mezclado), aquí se
-// llama directo al getter de CADA fuente con su propio episodio de muestra,
-// para poder atribuir el resultado a la fuente que lo produjo.
+// llama directo al getter de CADA fuente. Por defecto el chequeo es dinámico:
+// se toman las series recientes de cada catálogo propio, se expanden a
+// episodios vía getMeta y se prueban esos IDs reales (los DBG_IDS fijos se
+// pudrían cuando un título cae del site). ?ids=id1,id2 hace override manual;
+// ?n= cambia N (default 10, máx 25). Salida plana, una fila por episodio con
+// sample = servidor/tipo/name/url de cada stream encontrado.
 // ---------------------------------------------------------------------------
 
-/** Episodios de muestra conocidos, uno por fuente. Sobreescribibles con ?ids=. */
-const DEBUG_SAMPLES: string[] = [
-  "dorama:belleza-juvenil-doramas-latino-1x1",
-  "dsub:true-beauty-subtitulado-1x1",
-  "kplay:ep:make-me-tingle-1x1",
-  "dflix:built-in-love-1x1",
-  "tudorama:la-chispa-del-amor-1x1",
-  "pandrama:1:ep:150357",
-  "dyt:whats-wrong-with-secretary-kim-latino-sub-espanol-episodio-1",
+/** Cada fuente con el catalogId que la resuelve en getCatalog(). */
+const DEBUG_SOURCES: { source: string; catalogId: string }[] = [
+  { source: "dorama", catalogId: "doramaslat" },
+  { source: "dsub", catalogId: "doramedplay" },
+  { source: "kplay", catalogId: "kplay" },
+  { source: "dflix", catalogId: "doramasflix" },
+  { source: "tudorama", catalogId: "tudorama" },
+  { source: "pandrama", catalogId: "pandrama" },
+  { source: "dyt", catalogId: "doramasyt" },
 ];
 
 const DEBUG_TIMEOUT_MS = 45000;
+const DEBUG_CONCURRENCY = 3;
 
 type DebugCheck = {
   source: string;
   id: string;
   run: () => Promise<{ streams: any[] }>;
 };
+
+/** ¿Es este un id válido de EPISODIO de esta fuente? Los catálogos pueden
+ *  traer metas de serie/lista; el getter de streams solo acepta episodios,
+ *  así que filtramos por el formato del id de cada fuente. */
+function debugIsEpisodeId(source: string, id: string): boolean {
+  if (source === "pandrama") return /^pandrama:\d+:ep:\d+$/.test(id);
+  if (source === "dyt") return /^dyt:.+-episodio-\d+$/.test(id);
+  if (source === "kplay")
+    return /^kplay:(?:ep:.+-\d+x\d+|movie:.+)$/.test(id);
+  return new RegExp(`^${source}:.+-\\d+x\\d+$`).test(id);
+}
 
 /** Dado un stream id con prefijo `fuente:`, construye la llamada al getter de esa fuente. */
 function debugCheckFor(prefix: string, id: string, env: Env): DebugCheck | null {
@@ -279,6 +295,59 @@ function withTimeout<T>(p: Promise<T>, ms: number, tag: string): Promise<T> {
   ]);
 }
 
+/** Ejecuta fn sobre items con un tope de concurrencia (resto en cola). */
+async function debugMapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, () => {
+    return (async () => {
+      for (;;) {
+        const idx = next++;
+        if (idx >= items.length) return;
+        results[idx] = await fn(items[idx]);
+      }
+    })();
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+/** Chequeo de un episodio concreto: getter de la fuente + clasificación.
+ *  Todos los streams se exponen en `sample` con servidor/tipo/name/url. */
+async function debugRunOne(c: DebugCheck): Promise<Record<string, any>> {
+  const t0 = Date.now();
+  try {
+    const r = await withTimeout(c.run(), DEBUG_TIMEOUT_MS, c.source);
+    const streams = Array.isArray(r?.streams) ? r.streams : [];
+    return {
+      source: c.source,
+      id: c.id,
+      totalMs: Date.now() - t0,
+      streamsCount: streams.length,
+      tipos: debugClassify(streams),
+      // Todas las opciones encontradas, atribuidas a su servidor y con la URL:
+      sample: streams.map((s) => ({
+        servidor: debugServerOf(s),
+        tipo: debugTipoOf(s),
+        name: s?.name || "",
+        url: s?.url || s?.externalUrl || "",
+      })),
+    };
+  } catch (e) {
+    return {
+      id: c.id,
+      totalMs: Date.now() - t0,
+      streamsCount: 0,
+      tipos: { hls: 0, mp4: 0, external: 0 },
+      error: String(e).slice(0, 300),
+    };
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -341,58 +410,123 @@ export default {
     }
 
     if (path === "/debug-all") {
-      const idsParam = url.searchParams.get("ids");
-      const wanted = idsParam
-        ? idsParam
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean)
-        : DEBUG_SAMPLES;
-      const checks: DebugCheck[] = [];
-      const unknown: string[] = [];
-      for (const id of wanted) {
-        const prefix = id.split(":")[0];
-        const check = debugCheckFor(prefix, id, env);
-        if (check) checks.push(check);
-        else unknown.push(id);
-      }
-      const results = await Promise.all(
-        checks.map(async (c) => {
-          const t0 = Date.now();
-          try {
-            const r = await withTimeout(c.run(), DEBUG_TIMEOUT_MS, c.source);
-            const streams = Array.isArray(r?.streams) ? r.streams : [];
-            return {
-              source: c.source,
-              id: c.id,
-              totalMs: Date.now() - t0,
-              streamsCount: streams.length,
-              tipos: debugClassify(streams),
-              // Todas las opciones encontradas, atribuidas a su servidor y con la URL:
-              sample: streams.map((s) => ({
-                servidor: debugServerOf(s),
-                tipo: debugTipoOf(s),
-                name: s?.name || "",
-                url: s?.url || s?.externalUrl || "",
-              })),
-            };
-          } catch (e) {
-            return {
-              source: c.source,
-              id: c.id,
-              totalMs: Date.now() - t0,
-              streamsCount: 0,
-              tipos: { hls: 0, mp4: 0, external: 0 },
-              error: String(e).slice(0, 300),
-            };
-          }
-        })
+      const n = Math.max(
+        1,
+        Math.min(parseInt(url.searchParams.get("n") || "10", 10) || 10, 25)
       );
+      const t01 = Date.now();
+
+      // Override manual: solo los IDs pedidos, sin ir al catálogo.
+      const idsParam = url.searchParams.get("ids");
+      if (idsParam) {
+        const wanted = idsParam
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        const checks: DebugCheck[] = [];
+        const unknown: string[] = [];
+        for (const id of wanted) {
+          const prefix = id.split(":")[0];
+          const check = debugCheckFor(prefix, id, env);
+          if (check) checks.push(check);
+          else unknown.push(id);
+        }
+        const rows = await debugMapLimit(checks, DEBUG_CONCURRENCY, (c) =>
+          debugRunOne(c)
+        );
+        return json({
+          modo: "manual",
+          ids: checks.map((c) => c.id),
+          unknown,
+          results: rows,
+          hint: "streams crudos: sin caché KV ni filtro isDecoyUrl. Los externalUrl (🌐) no reproducen — solo HLS y MP4 cuentan como reproducibles.",
+        });
+      }
+
+      // Estándar: catálogo propio de cada fuente → series recientes →
+      // expansión a episodios vía getMeta (los catálogos traen ids de SERIE;
+      // el getter de streams solo acepta episodios) → su getter con
+      // concurrencia limitada. Las 7 fuentes van en paralelo entre sí;
+      // la salida es plana: una fila por episodio, como en el formato antiguo.
+      const perSource = await Promise.all(
+        DEBUG_SOURCES.map(
+          async (s): Promise<Record<string, any>[]> => {
+            let metas: any[] = [];
+            let catalogUrlOk = true;
+            let catalogError: string | undefined;
+            try {
+              const cat: any = await getCatalog(s.catalogId, {}, env);
+              metas = Array.isArray(cat?.metas) ? cat.metas : [];
+            } catch (e) {
+              catalogUrlOk = false;
+              catalogError = String(e).slice(0, 200);
+            }
+
+            // Series recientes (suficientes para llegar a n episodios, ~2/serie)
+            const seriesIds = metas
+              .map((m: any) => m?.id)
+              .filter(
+                (id: any) => typeof id === "string" && !debugIsEpisodeId(s.source, id)
+              )
+              .slice(0, Math.max(2, Math.ceil(n / 2)));
+
+            // Expansión serie → episodios (getMeta trae meta.videos[]), 3 en paralelo
+            const epIds: string[] = [];
+            await debugMapLimit(
+              seriesIds,
+              DEBUG_CONCURRENCY,
+              async (seriesId: string): Promise<boolean> => {
+                try {
+                  const m: any = await getMeta(seriesId, tmdbKey, env);
+                  const vids: any[] = Array.isArray(m?.meta?.videos)
+                    ? m.meta.videos
+                    : [];
+                  const valid = vids
+                    .map((v: any) => v?.id)
+                    .filter(
+                      (id: any) =>
+                        typeof id === "string" &&
+                        debugIsEpisodeId(s.source, id)
+                    )
+                    .slice(0, Math.max(1, Math.ceil(n / 4)));
+                  const room = n - epIds.length;
+                  if (room <= 0) return true; // corta el resto de workers
+                  epIds.push(...valid.slice(0, room));
+                  return epIds.length >= n;
+                } catch {
+                  return false; // serie sin meta utilizable: se salta
+                }
+              }
+            );
+
+            const checks = epIds
+              .map((id) => debugCheckFor(s.source, id, env))
+              .filter((c): c is DebugCheck => c !== null);
+            const rows = await debugMapLimit(checks, DEBUG_CONCURRENCY, (c) =>
+              debugRunOne(c)
+            );
+            // Sin episodios (catálogo roto o filtró todo): fila de contexto para que la fuente no desaparezca.
+            if (!rows.length)
+              return [
+                {
+                  source: s.source,
+                  catalogOk: catalogUrlOk,
+                  seriesProbadas: seriesIds.length,
+                  episodiosEncontrados: 0,
+                  ...(catalogError ? { catalogError } : {}),
+                },
+              ];
+            return rows;
+          }
+        )
+      );
+      const results = perSource.flat();
       return json({
-        ids: checks.map((c) => c.id),
-        unknown,
+        modo: "latest",
+        n,
+        totalMs: Date.now() - t01,
         results,
-        hint: "streams crudos: sin caché KV ni filtro isDecoyUrl. Los externalUrl (🌐) no reproducen — solo HLS y MP4 cuentan como reproducibles.",
+        hint: "streams crudos: sin caché KV ni filtro isDecoyUrl. Los externalUrl (🌐) no reproducen — solo HLS y MP4 cuentan como reproducibles. Cada fila trae sample con servidor/tipo/name/url por stream.",
       });
     }
 
