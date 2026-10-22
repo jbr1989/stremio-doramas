@@ -132,7 +132,10 @@ dejes la variante vieja detrás:
   plana: una fila por episodio con `sample` (`debugServerOf`: `title` →
   `externalUrl` → hostname de `url`; `debugTipoOf`) siempre; `?ids=` hace
   override manual. Cuidado en CF Workers free: ~100 subrequests/invocación de
-  este chequeo.
+  este chequeo. Los hosts de la familia Cloudflare-challenge
+  (`CHALLENGE_HOSTS_RE` en utils.ts: dsvplay/do7go/playmogo) van por fast
+  path directo sin cascada de proxies; `extractMp4upload` descarta sin fetch
+  los `embed-undef.html` (archivo borrado upstream).
   `/debug-dood?url=` sondea la rama Dood de `extractDood`.
 
 ## Familia Dood (do7go/playmogo/dood.*) — NO es StreamWish

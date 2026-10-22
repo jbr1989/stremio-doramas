@@ -30,6 +30,15 @@ function unpackPacker(source: string): string | null {
 }
 
 export async function extractMp4upload(embedUrl: string) {
+  // "embed-undef.html" es la página genérica de mp4upload para archivo
+  // eliminado upstream: no trae video y da igual cuántas veces la pidamos.
+  // Salir sin llamada de red (ahorra el GET y el ruido en el log).
+  if (/\/embed-undef\.html/i.test(embedUrl)) {
+    console.log(
+      `[extractMp4upload] embed undef (archivo borrado upstream): ${embedUrl}`
+    );
+    return null;
+  }
   try {
     const html = await fetchHtml(embedUrl);
     const m =

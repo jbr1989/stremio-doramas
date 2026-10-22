@@ -184,6 +184,25 @@ si no, esto crea un segundo Worker en otra URL en vez de actualizar el real.
 - `/debug-all` — chequea las 7 fuentes a la vez. Comportamiento estándar (dinámico): de cada catálogo propio toma las series recientes, las expande a `?n=` episodios vía meta (default 10) y llama al getter de cada fuente con esos IDs reales. Salida plana, una fila por episodio: `source/id/streamsCount/tipos/totalMs` + `sample` con cada stream (`servidor`/`tipo`/`name`/`url`); sin episodios solo muestra contexto del catálogo. `?ids=id1,id2` hace override manual. Streams crudos: sin caché ni filtro de señuelos.
 - `/cache-clear?key=<clave KV completa>` — limpia una entrada de caché
 
+### Hosts de reto (`CHALLENGE_HOSTS_RE`, src/utils.ts)
+
+Páginas de embed con challenge activo de Cloudflare contra TLS no-navegador.
+Para estos hosts `fetchHtml` **salta la cascada de proxies públicos** (que con
+ellos es pura pérdida: corsproxy 403 al instante, allorigins/codetabs timeout)
+e intenta directo con techo corto — más un render vía Browser Rendering si el
+secret `CF_API_TOKEN` está activo. Si falla, la opción queda como 🌐 external.
+
+| Host | Origen del embed | Evidencia |
+|---|---|---|
+| `dsvplay.com` | dyt (`/e/<code>`) | direct → THROW; codetabs/allorigins → timeout 8s; corsproxy → 403 (visto en `/debug-all` dyt) |
+| `do7go.com` | familia Dood (kplay/dyt/pandrama) | la página `/e/` desafía TLS no-navegador (probado con egress Deno/.NET/CF Worker); el `pass_md5` sí funciona GET directo server-side |
+| `playmogo.com` | familia Dood | mismo reto por infraestructura común con do7go |
+
+La lista es extensible: cualquier host que se descubra con el mismo patrón
+se añade al regex (`CHALLENGE_HOSTS_RE`) y automáticamente se beneficia del
+fast path. Relacionado: `extractMp4upload` descarta sin llamada de red los
+embeds `embed-undef.html` (página de mp4upload para archivo borrado upstream).
+
 ## Ejecución local
 
 1. Arranca el proxy local:
