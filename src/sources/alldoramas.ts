@@ -3,6 +3,7 @@ import { cleanTitle } from "../utils";
 import { genreSlug } from "../genres";
 import { getDoramaCatalog, DORAMA_SOURCES } from "./doramas";
 import { getKplayCatalog } from "./kdramasplay";
+import { getYandiCatalog } from "./yandispoiler";
 import { getDoramasflixCatalog } from "./doramasflix";
 import { getTudoramaCatalog } from "./tudorama";
 import { getPandramaCatalog } from "./pandrama";
@@ -50,6 +51,7 @@ const SOURCES: SourceSpec[] = [
   { name: "dyt", page: 24, fetch: (e, env) => getDoramaYtCatalog(e, env) },
   { name: "tudorama", page: 24, fetch: (e, env) => getTudoramaCatalog(e, env) },
   { name: "kplay", page: 24, fetch: (e, env) => getKplayCatalog(e, env) },
+  { name: "yandi", page: 24, fetch: (e, env) => getYandiCatalog(e, env) },
   { name: "pandrama", page: 48, fetch: (e, env) => getPandramaCatalog(e, env) },
 ];
 

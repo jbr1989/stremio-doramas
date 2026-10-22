@@ -33,6 +33,11 @@ import {
   getKplayStreams,
 } from "./sources/kdramasplay";
 import {
+  getYandiCatalog,
+  getYandiMeta,
+  getYandiStreams,
+} from "./sources/yandispoiler";
+import {
   getDoramasflixCatalog,
   getDoramasflixMeta,
   getDoramasflixStreams,
@@ -68,6 +73,7 @@ async function getCatalog(
   if (catalogId.startsWith("doramedplay"))
     return getDoramaCatalog(DORAMA_SOURCES.dsub, extra, env);
   if (catalogId.startsWith("kplay")) return getKplayCatalog(extra, env);
+  if (catalogId.startsWith("yandispoiler")) return getYandiCatalog(extra, env);
   if (catalogId.startsWith("doramasflix"))
     return getDoramasflixCatalog(extra);
   if (catalogId.startsWith("tudorama"))
@@ -85,6 +91,7 @@ async function getMeta(id: string, tmdbKey: string, env?: Env) {
   if (id.startsWith("dsub:"))
     return getDoramaMeta(DORAMA_SOURCES.dsub, id, tmdbKey, env);
   if (id.startsWith("kplay:")) return getKplayMeta(id, tmdbKey, env);
+  if (id.startsWith("yandi:")) return getYandiMeta(id, tmdbKey, env);
   if (id.startsWith("dflix:")) return getDoramasflixMeta(id, tmdbKey);
   if (id.startsWith("tudorama:")) return getTudoramaMeta(id, tmdbKey, env);
   if (id.startsWith("pandrama:")) return getPandramaMeta(id, tmdbKey, env);
@@ -99,6 +106,15 @@ async function getStreams(rawId: string, env: Env) {
     epSlug = rawId.slice("dorama:".length);
   } else if (rawId.startsWith("dsub:")) {
     epSlug = rawId.slice("dsub:".length);
+  } else if (rawId.startsWith("yandi:")) {
+    const parts = rawId.split(":");
+    if (parts[1] === "ep") {
+      epSlug = parts.slice(2).join(":");
+    } else if (parts[1] === "movie") {
+      epSlug = `${parts.slice(2).join(":")}-1x1`;
+    } else {
+      epSlug = parts.slice(1).join(":");
+    }
   } else if (rawId.startsWith("dflix:")) {
     epSlug = rawId.slice("dflix:".length);
   } else if (rawId.startsWith("dyt:")) {
@@ -153,6 +169,12 @@ async function getStreams(rawId: string, env: Env) {
     tasks.push(getKplayStreams(`kplay:ep:${epSlug}`, env));
   }
 
+  if (rawId.startsWith("yandi:")) {
+    tasks.push(getYandiStreams(rawId, env));
+  } else if (epSlug) {
+    tasks.push(getYandiStreams(`yandi:ep:${epSlug}`, env));
+  }
+
   if (rawId.startsWith("dflix:")) {
     tasks.push(getDoramasflixStreams(rawId, env));
   } else if (epSlug) {
@@ -205,6 +227,7 @@ const DEBUG_SOURCES: { source: string; catalogId: string }[] = [
   { source: "dorama", catalogId: "doramaslat" },
   { source: "dsub", catalogId: "doramedplay" },
   { source: "kplay", catalogId: "kplay" },
+  { source: "yandi", catalogId: "yandispoiler" },
   { source: "dflix", catalogId: "doramasflix" },
   { source: "tudorama", catalogId: "tudorama" },
   { source: "pandrama", catalogId: "pandrama" },
@@ -228,6 +251,8 @@ function debugIsEpisodeId(source: string, id: string): boolean {
   if (source === "dyt") return /^dyt:.+-episodio-\d+$/.test(id);
   if (source === "kplay")
     return /^kplay:(?:ep:.+-\d+x\d+|movie:.+)$/.test(id);
+  if (source === "yandi")
+    return /^yandi:(?:ep:.+-\d+x\d+|movie:.+)$/.test(id);
   return new RegExp(`^${source}:.+-\\d+x\\d+$`).test(id);
 }
 
@@ -238,6 +263,7 @@ function debugCheckFor(prefix: string, id: string, env: Env): DebugCheck | null 
   if (prefix === "dsub")
     return { source: prefix, id, run: () => getDoramaStreams(DORAMA_SOURCES.dsub, id, env) };
   if (prefix === "kplay") return { source: prefix, id, run: () => getKplayStreams(id, env) };
+  if (prefix === "yandi") return { source: prefix, id, run: () => getYandiStreams(id, env) };
   if (prefix === "dflix") return { source: prefix, id, run: () => getDoramasflixStreams(id, env) };
   if (prefix === "tudorama") return { source: prefix, id, run: () => getTudoramaStreams(id, env) };
   if (prefix === "pandrama") return { source: prefix, id, run: () => getPandramaStreams(id, env) };

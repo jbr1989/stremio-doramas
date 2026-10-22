@@ -57,7 +57,8 @@ type GenreSourceName =
   | "dflix"
   | "pandrama"
   | "tudorama"
-  | "dyt";
+  | "dyt"
+  | "yandi";
 
 interface GenreEntry {
   /** Label ES que ve el usuario en el dropdown de Stremio. */
@@ -80,7 +81,8 @@ const MASTER_GENRES: GenreEntry[] = [
       kplay: "romance", 
       dyt: "romance", 
       pandrama: "2", 
-      dflix: "romance", 
+      dflix: "romance",
+      yandi: "romance",
     } 
   },
   { label: "Comedia", slugs:
@@ -92,6 +94,7 @@ const MASTER_GENRES: GenreEntry[] = [
       tudorama: "comedia", 
       pandrama: "4", 
       dflix: "comedia",
+      yandi: "comedia",
     }
   },
   { label: "Drama", slugs: 
@@ -103,6 +106,7 @@ const MASTER_GENRES: GenreEntry[] = [
       tudorama: "drama", 
       pandrama: "3", 
       dflix: "drama",
+      yandi: "drama",
     } 
   },
   { label: "Acción", slugs: 
@@ -114,6 +118,7 @@ const MASTER_GENRES: GenreEntry[] = [
       tudorama: "accion", 
       pandrama: "35", 
       dflix: "accion",
+      yandi: "accion",
     } 
   },
   { label: "Acción y aventura", slugs: 
