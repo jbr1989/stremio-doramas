@@ -93,10 +93,16 @@ export const MANIFEST = {
     },
     {
       type: "series",
+      id: "yandispoiler-directory",
+      name: "Yandispoiler — Directorio",
+      extra: withGenre(genreSourceOptions("yandi")),
+    },
+    {
+      type: "series",
       id: "kisskh-directory",
       name: "KissKH — Directorio",
       extra: SEARCH_SKIP,
     },
   ],
-  idPrefixes: ["dlat:", "dplay:", "kplay:", "dflix:", "tudorama:", "pandrama:", "dyt:", "dsub:", "kisskh:"],
+  idPrefixes: ["dlat:", "dplay:", "kplay:", "dflix:", "tudorama:", "pandrama:", "dyt:", "dsub:", "yandi:", "kisskh:"],
 };

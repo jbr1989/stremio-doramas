@@ -83,14 +83,14 @@ async function handleFetch(target: string): Promise<Response> {
     logErr("fetch", `url inválida: ${trunc(target, 120)}`);
     return jsonError("invalid url", 400);
   }
-  // Allowlist: doramaslat.com, doramedplay.net, kdramasplay.com, doramasflix.in, doramasyt.com, tudorama.com, pandrama.tv, doramasub.com, kisskh.co.
-  if (u.protocol !== "https:" || !/(^|\.)(doramaslat\.com|doramedplay\.net|kdramasplay\.com|doramasflix\.in|doramasyt\.com|tudorama\.com|pandrama\.tv|doramasub\.com|kisskh\.co)$/i.test(u.hostname)) {
+  // Allowlist: doramaslat.com, doramedplay.net, kdramasplay.com, doramasflix.in, doramasyt.com, tudorama.com, pandrama.tv, doramasub.com, yandispoiler.net, kisskh.co.
+  if (u.protocol !== "https:" || !/(^|\.)(doramaslat\.com|doramedplay\.net|kdramasplay\.com|doramasflix\.in|doramasyt\.com|tudorama\.com|pandrama\.tv|doramasub\.com|yandispoiler\.net|kisskh\.co)$/i.test(u.hostname)) {
     logErr("fetch", `host no permitido: ${u.protocol}//${u.hostname}`);
     return jsonError("host not allowed", 403);
   }
   const t0 = performance.now();
   try {
-    const upstream = await fetch(target, {
+    let upstream = await fetch(target, {
       headers: {
         "User-Agent": CHROME_UA,
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -100,7 +100,29 @@ async function handleFetch(target: string): Promise<Response> {
       redirect: "follow",
       signal: AbortSignal.timeout(11000),
     });
-    const body = await upstream.text();
+    let body = await upstream.text();
+    const mChal = body.match(/document\.cookie=['"](ypg_chal=[^;]+);/);
+    if (mChal || upstream.status === 503) {
+      const cookie = mChal ? mChal[1] : null;
+      if (cookie) {
+        log("fetch", `solving ypg_chal for ${u.hostname}`);
+        const r2 = await fetch(target, {
+          headers: {
+            "User-Agent": CHROME_UA,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "es-MX,es;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Referer": "https://www.google.com/",
+            "Cookie": cookie,
+          },
+          redirect: "follow",
+          signal: AbortSignal.timeout(11000),
+        });
+        if (r2.ok) {
+          upstream = r2;
+          body = await r2.text();
+        }
+      }
+    }
     if (upstream.ok) {
       log("fetch", `GET ${u.pathname + u.search} → ${upstream.status}, ${body.length}B (${ms(t0)})`);
     } else {
@@ -187,7 +209,7 @@ async function handleStreamwish(embedUrl: string, selfBase: string): Promise<Res
   // Espejos de StreamWish admitidos. Mantén sincronizado con las regex de
   // src/sources/{doramas,kdramasplay,doramasflix}.ts — un host que el Worker
   // enruta aquí y no esté en esta allowlist muere con 403 silencioso.
-  try { host = new URL(embedUrl).hostname; ok = /streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|lulustream|luluvdo|lulu\.st/i.test(host); } catch { /* invalid */ }
+  try { host = new URL(embedUrl).hostname; ok = /streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|lulustream|luluvdo|luluvido|lulu\.st/i.test(host); } catch { /* invalid */ }
   if (!ok) {
     logErr("streamwish", `host no permitido / url inválida: ${trunc(embedUrl, 160)}`);
     return jsonError("host not allowed", 403);
@@ -459,7 +481,7 @@ async function handler(req: Request): Promise<Response> {
   }
   const target = url.searchParams.get("url");
   if (!target) {
-    return cors(JSON.stringify({ ok: true, usage: "/fetch?url=… | /savefiles?code=… | /streamwish?url=… | /hls?u=…&r=… | /mp4?url=…&r=…" }), {
+    return cors(JSON.stringify({ ok: true, usage: "/fetch?url=… | /savefiles?code=… | /streamwish?url=… | /hls?u=…&r=… | /mp4?url=…" }), {
       headers: { "Content-Type": "application/json" },
     });
   }
