@@ -59,7 +59,8 @@ type GenreSourceName =
   | "tudorama"
   | "dyt"
   | "yandi"
-  | "dsub";
+  | "dsub"
+  | "kisskh";
 
 interface GenreEntry {
   /** Label ES que ve el usuario en el dropdown de Stremio. */
