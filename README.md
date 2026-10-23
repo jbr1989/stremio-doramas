@@ -10,7 +10,7 @@ Addon de Stremio para ver **doramas en español** (sub español/latino), corrien
 
 | Prefijo del ID | Sitio | Archivo | Tecnología | Estado |
 |---|---|---|---|---|
-| `dorama:` | [doramaslat.com](https://doramaslat.com) | `src/sources/doramas.ts` | WordPress + tema DooPlay | ✅ Funcional |
+| `dlat:` | [doramaslat.com](https://doramaslat.com) | `src/sources/doramas.ts` | WordPress + tema DooPlay | ✅ Funcional |
 | `dsub:` | [doramedplay.net](https://doramedplay.net) | `src/sources/doramas.ts` | WordPress + tema DooPlay | ✅ Funcional |
 | `kplay:` | [kdramasplay.com](https://kdramasplay.com) | `src/sources/kdramasplay.ts` | WordPress + tema DooPlay | ⚠️ Episodios sin streams (ver problema conocido) |
 | `dflix:` | [doramasflix.in](https://doramasflix.in) | `src/sources/doramasflix.ts` | App propia (GraphQL) | ✅ Funcional |
@@ -111,7 +111,7 @@ póster del meta). La misma URL devuelve:
 
 El resto de hosts del addon no bloquean por Referer (doramaslat, doramedplay,
 shortpixel, TMDB — todos 200 con Referer de Stremio), así que las miniaturas
-funcionan en Stremio Web para los otros prefijos (`dorama:`, `dsub:`, `kplay:`,
+funcionan en Stremio Web para los otros prefijos (`dlat:`, `dsub:`, `kplay:`,
 `dflix:`, `pandrama:`).
 
 **Decisión (oct. 2026)**: documentado y **no se hace nada de momento**. En

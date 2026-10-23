@@ -17,9 +17,9 @@ Contratos estables. Cambiarlos es trabajo de protocolo y debe cumplir la spec
 - **Rutas**: `/manifest.json`, `/catalog/...`, `/meta/...`, `/stream/...`, más
   `/proxy/m3u8` + `/proxy/seg` (proxy de reescritura HLS) y los endpoints `/debug*`.
   Toda respuesta JSON pasa por `json()` y lleva cabeceras CORS.
-- **Esquema de IDs** (prefijos `idPrefixes: ["dorama:", "dsub:", "kplay:", "dflix:", "tudorama:", "pandrama:", "dyt:", "doramasub:"]`):
-  - `dorama:{slug}` / `dsub:{slug}` — meta de serie.
-  - `dorama:{slug}-1x{N}` / `dsub:{slug}-1x{N}` — streams de episodio
+- **Esquema de IDs** (prefijos `idPrefixes: ["dlat:", "dsub:", "kplay:", "dflix:", "tudorama:", "pandrama:", "dyt:", "doramasub:"]`):
+  - `dlat:{slug}` / `dsub:{slug}` — meta de serie.
+  - `dlat:{slug}-1x{N}` / `dsub:{slug}-1x{N}` — streams de episodio
     (validado con `/-\d+x\d+$/`, página fuente `/episodes/{slug}-1xN/`).
   - `kplay:series:{slug}` / `kplay:movie:{slug}` — meta (páginas `/series/` y `/peliculas/`).
   - `kplay:ep:{epSlug}` / `kplay:movie:{slug}` — streams de episodio/película
@@ -56,7 +56,7 @@ Contratos estables. Cambiarlos es trabajo de protocolo y debe cumplir la spec
   buscar la serie por título (`?s=`, scoring de tokens ≥ 0.5 con exigencia de
   ≥2 hits para títulos multi-palabra, stopwords en limpio) → raspar la lista
   de episodios de la página de serie → tomar el slug del SxE pedido; los DOS
-  prefijos DooPlay resuelven (`dorama`/`dsub` en `doramas.ts`) — p.ej. un id
+  prefijos DooPlay resuelven (`dlat`/`dsub` en `doramas.ts`) — p.ej. un id
   de kplay también puede encontrar su episodio en doramaslat. Se reusa
   con `getKplayStreams`/`getDoramaStreams`. Cache: `epmap:v1:{site}:{titleKey}`
   (mapa `{SxE: epSlug}` de toda la serie, TTL 24h — episodios siguientes salen
