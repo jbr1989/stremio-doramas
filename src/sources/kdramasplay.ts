@@ -1,8 +1,8 @@
 import { Env } from "../types";
 import { genreSlug } from "../genres";
-import { CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchHtml, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
+import { CHROME_UA, cleanTitle, denoBaseFromEnv, fetchHtml, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
 import { addEmbedStreams } from "../extractors";
-import { dooPlayerAjaxEmbed, genresFromDooPlay, imgFromTag } from "./dooplay";
+import { buildMovieMeta, buildSeriesMeta, dooPlayerAjaxEmbed, dooplayEpisodeList, dooplayEpThumbs, genresFromDooPlay, ogMetaFromHtml } from "./dooplay";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
 
 const KPLAY_BASE = "https://kdramasplay.com";
@@ -104,24 +104,7 @@ export async function getKplayMeta(
     return { meta: null };
   }
 
-  const name =
-    cleanTitle(
-      html.match(/<meta[^>]+property="og:title"[^>]+content="([^"]+)"/i)?.[1] ||
-        html.match(/<title>([\s\S]*?)<\/title>/i)?.[1] ||
-        slug
-    ) || slug;
-  const poster =
-    html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/i)?.[1] ||
-    html.match(/<div class="poster">\s*<img[^>]+(?:data-src|src)="([^"]+)"/i)?.[1] ||
-    "";
-  const description = decodeEntities(
-    html.match(/<meta[^>]+property="og:description"[^>]+content="([^"]+)"/i)?.[1] ||
-      html.match(/<div[^>]+itemprop="description"[^>]*>([\s\S]*?)<\/div>/i)?.[1] ||
-      ""
-  )
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  const og = ogMetaFromHtml(html, slug);
 
   // Géneros de la ficha: bloque sgeneros del tema (server-rendered, base
   // /genero/). Label canónico (src/genres.ts) o texto del sitio tal cual —
@@ -129,92 +112,39 @@ export async function getKplayMeta(
   // movies y series: el bloque existe en ambas páginas DooPlay.
   const genres = genresFromDooPlay(html, "genero", "kplay");
 
-  const tmdb = await fetchTmdb(name, tmdbKey);
+  const tmdb = await fetchTmdb(og.name, tmdbKey);
 
   if (type === "movie") {
-    return {
-      meta: {
-        id,
-        type: "movie",
-        name,
-        poster: tmdb?.poster || poster,
-        background: tmdb?.background || poster,
-        description: tmdb?.description || description,
-        posterShape: "poster",
-        releaseInfo: tmdb?.year || "",
-        genres,
-        videos: [
-          {
-            id: `kplay:movie:${slug}`,
-            title: name,
-            season: 1,
-            episode: 1,
-          },
-        ],
-      },
-    };
-  }
-
-  // Series episodes
-  const episodes: { slug: string; s: number; e: number }[] = [];
-  const seen = new Set<string>();
-  for (const m of html.matchAll(
-    /\/episodios\/([a-z0-9-]+-(\d+)x(\d+))\/?/gi
-  )) {
-    if (seen.has(m[1])) continue;
-    seen.add(m[1]);
-    episodes.push({
-      slug: m[1],
-      s: parseInt(m[2], 10),
-      e: parseInt(m[3], 10),
+    return buildMovieMeta({
+      id,
+      slug,
+      name: og.name,
+      poster: og.poster,
+      description: og.description,
+      genres,
+      tmdb,
     });
   }
-  episodes.sort((a, b) => a.s - b.s || a.e - b.e);
 
-  // Miniaturas de episodio:  misma grilla DooPlay que doramas.ts
-  // (<div class='imagen'><img src="thumb"></div> ... <a href=".../episodios/epSlug-SxE/">),
-  // la <img> del propio <li> precede al href.
-  const thumbs = new Map<string, string>();
-  const pushThumb = (epSlug: string, raw: string) => {
-    if (thumbs.has(epSlug)) return;
-    if (/dooplay\/assets\/img\/no\/dt_/.test(raw)) return;
-    const thumb = raw.startsWith("http")
-      ? raw
-      : raw.startsWith("//")
-      ? `https:${raw}`
-      : raw.startsWith("/")
-      ? `${KPLAY_BASE}${raw}`
-      : "";
-    if (thumb) thumbs.set(epSlug, thumb);
-  };
-  // preferencia data-src + nunca "data:" → imgFromTag (dooplay.ts)
-  for (const m of html.matchAll(
-    /<img\b([^>]*)>[\s\S]{0,220}?\/episodios\/([a-z0-9-]+-(\d+)x(\d+))\/["']/gi
-  )) {
-    const raw = imgFromTag(m[1]);
-    if (raw) pushThumb(m[2], raw);
-  }
+  // Series episodes + miniaturas (misma grilla DooPlay que doramas.ts:
+  // la <img> del propio <li> precede al href — ver dooplayEpThumbs).
+  const episodes = dooplayEpisodeList(html, "episodios");
+  const thumbs = dooplayEpThumbs(html, KPLAY_BASE, "episodios", 220);
 
-  return {
-    meta: {
-      id,
-      type: "series",
-      name,
-      poster: tmdb?.poster || poster,
-      background: tmdb?.background || poster,
-      description: tmdb?.description || description,
-      posterShape: "poster",
-      releaseInfo: tmdb?.year || "",
-      genres,
-      videos: episodes.map((ep) => ({
-        id: `kplay:ep:${ep.slug}`,
-        title: `T${ep.s} · Episodio ${ep.e}`,
-        season: ep.s,
-        episode: ep.e,
-        thumbnail: thumbs.get(ep.slug) || poster,
-      })),
-    },
-  };
+  return buildSeriesMeta({
+    id,
+    name: og.name,
+    poster: og.poster,
+    description: og.description,
+    genres,
+    tmdb,
+    videos: episodes.map((ep) => ({
+      id: `kplay:ep:${ep.slug}`,
+      season: ep.s,
+      episode: ep.e,
+      thumbnail: thumbs.get(ep.slug) || og.poster,
+    })),
+  });
 }
 
 /** Resuelve el epSlug propio de kdramasplay para un epSlug venido de otro
@@ -296,20 +226,11 @@ async function resolveKplayEpisodeSlug(
             `${KPLAY_BASE}/series/${seriesSlug}/`,
             env
           );
-          const episodes: { s: number; e: number; epSlug: string }[] = [];
-          const seen = new Set<string>();
-          for (const m of html.matchAll(
-            /\/episodios\/([a-z0-9-]+-(\d+)x(\d+))\/?/gi
-          )) {
-            if (seen.has(m[1])) continue;
-            seen.add(m[1]);
-            episodes.push({
-              epSlug: m[1],
-              s: parseInt(m[2], 10),
-              e: parseInt(m[3], 10),
-            });
-          }
-          return episodes;
+          return dooplayEpisodeList(html, "episodios").map((ep) => ({
+            epSlug: ep.slug,
+            s: ep.s,
+            e: ep.e,
+          }));
         })(),
     },
     epSlug,

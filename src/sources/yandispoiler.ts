@@ -1,8 +1,8 @@
 import { Env } from "../types";
 import { genreSlug } from "../genres";
-import { cleanTitle, decodeEntities, denoBaseFromEnv, fetchHtml, fetchTmdb, makeStreamDeduper, toMetaPreview } from "../utils";
+import { cleanTitle, denoBaseFromEnv, fetchHtml, fetchTmdb, makeStreamDeduper, toMetaPreview } from "../utils";
 import { addEmbedStreams } from "../extractors";
-import { genresFromDooPlay } from "./dooplay";
+import { buildMovieMeta, buildSeriesMeta, dooplayEpisodeList, genresFromDooPlay, ogMetaFromHtml } from "./dooplay";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
 
 const YANDI_BASE = "https://yandispoiler.net";
@@ -149,90 +149,43 @@ export async function getYandiMeta(
     return { meta: null };
   }
 
-  const name =
-    cleanTitle(
-      html.match(/<meta[^>]+property="og:title"[^>]+content="([^"]+)"/i)?.[1] ||
-        html.match(/<title>([\s\S]*?)<\/title>/i)?.[1] ||
-        slug
-    ) || slug;
-  const poster =
-    html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/i)?.[1] ||
-    html.match(/<div class="poster">\s*<img[^>]+(?:data-src|src)="([^"]+)"/i)?.[1] ||
-    "";
-  const description = decodeEntities(
-    html.match(/<meta[^>]+property="og:description"[^>]+content="([^"]+)"/i)?.[1] ||
-      html.match(/<div[^>]+itemprop="description"[^>]*>([\s\S]*?)<\/div>/i)?.[1] ||
-      ""
-  )
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  const og = ogMetaFromHtml(html, slug);
 
   const genres = genresFromDooPlay(html, "genero", "yandi");
-  const tmdb = await fetchTmdb(name, tmdbKey);
+  const tmdb = await fetchTmdb(og.name, tmdbKey);
 
   if (type === "movie") {
-    return {
-      meta: {
-        id,
-        type: "movie",
-        name,
-        poster: tmdb?.poster || poster,
-        background: tmdb?.background || poster,
-        description: tmdb?.description || description,
-        posterShape: "poster",
-        releaseInfo: tmdb?.year || "",
-        genres,
-        videos: [
-          {
-            id: `yandi:movie:${slug}`,
-            title: name,
-            season: 1,
-            episode: 1,
-          },
-        ],
-      },
-    };
+    return buildMovieMeta({
+      id,
+      slug,
+      name: og.name,
+      poster: og.poster,
+      description: og.description,
+      genres,
+      tmdb,
+    });
   }
 
   // Episodes extraction:
   // <a ... data-ep-num="4" ... onclick="window.location.href='https://yandispoiler.net/episodios/doctor-x-mafia-in-white-1x4/'">
   // or href="/episodios/doctor-x-mafia-in-white-1x4/"
-  const episodes: { slug: string; s: number; e: number }[] = [];
-  const seen = new Set<string>();
-  for (const m of html.matchAll(
-    /\/episodios\/([a-z0-9-]+-(\d+)x(\d+))\/?/gi
-  )) {
-    if (seen.has(m[1])) continue;
-    seen.add(m[1]);
-    episodes.push({
-      slug: m[1],
-      s: parseInt(m[2], 10),
-      e: parseInt(m[3], 10),
-    });
-  }
-  episodes.sort((a, b) => a.s - b.s || a.e - b.e);
+  const episodes = dooplayEpisodeList(html, "episodios");
 
-  return {
-    meta: {
-      id,
-      type: "series",
-      name,
-      poster: tmdb?.poster || poster,
-      background: tmdb?.background || poster,
-      description: tmdb?.description || description,
-      posterShape: "poster",
-      releaseInfo: tmdb?.year || "",
-      genres,
-      videos: episodes.map((ep) => ({
-        id: `yandi:ep:${ep.slug}`,
-        title: `T${ep.s} · Episodio ${ep.e}`,
-        season: ep.s,
-        episode: ep.e,
-        thumbnail: poster,
-      })),
-    },
-  };
+  return buildSeriesMeta({
+    id,
+    name: og.name,
+    poster: og.poster,
+    description: og.description,
+    genres,
+    tmdb,
+    // yandi no tiene grilla de miniaturas por episodio → poster siempre.
+    videos: episodes.map((ep) => ({
+      id: `yandi:ep:${ep.slug}`,
+      season: ep.s,
+      episode: ep.e,
+      thumbnail: og.poster,
+    })),
+  });
 }
 
 async function resolveYandiEpisodeSlug(
@@ -260,20 +213,11 @@ async function resolveYandiEpisodeSlug(
           `${YANDI_BASE}/series/${seriesSlug}/`,
           env
         );
-        const episodes: { s: number; e: number; epSlug: string }[] = [];
-        const seen = new Set<string>();
-        for (const m of html.matchAll(
-          /\/episodios\/([a-z0-9-]+-(\d+)x(\d+))\/?/gi
-        )) {
-          if (seen.has(m[1])) continue;
-          seen.add(m[1]);
-          episodes.push({
-            epSlug: m[1],
-            s: parseInt(m[2], 10),
-            e: parseInt(m[3], 10),
-          });
-        }
-        return episodes;
+        return dooplayEpisodeList(html, "episodios").map((ep) => ({
+          epSlug: ep.slug,
+          s: ep.s,
+          e: ep.e,
+        }));
       },
     },
     epSlug,
