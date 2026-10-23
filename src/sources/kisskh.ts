@@ -18,6 +18,7 @@ const KISSKH_BASE = "https://kisskh.co";
 // cookie ni sesión (probe: firma con guids fijos funciona).
 const KISSKH_APP_VER = "2.8.10";
 const KISSKH_GUID = "62f176f3bb1b5b8e70e39932ad34a0c7";
+const KISSKH_SUB_GUID = "VgV52sWhwvBSf8BsM3BRY9weWiiCbtGp";
 const KISSKH_PLATFORM_VER = 4830201;
 const KISSKH_APP = "kisskh";
 
@@ -231,6 +232,48 @@ export async function getKisskhStreams(rawId: string, env: Env) {
   const denoBase = denoBaseFromEnv(env);
   const { add, streams } = makeStreamDeduper();
 
+  // Subtítulos: /api/Sub/<epId>?kkey=<firma con subGuid> → [{src, label, land,
+  // default}] con .srt directos. Prioridad es → en (default) → resto (máx 4).
+  let subTracks: {
+    id: string;
+    url: string;
+    ext: "srt";
+    lang: string;
+    label: string;
+  }[] = [];
+  try {
+    const subKey = kisskhKkeyFn(
+      Number(epId),
+      null,
+      KISSKH_APP_VER,
+      KISSKH_SUB_GUID,
+      KISSKH_PLATFORM_VER,
+      KISSKH_APP, KISSKH_APP, KISSKH_APP, KISSKH_APP, KISSKH_APP, KISSKH_APP
+    );
+    const subText = await fetchHtml(
+      `${KISSKH_BASE}/api/Sub/${epId}?kkey=${subKey}`,
+      env,
+      { allowShort: true }
+    );
+    const raw: any[] = JSON.parse(subText);
+    if (Array.isArray(raw)) {
+      const prio = (land: string) => (land === "es" ? 0 : land === "en" ? 1 : 2);
+      subTracks = raw
+        .filter((s) => typeof s?.src === "string" && /^https?:\/\//.test(s.src))
+        .sort((a, b) => prio(a.land || "zz") - prio(b.land || "zz"))
+        .slice(0, 4)
+        .map((s) => ({
+          id: `kisskh-sub-${s.land || s.label}`,
+          url: s.src,
+          ext: "srt" as const,
+          lang: s.land || "xx",
+          label: String(s.label || s.land || "sub"),
+        }));
+    }
+  } catch (e) {
+    console.error(`[kisskh] subs falló para ep ${epId}: ${e}`);
+  }
+
   for (const url of directMp4) {
     const isHls = /\.m3u8/i.test(url);
     if (isHls && denoBase) {
@@ -244,6 +287,7 @@ export async function getKisskhStreams(rawId: string, env: Env) {
           filename: `${epId}.m3u8`,
           bingeGroup: "kisskh-hls",
         },
+        ...(subTracks.length ? { subtitles: subTracks } : {}),
       });
     } else if (isHls) {
       add({
@@ -261,6 +305,7 @@ export async function getKisskhStreams(rawId: string, env: Env) {
           filename: `${epId}.mp4`,
           bingeGroup: "kisskh-mp4",
         },
+        ...(subTracks.length ? { subtitles: subTracks } : {}),
       });
     }
   }
