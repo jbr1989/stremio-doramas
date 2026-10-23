@@ -36,8 +36,9 @@ export async function getKisskhCatalog(
 
   let resText = "";
   try {
-    resText = await fetchHtml(url, env);
-  } catch {
+    resText = await fetchHtml(url, env, { allowShort: true });
+  } catch (e) {
+    console.error(`[kisskh] catalog falló para ${url}: ${e}`);
     resText = "";
   }
 
@@ -86,8 +87,9 @@ export async function getKisskhMeta(
 
   let resText = "";
   try {
-    resText = await fetchHtml(pageUrl, env);
-  } catch {
+    resText = await fetchHtml(pageUrl, env, { allowShort: true });
+  } catch (e) {
+    console.error(`[kisskh] meta falló para ${pageUrl}: ${e}`);
     resText = "";
   }
 
@@ -154,8 +156,9 @@ export async function getKisskhStreams(rawId: string, env: Env) {
   const apiUrl = `${KISSKH_BASE}/api/Episode/${epId}`;
   let resText = "";
   try {
-    resText = await fetchHtml(apiUrl, env);
-  } catch {
+    resText = await fetchHtml(apiUrl, env, { allowShort: true });
+  } catch (e) {
+    console.error(`[kisskh] streams falló para ${apiUrl}: ${e}`);
     resText = "";
   }
 

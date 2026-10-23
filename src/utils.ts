@@ -240,8 +240,15 @@ function isAnySiteNotFound(e: unknown): boolean {
   return false;
 }
 
-export async function fetchHtml(url: string, env?: Env): Promise<string> {
+export async function fetchHtml(
+  url: string,
+  env?: Env,
+  opts?: { allowShort?: boolean }
+): Promise<string> {
   const encoded = encodeURIComponent(url);
+  // APIs JSON (kisskh /api/...) devuelven cuerpos < 500B válidos: con
+  // allowShort no se descartan por tamaño.
+  const MIN_LEN = opts?.allowShort ? 0 : 500;
 
   const controller = new AbortController();
   const globalTimer = setTimeout(() => controller.abort(), 25000);
@@ -256,7 +263,7 @@ export async function fetchHtml(url: string, env?: Env): Promise<string> {
       throw new SiteNotFoundError(r.status, url);
     if (!r.ok) throw new Error(`${name}: HTTP ${r.status}`);
     const html = await r.text();
-    if (html.length < 500)
+    if (html.length < MIN_LEN)
       throw new Error(`${name}: too short (${html.length}b)`);
     if (name !== "direct") console.log(`[fetchHtml] ${name} for ${url}`);
     return html;
@@ -283,7 +290,7 @@ export async function fetchHtml(url: string, env?: Env): Promise<string> {
           wait: "load",
           timeoutMs: 16000,
         });
-        if (html && html.length >= 500) {
+        if (html && html.length >= MIN_LEN) {
           clearTimeout(globalTimer);
           console.log(`[fetchHtml] render (challenge) for ${url}`);
           return html;
@@ -338,7 +345,7 @@ export async function fetchHtml(url: string, env?: Env): Promise<string> {
         wait: "load",
         timeoutMs: 16000,
       });
-      if (html && html.length >= 500) {
+      if (html && html.length >= MIN_LEN) {
         clearTimeout(globalTimer);
         console.log(`[fetchHtml] render for ${url}`);
         return html;
