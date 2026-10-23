@@ -22,7 +22,7 @@
 //              /genero/comedia/). Dato upstream: romance va solo a
 //              películas hoy (0 tvshows etiquetados) →dropdown honesto
 //              vacío hasta que etiqueten series.
-//   dsub (DoramasSub)    → /genre/{slug}/page/N/   (24/39 términos; sin
+//   dplay (DoramasSub)   → /genre/{slug}/page/N/   (24/39 términos; sin
 //              emision/proximamente, dups EN colapsados al ES). Mixto igual
 //              que dlat. Validado in-vivo (comedia: 2/2 fichas con tag).
 //   kplay (KDramasPlay)  → /genero/{slug}/ (21/33 términos; sin
@@ -52,7 +52,7 @@
 
 type GenreSourceName =
   | "dlat"
-  | "dsub"
+  | "dplay"
   | "kplay"
   | "dflix"
   | "pandrama"
@@ -77,7 +77,7 @@ const MASTER_GENRES: GenreEntry[] = [
   { label: "Romance", slugs: 
     { 
       dlat: "romance", 
-      dsub: "romance", 
+      dplay: "romance", 
       kplay: "romance", 
       dyt: "romance", 
       pandrama: "2", 
@@ -88,7 +88,7 @@ const MASTER_GENRES: GenreEntry[] = [
   { label: "Comedia", slugs:
     { 
       dlat: "comedia", 
-      dsub: "comedia", 
+      dplay: "comedia", 
       kplay: "comedia", 
       dyt: "comedia", 
       tudorama: "comedia", 
@@ -100,7 +100,7 @@ const MASTER_GENRES: GenreEntry[] = [
   { label: "Drama", slugs: 
     {
       dlat: "drama", 
-      dsub: "drama", 
+      dplay: "drama", 
       kplay: "drama",
       dyt: "drama", 
       tudorama: "drama", 
@@ -112,7 +112,7 @@ const MASTER_GENRES: GenreEntry[] = [
   { label: "Acción", slugs: 
     {
       dlat: "accion", 
-      dsub: "accion", 
+      dplay: "accion", 
       kplay: "accion",
       dyt: "accion", 
       tudorama: "accion", 
@@ -123,7 +123,7 @@ const MASTER_GENRES: GenreEntry[] = [
   { label: "Acción y aventura", slugs: 
     {
       dlat: "action-adventure",
-      dsub: "action-adventure", 
+      dplay: "action-adventure", 
       kplay: "action-adventure",
       pandrama: "12",
     } 
@@ -131,7 +131,7 @@ const MASTER_GENRES: GenreEntry[] = [
   { label: "Aventura", slugs: 
     {
       dlat: "aventura", 
-      dsub: "aventura", 
+      dplay: "aventura", 
       kplay: "aventura",
       tudorama: "adventure", 
       pandrama: "11", 
@@ -141,7 +141,7 @@ const MASTER_GENRES: GenreEntry[] = [
   { label: "Misterio", slugs: 
     {
       dlat: "misterio", 
-      dsub: "misterio", 
+      dplay: "misterio", 
       kplay: "misterio",
       dyt: "misterio", 
       tudorama: "misterio",
@@ -152,14 +152,14 @@ const MASTER_GENRES: GenreEntry[] = [
   { label: "Suspense", slugs: 
     {
       dlat: "suspense", 
-      dsub: "suspense", 
+      dplay: "suspense", 
       kplay: "suspense",
       pandrama: "16",
     } 
   },
   { label: "Thriller", slugs: 
     {
-      dsub: "thriller", 
+      dplay: "thriller", 
       kplay: "thriller",
       dflix: "thriller",
     } 
@@ -167,7 +167,7 @@ const MASTER_GENRES: GenreEntry[] = [
   { label: "Crimen", slugs: 
     {
       dlat: "crimen", 
-      dsub: "crimen", 
+      dplay: "crimen", 
       kplay: "crimen",
       tudorama: "crimen", 
       pandrama: "13", 
@@ -182,13 +182,13 @@ const MASTER_GENRES: GenreEntry[] = [
   },
   { label: "Horror", slugs: 
     { 
-      dsub: "horror" 
+      dplay: "horror" 
     } 
   },
   { label: "Fantasía", slugs: 
     {
       dlat: "fantasia", 
-      dsub: "fantasia", 
+      dplay: "fantasia", 
       kplay: "fantasy",
       dyt: "fantasia", 
       pandrama: "28", 
@@ -198,7 +198,7 @@ const MASTER_GENRES: GenreEntry[] = [
   { label: "Ciencia ficción", slugs: 
     {
       dlat: "ciencia-ficcion", 
-      dsub: "ciencia-ficcion", 
+      dplay: "ciencia-ficcion", 
       kplay: "ciencia-ficcion",
       pandrama: "10", 
       dflix: "ciencia-ficcion",
@@ -207,7 +207,7 @@ const MASTER_GENRES: GenreEntry[] = [
   { label: "Sci-Fi y fantasía", slugs: 
     {
       dlat: "sci-fi-fantasy",
-      dsub: "sci-fi-fantasy",
+      dplay: "sci-fi-fantasy",
       kplay: "sci-fi-fantasy",
       pandrama: "5",
     } 
@@ -215,7 +215,7 @@ const MASTER_GENRES: GenreEntry[] = [
   { label: "Histórico", slugs: 
     {
       dlat: "historia", 
-      dsub: "historia", 
+      dplay: "historia", 
       kplay: "historia",
       dyt: "historico", 
       dflix: "history",
@@ -229,7 +229,7 @@ const MASTER_GENRES: GenreEntry[] = [
   { label: "Melodrama", slugs: 
     {
       dlat: "soap", 
-      dsub: "soap",
+      dplay: "soap",
       pandrama: "56", 
       dflix: "soap",
     } 
@@ -237,7 +237,7 @@ const MASTER_GENRES: GenreEntry[] = [
   { label: "Guerra y política", slugs: 
     {
       dlat: "war-politics",
-      dsub: "war-politics",
+      dplay: "war-politics",
       kplay: "war-politics",
       pandrama: "7",
       dflix: "politica",
@@ -246,7 +246,7 @@ const MASTER_GENRES: GenreEntry[] = [
   { label: "Bélica", slugs:
     {
       dlat: "belica",
-      dsub: "belica",
+      dplay: "belica",
       dflix: "war",
     }
   },
@@ -264,7 +264,7 @@ const MASTER_GENRES: GenreEntry[] = [
   { label: "Familia", slugs: 
     { 
       dlat: "familia", 
-      dsub: "familia", 
+      dplay: "familia", 
       kplay: "familia",
       tudorama: "familia",
       pandrama: "6",
@@ -274,7 +274,7 @@ const MASTER_GENRES: GenreEntry[] = [
   { label: "Música", slugs: 
     {
       dlat: "musica", 
-      dsub: "musica", 
+      dplay: "musica", 
       kplay: "music",
       pandrama: "14",
       dflix: "music",
@@ -283,7 +283,7 @@ const MASTER_GENRES: GenreEntry[] = [
   { label: "Documental", slugs: 
     {
       dlat: "documental", 
-      dsub: "documental", 
+      dplay: "documental", 
       kplay: "documental",
       dflix: "documental",
     } 
@@ -291,14 +291,14 @@ const MASTER_GENRES: GenreEntry[] = [
   { label: "Reality", slugs: 
     {
       dlat: "reality", 
-      dsub: "reality", 
+      dplay: "reality", 
       kplay: "reality",
       tudorama: "reality", 
       dflix: "reality",
     } 
   },
   { label: "Talk", slugs: 
-    { dsub: "talk" } 
+    { dplay: "talk" } 
   },
   { label: "Infantil", slugs: 
     {
@@ -309,7 +309,7 @@ const MASTER_GENRES: GenreEntry[] = [
   { label: "Animación", slugs: 
     {
       dlat: "animacion", 
-      dsub: "animacion",
+      dplay: "animacion",
       kplay: "animacion",
       pandrama: "33", 
       dflix: "animacion",

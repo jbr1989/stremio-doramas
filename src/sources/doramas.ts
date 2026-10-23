@@ -21,10 +21,10 @@ export const DORAMA_SOURCES: Record<string, DoramaSource> = {
     label: "Doramas Latino",
     genreBase: "genero",
   },
-  dsub: {
-    prefix: "dsub",
+  dplay: {
+    prefix: "dplay",
     base: "https://doramedplay.net",
-    label: "Doramas Sub",
+    label: "Doramed Play",
     genreBase: "genre",
   },
 };
@@ -257,10 +257,10 @@ export async function getDoramaMeta(
   };
 }
 
-/** Resuelve el epSlug propio de un sitio DooPlay (dlat=doramaslat, dsub=
+/** Resuelve el epSlug propio de un sitio DooPlay (dlat=doramaslat, dplay=
  * doramedplay) para un epSlug venido de otro sitio (mapping por título, ver
- * slugmap.ts). Antes solo dsub resolvía; hoy AMBOS participan: cuando el id
- * llega con prefijo kplay/dflix/dsub, doramaslat también busca su propio
+ * slugmap.ts). Antes solo dplay resolvía; hoy AMBOS participan: cuando el id
+ * llega con prefijo kplay/dflix/dplay, doramaslat también busca su propio
  * slug de episodio en vez de 404-ear en silencio. */
 async function resolveDooPlayEpisodeSlug(
   src: DoramaSource,

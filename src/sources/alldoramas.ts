@@ -44,9 +44,9 @@ const SOURCES: SourceSpec[] = [
     fetch: (e, env) => getDoramaCatalog(DORAMA_SOURCES.dlat, e, env),
   },
   {
-    name: "dsub",
+    name: "dplay",
     page: 45,
-    fetch: (e, env) => getDoramaCatalog(DORAMA_SOURCES.dsub, e, env),
+    fetch: (e, env) => getDoramaCatalog(DORAMA_SOURCES.dplay, e, env),
   },
   { name: "dyt", page: 24, fetch: (e, env) => getDoramaYtCatalog(e, env) },
   { name: "doramasub", page: 24, fetch: (e, env) => getDoramaSubCatalog(e, env) },
@@ -79,7 +79,7 @@ export async function getAllAlldoramasCatalog(
   const perSource = await Promise.all(
     SOURCES.map(async (src) => {
       // Género solo en fuentes que lo tienen en la lista maestra canónica
-      // (src/genres.ts): skip de las demás — dlat/dsub/kplay ahora SÍ
+      // (src/genres.ts): skip de las demás — dlat/dplay/kplay ahora SÍ
       // integran género (Opción B: archivos de término upstream, aunque
       // algunos devuelvan vacío hoy).
       if (extra.genre && !genreSlug(src.name, extra.genre)) return [];

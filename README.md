@@ -11,7 +11,7 @@ Addon de Stremio para ver **doramas en español** (sub español/latino), corrien
 | Prefijo del ID | Sitio | Archivo | Tecnología | Estado |
 |---|---|---|---|---|
 | `dlat:` | [doramaslat.com](https://doramaslat.com) | `src/sources/doramas.ts` | WordPress + tema DooPlay | ✅ Funcional |
-| `dsub:` | [doramedplay.net](https://doramedplay.net) | `src/sources/doramas.ts` | WordPress + tema DooPlay | ✅ Funcional |
+| `dplay:` | [doramedplay.net](https://doramedplay.net) | `src/sources/doramas.ts` | WordPress + tema DooPlay | ✅ Funcional |
 | `kplay:` | [kdramasplay.com](https://kdramasplay.com) | `src/sources/kdramasplay.ts` | WordPress + tema DooPlay | ⚠️ Episodios sin streams (ver problema conocido) |
 | `dflix:` | [doramasflix.in](https://doramasflix.in) | `src/sources/doramasflix.ts` | App propia (GraphQL) | ✅ Funcional |
 | `tudorama:` | [tudorama.com](https://tudorama.com) | `src/sources/tudorama.ts` | WordPress + tema WStream | ⚠️ Miniaturas/pósters en blanco en Stremio Web (ver problema conocido) |
@@ -111,7 +111,7 @@ póster del meta). La misma URL devuelve:
 
 El resto de hosts del addon no bloquean por Referer (doramaslat, doramedplay,
 shortpixel, TMDB — todos 200 con Referer de Stremio), así que las miniaturas
-funcionan en Stremio Web para los otros prefijos (`dlat:`, `dsub:`, `kplay:`,
+funcionan en Stremio Web para los otros prefijos (`dlat:`, `dplay:`, `kplay:`,
 `dflix:`, `pandrama:`).
 
 **Decisión (oct. 2026)**: documentado y **no se hace nada de momento**. En
@@ -126,7 +126,7 @@ cliente-side.
 | **[doramasyt.com](https://www.doramasyt.com)** | App propia (no WP), carga dinámica | Episodios `/ver/{slug}-episodio-N`; servidores DooD, StreamTape, Filemoon → requiere extractores nuevos (DooD/StreamTape son duros; Filemoon viable). | Alto |
 | **[seriesbl.net](https://seriesbl.net)** | WordPress + DooPlay | Patrón DooPlay estándar: basta añadir una entrada a `DORAMA_SOURCES`. Nicho: series/pelis Boys Love. | Bajo |
 
-Descartados: `doramedplay.com` (misma marca que doramedplay.net, ya integrada como `dsub:`), `doramasmp4.com` (muerto, redirige a la alianza antipiratería; **no confundir con `doramasmp4.io`, espejo vivo de la plataforma doramasflix** — ver arriba) y `doramasia.com` como fuente independiente (es espejo de la plataforma dflix, ver arriba; su contenido ya se sirve bajo `dflix:`).
+Descartados: `doramedplay.com` (misma marca que doramedplay.net, ya integrada como `dplay:`), `doramasmp4.com` (muerto, redirige a la alianza antipiratería; **no confundir con `doramasmp4.io`, espejo vivo de la plataforma doramasflix** — ver arriba) y `doramasia.com` como fuente independiente (es espejo de la plataforma dflix, ver arriba; su contenido ya se sirve bajo `dflix:`).
 
 Orden de integración sugerido: `doramasyt.com` → `seriesbl.net` (nicho). (El fix de `kplay` está aplicado — ver arriba.)
 
