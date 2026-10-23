@@ -488,6 +488,35 @@ export function denoBaseFromEnv(env?: Env): string {
  * url/externalUrl. Uso: `const { add, streams } = makeStreamDeduper();`.
  * Antes copiado ×6 como `const add = (s: any) => …` (pandrama lo usaba vía
  * `seen`) + el filtrado final de getStreams en index.ts. */
+/** Validates and returns a URL if it uses http/https scheme and is not targeting
+ * loopback, private IPv4/IPv6 ranges, or cloud metadata endpoints (SSRF protection). */
+export function safeProxyUrl(urlString: string): URL | null {
+  if (!urlString) return null;
+  try {
+    const u = new URL(urlString);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+    const h = u.hostname.toLowerCase();
+    if (
+      h === "localhost" ||
+      h === "127.0.0.1" ||
+      h === "0.0.0.0" ||
+      h === "::1" ||
+      h === "[::1]" ||
+      h === "169.254.169.254" ||
+      /^10\./.test(h) ||
+      /^127\./.test(h) ||
+      /^169\.254\./.test(h) ||
+      /^192\.168\./.test(h) ||
+      /^172\.(1[6-9]|2[0-9]|3[01])\./.test(h)
+    ) {
+      return null;
+    }
+    return u;
+  } catch {
+    return null;
+  }
+}
+
 export function makeStreamDeduper() {
   const streams: any[] = [];
   const seen = new Set<string>();

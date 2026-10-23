@@ -14,6 +14,7 @@ import {
   netFetch,
   renderPage,
   isCfChallenge,
+  safeProxyUrl,
 } from "./utils";
 import {
   extractSavefiles,
@@ -789,9 +790,15 @@ export default {
     }
 
     if (path === "/proxy/m3u8") {
-      const m3u8Url = url.searchParams.get("url");
-      const referer = url.searchParams.get("ref") || "https://doramasflix.in/";
-      if (!m3u8Url) return new Response("Missing url", { status: 400 });
+      const target = safeProxyUrl(url.searchParams.get("url") || "");
+      if (!target)
+        return new Response("Invalid or restricted target url", { status: 400 });
+      const ref = safeProxyUrl(
+        url.searchParams.get("ref") || "https://doramasflix.in/"
+      ) || new URL("https://doramasflix.in/");
+      const m3u8Url = target.toString();
+      const referer = ref.toString();
+      const origin = ref.origin;
       try {
         const base = m3u8Url.substring(0, m3u8Url.lastIndexOf("/") + 1);
         const workerBase = new URL(request.url).origin;
@@ -805,7 +812,7 @@ export default {
         const r = await netFetch("direct", m3u8Url, {
           headers: {
             Referer: referer,
-            Origin: new URL(referer).origin,
+            Origin: origin,
             "User-Agent": MOBILE_UA,
           },
           signal: AbortSignal.timeout(15000),
@@ -846,14 +853,20 @@ export default {
     }
 
     if (path === "/proxy/seg") {
-      const segUrl = url.searchParams.get("url");
-      const referer = url.searchParams.get("ref") || "https://doramasflix.in/";
-      if (!segUrl) return new Response("Missing url", { status: 400 });
+      const target = safeProxyUrl(url.searchParams.get("url") || "");
+      if (!target)
+        return new Response("Invalid or restricted target url", { status: 400 });
+      const ref = safeProxyUrl(
+        url.searchParams.get("ref") || "https://doramasflix.in/"
+      ) || new URL("https://doramasflix.in/");
+      const segUrl = target.toString();
+      const referer = ref.toString();
+      const origin = ref.origin;
       try {
         const r = await netFetch("direct", segUrl, {
           headers: {
             Referer: referer,
-            Origin: new URL(referer).origin,
+            Origin: origin,
             "User-Agent": MOBILE_UA,
           },
         });
