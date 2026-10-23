@@ -457,7 +457,7 @@ export const CHALLENGE_HOSTS_RE =
  * sondas reales: unresolved con extractStreamwish tal cual).
  * Mantener sincronizada con la allowlist de /streamwish en deno/fetch.ts. */
 export const STREAMWISH_HOSTS_RE =
-  /streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|lulustream|luluvdo|lulu\.st/i;
+  /streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|lulustream|luluvdo|luluvido|lulu\.st/i;
 
 /**.Hosts de la família Dood (do7go/playmogo/dood*): NO son StreamWish — sirven
  * un MP4 progresivo vía pass_md5 y el gate del MP4 es Referer (no IP-bound).
