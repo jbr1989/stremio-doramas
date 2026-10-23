@@ -9,22 +9,74 @@ const YANDI_BASE = "https://yandispoiler.net";
 
 export function parseYandiCards(html: string) {
   const results: { id: string; name: string; poster: string }[] = [];
-  const seen = new Set<string>();
+  const seen = new Map<string, { id: string; name: string; poster: string }>();
   const push = (type: "series" | "movie", slug: string, rawPoster: string, rawName: string) => {
-    if (!slug || seen.has(`${type}:${slug}`)) return;
-    seen.add(`${type}:${slug}`);
+    if (!slug) return;
+    const key = `${type}:${slug}`;
     const poster = rawPoster.startsWith("http")
       ? rawPoster
       : rawPoster
       ? `${YANDI_BASE}${rawPoster}`
       : "";
-    results.push({
-      id: `yandi:${type}:${slug}`,
-      name: cleanTitle(rawName) || slug,
-      poster,
-    });
+    const name = cleanTitle(rawName) || slug;
+    const existing = seen.get(key);
+    // Fusiona duplicados: la primera aparición gana, pero se completa
+    // name/poster si faltan (p. ej. anchor vacío seguido de su <img>).
+    if (existing) {
+      if (!existing.poster && poster) existing.poster = poster;
+      if (existing.name === slug && name !== slug) existing.name = name;
+      return;
+    }
+    const entry = { id: `yandi:${type}:${slug}`, name, poster };
+    seen.set(key, entry);
+    results.push(entry);
   };
 
+  // Cards del tema Dooplay. Dos variantes:
+  //  a) <a href=".../series/<slug>/" data-ptype="tvshows" title="TITULO">
+  //       <img class="thumb" alt="TITULO" src="poster.jpg">   <- img dentro del anchor
+  //     </a>
+  //  b) <a href=".../series/<slug>/" data-ptype="tvshows" title="TITULO"></a>
+  //     ... <img data-original="poster.jpg" alt="TITULO" src="poster.jpg">  <- img fuera
+  // En ambas el <img> usa "alt" ANTES de "src" y lazyload por "data-src"/"data-original".
+  const anchorRe = /<a\s[^>]*href="[^"]*\/(series|peliculas)\/([a-z0-9-]+)\/"[^>]*>/gi;
+  for (const m of html.matchAll(anchorRe)) {
+    const openTag = m[0];
+    const idx = m.index ?? 0;
+    // Ventana hasta el proximo anchor o item del tema (evita colarse el poster
+    // de la card siguiente); el <img> queda incluido dentro de la ventana.
+    const nextA = html.indexOf("<a ", idx + openTag.length);
+    const nextItem = html.indexOf('<div id="item-', idx + openTag.length);
+    const end = Math.min(
+      nextA === -1 ? html.length : nextA,
+      nextItem === -1 ? html.length : nextItem,
+      idx + 1500
+    );
+    const block = html.slice(idx, end);
+    const ptype = (openTag.match(/data-ptype="([^"]*)"/i)?.[1] || "").toLowerCase();
+    const type: "series" | "movie" = ptype.startsWith("tv")
+      ? "series"
+      : ptype === "movie"
+      ? "movie"
+      : m[1].toLowerCase() === "peliculas"
+      ? "movie"
+      : "series";
+    const poster = (
+      block.slice(openTag.length).match(/(?:data-src|data-original|src)="([^"]+)"/i)?.[1] || ""
+    ).trim();
+    // Variante "sideranking" (trending lateral): el anchor no trae <img> y el
+    // poster vive en el <li> contenedor, ANTES del anchor (data-bg-url).
+    const back = html.slice(Math.max(0, idx - 600), idx);
+    const bgPoster = back.match(/data-bg-url="([^"]+)"/i)?.[1] || "";
+    const name = (
+      openTag.match(/title="([^"]*)"/i)?.[1] ||
+      block.match(/alt="([^"]*)"/i)?.[1] ||
+      ""
+    ).trim();
+    push(type, m[2], poster || bgPoster, name);
+  }
+
+  // Fallback: markup sin data-ptype (img con src antes de alt y link después)
   for (const m of html.matchAll(
     /<img[^>]+(?:data-src|src)="([^"]+)"[^>]*alt="([^"]*)"[\s\S]{0,250}?\/(series|peliculas)\/([a-z0-9-]+)\//gi
   )) {
