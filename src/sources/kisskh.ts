@@ -1,8 +1,6 @@
 import { Env } from "../types";
-import { genreSlug } from "../genres";
 import {
   cleanTitle,
-  decodeEntities,
   denoBaseFromEnv,
   fetchHtml,
   fetchTmdb,
