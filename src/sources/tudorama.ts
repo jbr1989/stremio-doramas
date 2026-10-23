@@ -1,6 +1,6 @@
 import { Env } from "../types";
 import { genreSlug } from "../genres";
-import { CHROME_HEADERS, CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
+import { CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchTmdb, makeStreamDeduper, netFetch, racerFetch, toMetaPreview } from "../utils";
 import { addEmbedStreams } from "../extractors";
 import { genresFromListItems, imgFromTag } from "./dooplay";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
@@ -14,36 +14,7 @@ async function fetchTudorama(
   env?: Env,
   timeoutMs = 12000
 ): Promise<string> {
-  const proxyBase = env?.FETCH_PROXY_URL?.trim();
-  const pull = async (name: string, r: Promise<Response>) => {
-    const res = await r;
-    if (!res.ok) throw new Error(`${name}: HTTP ${res.status}`);
-    const txt = await res.text();
-    if (txt.length < 300)
-      throw new Error(`${name}: too short (${txt.length}b)`);
-    return txt;
-  };
-  const racers: Promise<string>[] = [
-    pull(
-      "direct",
-      netFetch("direct", url, {
-        headers: CHROME_HEADERS,
-        signal: AbortSignal.timeout(8000),
-      })
-    ),
-  ];
-  if (proxyBase) {
-    racers.push(
-      pull(
-        "relay",
-        netFetch("proxy", `${proxyBase}?url=${encodeURIComponent(url)}`, {
-          headers: { "User-Agent": CHROME_UA },
-          signal: AbortSignal.timeout(timeoutMs),
-        })
-      )
-    );
-  }
-  return Promise.any(racers);
+  return racerFetch(url, env, { minLen: 300, proxyTimeoutMs: timeoutMs });
 }
 
 function parseTudoramaCards(html: string) {

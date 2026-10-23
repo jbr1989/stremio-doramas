@@ -49,6 +49,54 @@ export async function netFetch(
   }
 }
 
+// Racer fetch compartido: directo + relay vía FETCH_PROXY_URL (si está
+// configurado) en paralelo con Promise.any, descartando respuestas cortas.
+// Antes copiado inline ×3 (doramas, tudorama, pandrama).
+export async function racerFetch(
+  url: string,
+  env?: Env,
+  opts?: {
+    minLen?: number; // longitud mínima del cuerpo (default 300)
+    directTimeoutMs?: number; // default 8000
+    proxyTimeoutMs?: number; // default 12000
+    headers?: HeadersInit; // default CHROME_HEADERS
+  }
+): Promise<string> {
+  const proxyBase = env?.FETCH_PROXY_URL?.trim();
+  const minLen = opts?.minLen ?? 300;
+  const directTimeoutMs = opts?.directTimeoutMs ?? 8000;
+  const proxyTimeoutMs = opts?.proxyTimeoutMs ?? 12000;
+  const headers = opts?.headers ?? CHROME_HEADERS;
+
+  const pull = async (name: string, r: Promise<Response>) => {
+    const res = await r;
+    if (!res.ok) throw new Error(`${name}: HTTP ${res.status}`);
+    const txt = await res.text();
+    if (txt.length < minLen)
+      throw new Error(`${name}: too short (${txt.length}b)`);
+    return txt;
+  };
+
+  const racers: Promise<string>[] = [
+    pull(
+      "direct",
+      netFetch("direct", url, { headers, signal: AbortSignal.timeout(directTimeoutMs) })
+    ),
+  ];
+  if (proxyBase) {
+    racers.push(
+      pull(
+        "relay",
+        netFetch("proxy", `${proxyBase}?url=${encodeURIComponent(url)}`, {
+          headers: { "User-Agent": CHROME_UA },
+          signal: AbortSignal.timeout(proxyTimeoutMs),
+        })
+      )
+    );
+  }
+  return Promise.any(racers);
+}
+
 export const CHROME_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 

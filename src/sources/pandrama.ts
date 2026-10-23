@@ -9,7 +9,7 @@ import {
   DOOD_HOSTS_RE,
   fetchTmdb,
   makeStreamDeduper,
-  netFetch,
+  racerFetch,
   STREAMWISH_HOSTS_RE,
   toMetaPreview,
 } from "../utils";
@@ -79,44 +79,16 @@ export async function pandramaEpCanonicalSlug(
 
 async function fetchPandramaData(path: string, env?: Env): Promise<any | null> {
   const url = path.startsWith("http") ? path : `${PANDRAMA_BASE}${path.startsWith("/") ? "" : "/"}${path}`;
-  const proxyBase = env?.FETCH_PROXY_URL?.trim();
-
-  const pull = async (name: string, r: Promise<Response>) => {
-    const res = await r;
-    if (!res.ok) throw new Error(`${name}: HTTP ${res.status}`);
-    const txt = await res.text();
-    if (txt.length < 300) throw new Error(`${name}: text too short (${txt.length}b)`);
-    return txt;
-  };
-
-  const racers: Promise<string>[] = [
-    pull(
-      "direct",
-      netFetch("direct", url, {
-        headers: {
-          "User-Agent": CHROME_UA,
-          Referer: `${PANDRAMA_BASE}/`,
-          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        },
-        signal: AbortSignal.timeout(8000),
-      })
-    ),
-  ];
-
-  if (proxyBase) {
-    racers.push(
-      pull(
-        "relay",
-        netFetch("proxy", `${proxyBase}?url=${encodeURIComponent(url)}`, {
-          headers: { "User-Agent": CHROME_UA },
-          signal: AbortSignal.timeout(11000),
-        })
-      )
-    );
-  }
 
   try {
-    const html = await Promise.any(racers);
+    const html = await racerFetch(url, env, {
+      headers: {
+        "User-Agent": CHROME_UA,
+        Referer: `${PANDRAMA_BASE}/`,
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      },
+      proxyTimeoutMs: 11000,
+    });
     const m = html.match(/window\.bootstrapData\s*=\s*(\{[\s\S]*?\});\s*<\/script>/);
     if (!m) return null;
     return JSON.parse(m[1]);
