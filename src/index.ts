@@ -60,6 +60,11 @@ import {
   getDoramaSubStreams,
   canonicalDoramaSubSlug,
 } from "./sources/doramasub";
+import {
+  getKisskhCatalog,
+  getKisskhMeta,
+  getKisskhStreams,
+} from "./sources/kisskh";
 import { getAllAlldoramasCatalog } from "./sources/alldoramas";
 
 async function getCatalog(
@@ -84,6 +89,8 @@ async function getCatalog(
     return getDoramaYtCatalog(extra, env);
   if (catalogId.startsWith("doramasub"))
     return getDoramaSubCatalog(extra, env);
+  if (catalogId.startsWith("kisskh"))
+    return getKisskhCatalog(extra, env);
   return getDoramasflixCatalog(extra);
 }
 
@@ -98,6 +105,7 @@ async function getMeta(id: string, tmdbKey: string, env?: Env) {
   if (id.startsWith("pandrama:")) return getPandramaMeta(id, tmdbKey, env);
   if (id.startsWith("dyt:")) return getDoramaYtMeta(id, tmdbKey, env);
   if (id.startsWith("dsub:")) return getDoramaSubMeta(id, tmdbKey, env);
+  if (id.startsWith("kisskh:")) return getKisskhMeta(id, tmdbKey, env);
   return { meta: null };
 }
 
@@ -116,6 +124,11 @@ async function getStreams(rawId: string, env: Env) {
     epSlug = canonicalDytSlug(rawId.slice("dyt:".length));
   } else if (rawId.startsWith("dsub:")) {
     epSlug = canonicalDoramaSubSlug(rawId.slice("dsub:".length));
+  } else if (rawId.startsWith("kisskh:")) {
+    const content = rawId.slice("kisskh:".length);
+    if (!content.startsWith("ep:")) {
+      epSlug = content;
+    }
   } else if (rawId.startsWith("tudorama:")) {
     epSlug = rawId.slice("tudorama:".length);
   } else if (rawId.startsWith("kplay:")) {
@@ -194,6 +207,12 @@ async function getStreams(rawId: string, env: Env) {
     tasks.push(getDoramaSubStreams(`dsub:${epSlug}`, env));
   }
 
+  if (rawId.startsWith("kisskh:")) {
+    tasks.push(getKisskhStreams(rawId, env));
+  } else if (epSlug) {
+    tasks.push(getKisskhStreams(`kisskh:${epSlug}`, env));
+  }
+
   const results = await Promise.allSettled(tasks);
   const { add, streams } = makeStreamDeduper();
 
@@ -227,6 +246,7 @@ const DEBUG_SOURCES: { source: string; catalogId: string }[] = [
   { source: "pandrama", catalogId: "pandrama" },
   { source: "dyt", catalogId: "doramasyt" },
   { source: "dsub", catalogId: "doramasub" },
+  { source: "kisskh", catalogId: "kisskh" },
 ];
 
 const DEBUG_TIMEOUT_MS = 45000;
@@ -245,6 +265,7 @@ function debugIsEpisodeId(source: string, id: string): boolean {
   if (source === "pandrama") return /^pandrama:\d+:ep:\d+$/.test(id);
   if (source === "dyt") return /^dyt:.+-episodio-\d+$/.test(id);
   if (source === "dsub") return /^dsub:.+capitulo-\d+$/.test(id);
+  if (source === "kisskh") return /^kisskh:(?:ep:\d+|.+-\d+x\d+)$/.test(id);
   if (source === "kplay")
     return /^kplay:(?:ep:.+-\d+x\d+|movie:.+)$/.test(id);
   return new RegExp(`^${source}:.+-\\d+x\\d+$`).test(id);
@@ -262,6 +283,7 @@ function debugCheckFor(prefix: string, id: string, env: Env): DebugCheck | null 
   if (prefix === "pandrama") return { source: prefix, id, run: () => getPandramaStreams(id, env) };
   if (prefix === "dyt") return { source: prefix, id, run: () => getDoramaYtStreams(id, env) };
   if (prefix === "dsub") return { source: prefix, id, run: () => getDoramaSubStreams(id, env) };
+  if (prefix === "kisskh") return { source: prefix, id, run: () => getKisskhStreams(id, env) };
   return null;
 }
 

@@ -2,7 +2,7 @@
 
 Cloudflare Worker que sirve el protocolo de addon de Stremio (`com.doramas.stremio`,
 v1.0.0) para **fuentes de doramas**: doramaslat.com, doramedplay.net,
-kdramasplay.com (WordPress + tema DooPlay), doramasflix.in (GraphQL), tudorama.com, pandrama.tv, doramasyt.com y doramasub.com. Archivo
+kdramasplay.com (WordPress + tema DooPlay), doramasflix.in (GraphQL), tudorama.com, pandrama.tv, doramasyt.com, doramasub.com y kisskh.co. Archivo
 principal: `src/index.ts`, más un servicio auxiliar `deno/fetch.ts` que corre en
 **Deno Deploy** (ver notas del proxy abajo; `deno.json` fija su entrypoint). El
 Worker se despliega con **Cloudflare Workers Builds** (integración Git del dashboard)
@@ -17,7 +17,7 @@ Contratos estables. Cambiarlos es trabajo de protocolo y debe cumplir la spec
 - **Rutas**: `/manifest.json`, `/catalog/...`, `/meta/...`, `/stream/...`, más
   `/proxy/m3u8` + `/proxy/seg` (proxy de reescritura HLS) y los endpoints `/debug*`.
   Toda respuesta JSON pasa por `json()` y lleva cabeceras CORS.
-- **Esquema de IDs** (prefijos `idPrefixes: ["dlat:", "dplay:", "kplay:", "dflix:", "tudorama:", "pandrama:", "dyt:", "dsub:"]`):
+- **Esquema de IDs** (prefijos `idPrefixes: ["dlat:", "dplay:", "kplay:", "dflix:", "tudorama:", "pandrama:", "dyt:", "dsub:", "kisskh:"]`):
   - `dlat:{slug}` / `dplay:{slug}` — meta de serie.
   - `dlat:{slug}-1x{N}` / `dplay:{slug}-1x{N}` — streams de episodio
     (validado con `/-\d+x\d+$/`, página fuente `/episodes/{slug}-1xN/`).
@@ -29,6 +29,7 @@ Contratos estables. Cambiarlos es trabajo de protocolo y debe cumplir la spec
   - `pandrama:{id}:{slug}` — meta; `pandrama:{titleId}:ep:{videoId}` — streams de episodio.
   - `dyt:{slug}` — meta/streams.
   - `dsub:{slug}` — meta/streams.
+  - `kisskh:{id}` — meta; `kisskh:ep:{videoId}` — streams de episodio.
 - **Los objetos stream llevan `title` O `description`, nunca ambos**: stremio-core
   (el núcleo Rust detrás de Android + Web) deserializa `title` como alias serde de
   `description`, así que un objeto con ambos falla como campo duplicado y el cliente
@@ -123,7 +124,7 @@ dejes la variante vieja detrás:
   `/debug-host?url=` / `/debug-mixdrop?url=` / `/debug-streamwish?url=` /
   `/debug-savefiles?code=` sondean un embed concreto — úsalos para diagnosticar
   fallos de extracción en el Worker desplegado.
-- `/debug-all` (src/index.ts, `DEBUG_SOURCES`) es el chequeo dinámico de las 7
+- `/debug-all` (src/index.ts, `DEBUG_SOURCES`) es el chequeo dinámico de las 8
   fuentes: por fuente toma las series recientes de su propio catálogo
   (`getCatalog`), las expande a episodios vía `getMeta` (los catálogos traen
   ids de serie; `debugIsEpisodeId` valida el formato por fuente) y llama al

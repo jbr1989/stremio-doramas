@@ -17,6 +17,7 @@ Addon de Stremio para ver **doramas en español** (sub español/latino), corrien
 | `tudorama:` | [tudorama.com](https://tudorama.com) | `src/sources/tudorama.ts` | WordPress + tema WStream | ⚠️ Miniaturas/pósters en blanco en Stremio Web (ver problema conocido) |
 | `pandrama:` | [pandrama.tv](https://www.pandrama.tv) | `src/sources/pandrama.ts` | App propia (Laravel + React) | ✅ Funcional |
 | `dsub:` | [doramasub.com](https://www.doramasub.com) | `src/sources/doramasub.ts` | Blogger + API Feeds | ✅ Funcional |
+| `kisskh:` | [kisskh.co](https://kisskh.co) | `src/sources/kisskh.ts` | App propia (JSON API) | ✅ Funcional |
 
 Todas exponen catálogo (directorio + búsqueda), meta con episodios (pósteres vía TMDB) y streams.
 
@@ -183,7 +184,7 @@ si no, esto crea un segundo Worker en otra URL en vez de actualizar el real.
 - `/debug-mixdrop?url=<embed>` — resuelve un embed de Mixdrop
 - `/debug-render?url=<url>` — prueba de Cloudflare Browser Rendering
 - `/debug-dood?url=<embed>` — resuelve un embed de la familia Dood (do7go/playmogo/dood.*) a un MP4 provisional vía `pass_md5`; devuelve el MP4 final y la URL del relay Deno `/mp4`
-- `/debug-all` — chequea las 7 fuentes a la vez. Comportamiento estándar (dinámico): de cada catálogo propio toma las series recientes, las expande a `?n=` episodios vía meta (default 10) y llama al getter de cada fuente con esos IDs reales. Salida plana, una fila por episodio: `source/id/streamsCount/tipos/totalMs` + `sample` con cada stream (`servidor`/`tipo`/`name`/`url`); sin episodios solo muestra contexto del catálogo. `?ids=id1,id2` hace override manual. Streams crudos: sin caché ni filtro de señuelos.
+- `/debug-all` — chequea las 8 fuentes a la vez. Comportamiento estándar (dinámico): de cada catálogo propio toma las series recientes, las expande a `?n=` episodios vía meta (default 10) y llama al getter de cada fuente con esos IDs reales. Salida plana, una fila por episodio: `source/id/streamsCount/tipos/totalMs` + `sample` con cada stream (`servidor`/`tipo`/`name`/`url`); sin episodios solo muestra contexto del catálogo. `?ids=id1,id2` hace override manual. Streams crudos: sin caché ni filtro de señuelos.
 - `/cache-clear?key=<clave KV completa>` — limpia una entrada de caché
 
 ### Hosts de reto (`CHALLENGE_HOSTS_RE`, src/utils.ts)

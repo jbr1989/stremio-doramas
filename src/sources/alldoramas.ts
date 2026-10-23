@@ -8,6 +8,7 @@ import { getTudoramaCatalog } from "./tudorama";
 import { getPandramaCatalog } from "./pandrama";
 import { getDoramaYtCatalog } from "./doramasyt";
 import { getDoramaSubCatalog } from "./doramasub";
+import { getKisskhCatalog } from "./kisskh";
 
 // ─── Catálogo consolidado "Todos los Doramas" ───────────────────────────────
 // Orquesta los catálogos ya existentes en paralelo, fusiona, y de-duplica por
@@ -53,6 +54,7 @@ const SOURCES: SourceSpec[] = [
   { name: "tudorama", page: 24, fetch: (e, env) => getTudoramaCatalog(e, env) },
   { name: "kplay", page: 24, fetch: (e, env) => getKplayCatalog(e, env) },
   { name: "pandrama", page: 48, fetch: (e, env) => getPandramaCatalog(e, env) },
+  { name: "kisskh", page: 25, fetch: (e, env) => getKisskhCatalog(e, env) },
 ];
 
 /** Clave de dedup: cleanTitle ya limpia "Ver", "subtitulado", colas del tema;
