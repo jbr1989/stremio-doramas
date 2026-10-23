@@ -114,7 +114,7 @@ export async function getYandiCatalog(
     if (!gslug) return { metas: [] };
     return {
       metas: parseYandiCards(
-        await fetchHtml(`${YANDI_BASE}/genero/${gslug}/`, env)
+        await fetchHtml(`${YANDI_BASE}/generos/${gslug}/`, env)
       )
         .filter((r) => r.id.startsWith("yandi:series:"))
         .map(toMetaPreview),

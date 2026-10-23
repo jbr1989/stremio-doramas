@@ -131,6 +131,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dplay: "action-adventure",
       kplay: "action-adventure",
       pandrama: "12",
+      yandi: "action-adventure",
     } 
   },
   { label: "Aventura", slugs: 
@@ -141,6 +142,7 @@ const MASTER_GENRES: GenreEntry[] = [
       tudorama: "adventure", 
       pandrama: "11", 
       dflix: "aventura",
+      yandi: "aventura",
     } 
   },
   { label: "Misterio", slugs: 
@@ -152,6 +154,7 @@ const MASTER_GENRES: GenreEntry[] = [
       tudorama: "misterio",
       pandrama: "8", 
       dflix: "misterio",
+      yandi: "misterio",
     } 
   },
   { label: "Suspense", slugs: 
@@ -160,6 +163,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dplay: "suspense",
       kplay: "suspense",
       pandrama: "16",
+      yandi: "suspenso",
     } 
   },
   { label: "Thriller", slugs: 
@@ -167,6 +171,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dplay: "thriller",
       kplay: "thriller",
       dflix: "thriller",
+      yandi: "thriller",
     } 
   },
   { label: "Crimen", slugs: 
@@ -177,17 +182,20 @@ const MASTER_GENRES: GenreEntry[] = [
       tudorama: "crimen", 
       pandrama: "13", 
       dflix: "crimen",
+      yandi: "crimen",
     } 
   },
   { label: "Terror", slugs: 
     {
       pandrama: "9", 
       dflix: "terror",
+      yandi: "terror",
     } 
   },
   { label: "Horror", slugs: 
     { 
-      dplay: "horror"
+      dplay: "horror",
+      yandi: "horror",
     } 
   },
   { label: "Fantasía", slugs: 
@@ -198,6 +206,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dyt: "fantasia", 
       pandrama: "28", 
       dflix: "fantasia",
+      yandi: "fantasia",
     } 
   },
   { label: "Ciencia ficción", slugs: 
@@ -207,6 +216,7 @@ const MASTER_GENRES: GenreEntry[] = [
       kplay: "ciencia-ficcion",
       pandrama: "10", 
       dflix: "ciencia-ficcion",
+      yandi: "ciencia-ficcion",
     } 
   },
   { label: "Sci-Fi y fantasía", slugs: 
@@ -215,6 +225,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dplay: "sci-fi-fantasy",
       kplay: "sci-fi-fantasy",
       pandrama: "5",
+      yandi: "sci-fi-fantasy",
     } 
   },
   { label: "Histórico", slugs: 
@@ -224,12 +235,14 @@ const MASTER_GENRES: GenreEntry[] = [
       kplay: "historia",
       dyt: "historico", 
       dflix: "history",
+      yandi: "historico",
     } 
   },
   { label: "Escolar", slugs: 
     { 
-      dyt: "escolar"
-    } 
+      dyt: "escolar",
+      yandi: "escolar",
+    }
   },
   { label: "Melodrama", slugs: 
     {
@@ -237,6 +250,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dplay: "soap",
       pandrama: "56", 
       dflix: "soap",
+      yandi: "melodrama",
     } 
   },
   { label: "Guerra y política", slugs: 
@@ -246,6 +260,7 @@ const MASTER_GENRES: GenreEntry[] = [
       kplay: "war-politics",
       pandrama: "7",
       dflix: "politica",
+      yandi: "war-politics",
     }
   },
   { label: "Bélica", slugs:
@@ -253,6 +268,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dlat: "belica",
       dplay: "belica",
       dflix: "war",
+      yandi: "guerra",
     }
   },
   { label: "Western", slugs: 
@@ -263,7 +279,7 @@ const MASTER_GENRES: GenreEntry[] = [
   },
   { label: "Noticias", slugs: 
     { 
-    dflix: "news" 
+      dflix: "news" 
     } 
   },
   { label: "Familia", slugs: 
@@ -274,6 +290,7 @@ const MASTER_GENRES: GenreEntry[] = [
       tudorama: "familia",
       pandrama: "6",
       dflix: "familia",
+      yandi: "familia",
     }
   },
   { label: "Música", slugs: 
@@ -283,6 +300,7 @@ const MASTER_GENRES: GenreEntry[] = [
       kplay: "music",
       pandrama: "14",
       dflix: "music",
+      yandi: "musica",
     }
   },
   { label: "Documental", slugs: 
@@ -291,6 +309,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dplay: "documental",
       kplay: "documental",
       dflix: "documental",
+      yandi: "documental",
     } 
   },
   { label: "Reality", slugs: 
@@ -300,6 +319,7 @@ const MASTER_GENRES: GenreEntry[] = [
       kplay: "reality",
       tudorama: "reality", 
       dflix: "reality",
+      yandi: "reality",
     } 
   },
   { label: "Talk", slugs: 
@@ -309,6 +329,7 @@ const MASTER_GENRES: GenreEntry[] = [
     {
       kplay: "kids",
       dflix: "kids",
+      yandi: "kids",
     } 
   },
   { label: "Animación", slugs: 
@@ -318,6 +339,7 @@ const MASTER_GENRES: GenreEntry[] = [
       kplay: "animacion",
       pandrama: "33", 
       dflix: "animacion",
+      yandi: "animacion",
     } 
   },
   { label: "Negocios", slugs: 
@@ -344,6 +366,7 @@ const MASTER_GENRES: GenreEntry[] = [
     {
       dlat: "dramas-lgtb",
       pandrama: "1",
+      yandi: "bl",
     } 
   },
   { label: "K-Drama", slugs: 
@@ -367,6 +390,13 @@ const MASTER_GENRES: GenreEntry[] = [
       dyt: "thai-drama"
     }
   },
+  { label: "Biografía", slugs: { yandi: "biografia" } },
+  { label: "Deportes", slugs: { yandi: "deportes" } },
+  { label: "Legal", slugs: { yandi: "legal" } },
+  { label: "LGBTQ", slugs: { yandi: "lgbtq" } },
+  { label: "Medicina", slugs: { yandi: "medicina" } },
+  { label: "Política", slugs: { yandi: "politica" } },
+  { label: "Película de TV", slugs: { yandi: "pelicula-de-tv" } },
 ];
 
 /** Labels de la lista maestra, en orden (dropdown del consolidado). */
