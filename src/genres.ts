@@ -86,6 +86,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dflix: "romance",
       dsub: "romance",
       yandi: "romance",
+      kisskh: "Romance",
     } 
   },
   { label: "Comedia", slugs:
@@ -99,6 +100,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dflix: "comedia",
       dsub: "Comedia",
       yandi: "comedia",
+      kisskh: "Comedy",
     }
   },
   { label: "Drama", slugs: 
@@ -112,6 +114,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dflix: "drama",
       dsub: "Drama",
       yandi: "drama",
+      kisskh: "Drama",
     } 
   },
   { label: "Acción", slugs: 
