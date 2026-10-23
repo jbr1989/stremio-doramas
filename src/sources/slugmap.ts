@@ -42,7 +42,7 @@ const STOPWORDS = new Set([
   "doblada", "online", "hd", "completo", "estreno", "temporada", "ver",
 ]);
 
-export function parseSxE(epSlug: string): { s: number; e: number } | null {
+function parseSxE(epSlug: string): { s: number; e: number } | null {
   const m = epSlug.match(/-(\d+)x(\d+)$/);
   return m ? { s: parseInt(m[1], 10), e: parseInt(m[2], 10) } : null;
 }

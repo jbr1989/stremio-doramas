@@ -22,13 +22,6 @@ const KISSKH_SUB_GUID = "VgV52sWhwvBSf8BsM3BRY9weWiiCbtGp";
 const KISSKH_PLATFORM_VER = 4830201;
 const KISSKH_APP = "kisskh";
 
-export function canonicalKisskhSlug(slug: string): string {
-  if (/-\d+x\d+$/.test(slug)) return slug;
-  const m = slug.match(/^(.*?)-episode-(\d+)$/i) || slug.match(/^(.*?)-ep-(\d+)$/i);
-  if (m) return `${m[1]}-1x${parseInt(m[2], 10)}`;
-  return slug;
-}
-
 export async function getKisskhCatalog(
   extra: Record<string, string>,
   env?: Env

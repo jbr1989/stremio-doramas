@@ -66,7 +66,7 @@ async function fetchDorama(
   return Promise.any(racers);
 }
 
-export function parseDoramaCards(html: string, src: DoramaSource) {
+function parseDoramaCards(html: string, src: DoramaSource) {
   const results: { id: string; name: string; poster: string }[] = [];
   const seen = new Set<string>();
   const push = (slug: string, rawPoster: string, rawName: string) => {
