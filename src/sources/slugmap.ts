@@ -13,7 +13,7 @@ import { cacheGet, cacheSet } from "../utils";
 //   NO la escriben (página lenta ≠ serie inexistente).
 //
 // Es genérico e inyectado (SiteAdapter) para evitar imports circulares: los
-// adapters viven en kdramasplay.ts (kplay) y doramas.ts (dsub).
+// adapters viven en kdramasplay.ts (kplay) y doramas.ts (dplay).
 
 interface SiteAdapter {
   /** id estable para las claves KV */

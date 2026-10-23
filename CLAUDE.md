@@ -1,8 +1,8 @@
 # Addon Stremio de Doramas
 
 Cloudflare Worker que sirve el protocolo de addon de Stremio (`com.doramas.stremio`,
-v1.0.0) para **6 fuentes de doramas**: doramaslat.com, doramedplay.net,
-kdramasplay.com (WordPress + tema DooPlay), doramasflix.in (GraphQL), tudorama.com y pandrama.tv. Archivo
+v1.0.0) para **fuentes de doramas**: doramaslat.com, doramedplay.net,
+kdramasplay.com (WordPress + tema DooPlay), doramasflix.in (GraphQL), tudorama.com, pandrama.tv, doramasyt.com y doramasub.com. Archivo
 principal: `src/index.ts`, más un servicio auxiliar `deno/fetch.ts` que corre en
 **Deno Deploy** (ver notas del proxy abajo; `deno.json` fija su entrypoint). El
 Worker se despliega con **Cloudflare Workers Builds** (integración Git del dashboard)
@@ -17,9 +17,9 @@ Contratos estables. Cambiarlos es trabajo de protocolo y debe cumplir la spec
 - **Rutas**: `/manifest.json`, `/catalog/...`, `/meta/...`, `/stream/...`, más
   `/proxy/m3u8` + `/proxy/seg` (proxy de reescritura HLS) y los endpoints `/debug*`.
   Toda respuesta JSON pasa por `json()` y lleva cabeceras CORS.
-- **Esquema de IDs** (6 prefijos, `idPrefixes: ["dorama:", "dsub:", "kplay:", "dflix:", "tudorama:", "pandrama:"]`):
-  - `dorama:{slug}` / `dsub:{slug}` — meta de serie.
-  - `dorama:{slug}-1x{N}` / `dsub:{slug}-1x{N}` — streams de episodio
+- **Esquema de IDs** (prefijos `idPrefixes: ["dlat:", "dplay:", "kplay:", "dflix:", "tudorama:", "pandrama:", "dyt:", "dsub:"]`):
+  - `dlat:{slug}` / `dplay:{slug}` — meta de serie.
+  - `dlat:{slug}-1x{N}` / `dplay:{slug}-1x{N}` — streams de episodio
     (validado con `/-\d+x\d+$/`, página fuente `/episodes/{slug}-1xN/`).
   - `kplay:series:{slug}` / `kplay:movie:{slug}` — meta (páginas `/series/` y `/peliculas/`).
   - `kplay:ep:{epSlug}` / `kplay:movie:{slug}` — streams de episodio/película
@@ -27,6 +27,8 @@ Contratos estables. Cambiarlos es trabajo de protocolo y debe cumplir la spec
   - `dflix:{slug}` — meta; `dflix:{slug}-1x{N}` — streams/episodios.
   - `tudorama:{slug}` — meta; `tudorama:{slug}-s{S}x{E}` — streams de episodio.
   - `pandrama:{id}:{slug}` — meta; `pandrama:{titleId}:ep:{videoId}` — streams de episodio.
+  - `dyt:{slug}` — meta/streams.
+  - `dsub:{slug}` — meta/streams.
 - **Los objetos stream llevan `title` O `description`, nunca ambos**: stremio-core
   (el núcleo Rust detrás de Android + Web) deserializa `title` como alias serde de
   `description`, así que un objeto con ambos falla como campo duplicado y el cliente
@@ -54,7 +56,7 @@ Contratos estables. Cambiarlos es trabajo de protocolo y debe cumplir la spec
   buscar la serie por título (`?s=`, scoring de tokens ≥ 0.5 con exigencia de
   ≥2 hits para títulos multi-palabra, stopwords en limpio) → raspar la lista
   de episodios de la página de serie → tomar el slug del SxE pedido; los DOS
-  prefijos DooPlay resuelven (`dorama`/`dsub` en `doramas.ts`) — p.ej. un id
+  prefijos DooPlay resuelven (`dlat`/`dplay` en `doramas.ts`) — p.ej. un id
   de kplay también puede encontrar su episodio en doramaslat. Se reusa
   con `getKplayStreams`/`getDoramaStreams`. Cache: `epmap:v1:{site}:{titleKey}`
   (mapa `{SxE: epSlug}` de toda la serie, TTL 24h — episodios siguientes salen

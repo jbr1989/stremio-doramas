@@ -83,8 +83,8 @@ async function handleFetch(target: string): Promise<Response> {
     logErr("fetch", `url inválida: ${trunc(target, 120)}`);
     return jsonError("invalid url", 400);
   }
-  // Allowlist: doramaslat.com, doramedplay.net, kdramasplay.com, doramasflix.in, doramasyt.com, tudorama.com, pandrama.tv, yandispoiler.net.
-  if (u.protocol !== "https:" || !/(^|\.)(doramaslat\.com|doramedplay\.net|kdramasplay\.com|doramasflix\.in|doramasyt\.com|tudorama\.com|pandrama\.tv|yandispoiler\.net)$/i.test(u.hostname)) {
+  // Allowlist: doramaslat.com, doramedplay.net, kdramasplay.com, doramasflix.in, doramasyt.com, tudorama.com, pandrama.tv, doramasub.com, yandispoiler.net.
+  if (u.protocol !== "https:" || !/(^|\.)(doramaslat\.com|doramedplay\.net|kdramasplay\.com|doramasflix\.in|doramasyt\.com|tudorama\.com|pandrama\.tv|doramasub\.com|yandispoiler\.net)$/i.test(u.hostname)) {
     logErr("fetch", `host no permitido: ${u.protocol}//${u.hostname}`);
     return jsonError("host not allowed", 403);
   }
@@ -211,7 +211,7 @@ async function handleStreamwish(embedUrl: string, selfBase: string): Promise<Res
   // enruta aquí y no esté en esta allowlist muere con 403 silencioso.
   try { host = new URL(embedUrl).hostname; ok = /streamwish|embedwish|wishfast|sfastwish|swishsrv|streamaly|streamis|flaswish|lulustream|luluvdo|luluvido|lulu\.st/i.test(host); } catch { /* invalid */ }
   if (!ok) {
-    logErr("streamwish", `host no permitido / url inválida: ${trunc(embedUrl, 160)}`);
+    logErr("streamwish", `host no permitted / url inválida: ${trunc(embedUrl, 160)}`);
     return jsonError("host not allowed", 403);
   }
   const master = await resolveStreamwish(embedUrl);
@@ -481,7 +481,7 @@ async function handler(req: Request): Promise<Response> {
   }
   const target = url.searchParams.get("url");
   if (!target) {
-    return cors(JSON.stringify({ ok: true, usage: "/fetch?url=… | /savefiles?code=… | /streamwish?url=… | /hls?u=…&r=… | /mp4?url=…&r=…" }), {
+    return cors(JSON.stringify({ ok: true, usage: "/fetch?url=… | /savefiles?code=… | /streamwish?url=… | /hls?u=…&r=… | /mp4?url=…" }), {
       headers: { "Content-Type": "application/json" },
     });
   }
