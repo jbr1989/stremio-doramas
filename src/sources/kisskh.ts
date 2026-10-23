@@ -1,5 +1,6 @@
 import { Env } from "../types";
 import { genreSlug } from "../genres";
+import { kisskhKkeyFn } from "../kisskhKey";
 import {
   cleanTitle,
   decodeEntities,
@@ -12,6 +13,13 @@ import {
 import { addEmbedStreams } from "../extractors";
 
 const KISSKH_BASE = "https://kisskh.co";
+// Constantes del cliente oficial (fijas en el bundle de Angular):
+// appVer / viGuid / platformVer / appName — el server no valida contra
+// cookie ni sesión (probe: firma con guids fijos funciona).
+const KISSKH_APP_VER = "2.8.10";
+const KISSKH_GUID = "62f176f3bb1b5b8e70e39932ad34a0c7";
+const KISSKH_PLATFORM_VER = 4830201;
+const KISSKH_APP = "kisskh";
 
 export function canonicalKisskhSlug(slug: string): string {
   if (/-\d+x\d+$/.test(slug)) return slug;
@@ -83,7 +91,7 @@ export async function getKisskhMeta(
   env?: Env
 ) {
   const dramaId = id.replace(/^kisskh:/, "").split(":")[0];
-  const pageUrl = `${KISSKH_BASE}/api/DramaList/Drama/${dramaId}?is_q=true`;
+  const pageUrl = `${KISSKH_BASE}/api/DramaList/Drama/${dramaId}?isq=false`;
 
   let resText = "";
   try {
@@ -153,7 +161,26 @@ export async function getKisskhStreams(rawId: string, env: Env) {
 
   if (!epId) return { streams: [] };
 
-  const apiUrl = `${KISSKH_BASE}/api/Episode/${epId}`;
+  // (2026) /api/Episode/<id> fue retirada del sitio (responde la SPA HTML).
+  // Nuevo endpoint, firmado: /api/DramaList/Episode/<epId>.png con kkey
+  // calculado por common.js (copiado literal en kisskhKey.js). Respuesta:
+  // { Video: mp4/hls directo, Video_tmp, ThirdParty: embed, Type: 0=mp4, 1=hls }.
+  let kkey = "";
+  try {
+    kkey = kisskhKkeyFn(
+      Number(epId),
+      null,
+      KISSKH_APP_VER,
+      KISSKH_GUID,
+      KISSKH_PLATFORM_VER,
+      KISSKH_APP, KISSKH_APP, KISSKH_APP, KISSKH_APP, KISSKH_APP, KISSKH_APP
+    );
+  } catch (e) {
+    console.error(`[kisskh] kkey falló para ep ${epId}: ${e}`);
+    return { streams: [] };
+  }
+
+  const apiUrl = `${KISSKH_BASE}/api/DramaList/Episode/${epId}.png?err=false&ts=null&time=null&kkey=${kkey}`;
   let resText = "";
   try {
     resText = await fetchHtml(apiUrl, env, { allowShort: true });
@@ -162,35 +189,81 @@ export async function getKisskhStreams(rawId: string, env: Env) {
     resText = "";
   }
 
+  // El CDN del mp4 no valida los params ip/verify (probe: 206 con query vacía
+  // o basura) → el Video directo se sirve sin proxy; el verify se hornea para
+  // la IP del que pide el JSON, igual funciona desde otra IP.
+  const directMp4 = new Set<string>();
   const embedUrls = new Set<string>();
 
   if (resText) {
     try {
       const data = JSON.parse(resText);
-      if (data.Video || data.video) {
-        embedUrls.add(data.Video || data.video);
+      if (typeof data.Video === "string" && /^https?:\/\//.test(data.Video)) {
+        directMp4.add(data.Video);
       }
-      if (data.Video2 || data.video2) {
-        embedUrls.add(data.Video2 || data.video2);
+      if (typeof data.Video_tmp === "string" && /^https?:\/\//.test(data.Video_tmp)) {
+        directMp4.add(data.Video_tmp);
       }
+      if (typeof data.ThirdParty === "string" && /^https?:\/\//.test(data.ThirdParty)) {
+        embedUrls.add(data.ThirdParty);
+      }
+      // Forma local (por si el sitio vuelve a server descriptor arrays).
       if (Array.isArray(data.videos)) {
         for (const v of data.videos) {
-          if (v.url || v.src) embedUrls.add(v.url || v.src);
+          const u = v?.url || v?.src;
+          if (typeof u === "string" && /^https?:\/\//.test(u)) {
+            if (/\.(m3u8|mp4)/.test(u)) directMp4.add(u);
+            else embedUrls.add(u);
+          }
         }
       }
     } catch {
       for (const m of resText.matchAll(
         /(https?:\/\/[^"'\s\\]+\.(?:m3u8|mp4)[^"'\s\\]*)/gi
       )) {
-        embedUrls.add(m[1]);
+        directMp4.add(m[1]);
       }
     }
   }
 
-  if (embedUrls.size === 0) return { streams: [] };
+  if (directMp4.size === 0 && embedUrls.size === 0) return { streams: [] };
 
   const denoBase = denoBaseFromEnv(env);
   const { add, streams } = makeStreamDeduper();
+
+  for (const url of directMp4) {
+    const isHls = /\.m3u8/i.test(url);
+    if (isHls && denoBase) {
+      // HLS: Stremio exige CORS → relay /hls del Deno.
+      add({
+        url: `${denoBase}/hls?u=${encodeURIComponent(url)}&r=${encodeURIComponent("https://kisskh.co/")}`,
+        name: "KissKH HLS",
+        title: "▶ KissKH — HLS",
+        behaviorHints: {
+          notWebReady: false,
+          filename: `${epId}.m3u8`,
+          bingeGroup: "kisskh-hls",
+        },
+      });
+    } else if (isHls) {
+      add({
+        externalUrl: url,
+        name: "KissKH 🌐",
+        title: "🌐 HLS — KissKH",
+      });
+    } else {
+      add({
+        url,
+        name: "KissKH MP4",
+        title: "▶ KissKH — directo",
+        behaviorHints: {
+          notWebReady: false,
+          filename: `${epId}.mp4`,
+          bingeGroup: "kisskh-mp4",
+        },
+      });
+    }
+  }
 
   for (const embed of embedUrls) {
     await addEmbedStreams({
