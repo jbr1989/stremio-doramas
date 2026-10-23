@@ -17,7 +17,7 @@ Contratos estables. Cambiarlos es trabajo de protocolo y debe cumplir la spec
 - **Rutas**: `/manifest.json`, `/catalog/...`, `/meta/...`, `/stream/...`, más
   `/proxy/m3u8` + `/proxy/seg` (proxy de reescritura HLS) y los endpoints `/debug*`.
   Toda respuesta JSON pasa por `json()` y lleva cabeceras CORS.
-- **Esquema de IDs** (prefijos `idPrefixes: ["dlat:", "dplay:", "kplay:", "dflix:", "tudorama:", "pandrama:", "dyt:", "doramasub:"]`):
+- **Esquema de IDs** (prefijos `idPrefixes: ["dlat:", "dplay:", "kplay:", "dflix:", "tudorama:", "pandrama:", "dyt:", "dsub:"]`):
   - `dlat:{slug}` / `dplay:{slug}` — meta de serie.
   - `dlat:{slug}-1x{N}` / `dplay:{slug}-1x{N}` — streams de episodio
     (validado con `/-\d+x\d+$/`, página fuente `/episodes/{slug}-1xN/`).
@@ -28,7 +28,7 @@ Contratos estables. Cambiarlos es trabajo de protocolo y debe cumplir la spec
   - `tudorama:{slug}` — meta; `tudorama:{slug}-s{S}x{E}` — streams de episodio.
   - `pandrama:{id}:{slug}` — meta; `pandrama:{titleId}:ep:{videoId}` — streams de episodio.
   - `dyt:{slug}` — meta/streams.
-  - `doramasub:{slug}` — meta/streams.
+  - `dsub:{slug}` — meta/streams.
 - **Los objetos stream llevan `title` O `description`, nunca ambos**: stremio-core
   (el núcleo Rust detrás de Android + Web) deserializa `title` como alias serde de
   `description`, así que un objeto con ambos falla como campo duplicado y el cliente

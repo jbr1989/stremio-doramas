@@ -28,7 +28,7 @@ const withGenre = (opts: string[]): CatalogExtra[] => [
 
 export const MANIFEST = {
   id: ADDON_ID,
-  version: "1.4.2",
+  version: "1.4.3",
   name: "Doramas",
   description: "Fuentes de Doramas en español y subtituladas",
   // Fallback por si el manifest se consume fuera del handler (el dominio vivo
@@ -89,8 +89,8 @@ export const MANIFEST = {
       type: "series",
       id: "doramasub-directory",
       name: "DoramaSub — Directorio",
-      extra: withGenre(genreSourceOptions("doramasub")),
+      extra: withGenre(genreSourceOptions("dsub")),
     },
   ],
-  idPrefixes: ["dlat:", "dplay:", "kplay:", "dflix:", "tudorama:", "pandrama:", "dyt:", "doramasub:"],
+  idPrefixes: ["dlat:", "dplay:", "kplay:", "dflix:", "tudorama:", "pandrama:", "dyt:", "dsub:"],
 };

@@ -16,7 +16,7 @@ Addon de Stremio para ver **doramas en español** (sub español/latino), corrien
 | `dflix:` | [doramasflix.in](https://doramasflix.in) | `src/sources/doramasflix.ts` | App propia (GraphQL) | ✅ Funcional |
 | `tudorama:` | [tudorama.com](https://tudorama.com) | `src/sources/tudorama.ts` | WordPress + tema WStream | ⚠️ Miniaturas/pósters en blanco en Stremio Web (ver problema conocido) |
 | `pandrama:` | [pandrama.tv](https://www.pandrama.tv) | `src/sources/pandrama.ts` | App propia (Laravel + React) | ✅ Funcional |
-| `doramasub:` | [doramasub.com](https://www.doramasub.com) | `src/sources/doramasub.ts` | Blogger + API Feeds | ✅ Funcional |
+| `dsub:` | [doramasub.com](https://www.doramasub.com) | `src/sources/doramasub.ts` | Blogger + API Feeds | ✅ Funcional |
 
 Todas exponen catálogo (directorio + búsqueda), meta con episodios (pósteres vía TMDB) y streams.
 

@@ -97,7 +97,7 @@ async function getMeta(id: string, tmdbKey: string, env?: Env) {
   if (id.startsWith("tudorama:")) return getTudoramaMeta(id, tmdbKey, env);
   if (id.startsWith("pandrama:")) return getPandramaMeta(id, tmdbKey, env);
   if (id.startsWith("dyt:")) return getDoramaYtMeta(id, tmdbKey, env);
-  if (id.startsWith("doramasub:")) return getDoramaSubMeta(id, tmdbKey, env);
+  if (id.startsWith("dsub:")) return getDoramaSubMeta(id, tmdbKey, env);
   return { meta: null };
 }
 
@@ -114,8 +114,8 @@ async function getStreams(rawId: string, env: Env) {
     // DYT usa "titulo-episodio-N": a la forma canónica "titulo-1xN" para que
     // las demás fuentes (guardean sobre -\d+x\d+$) acepten el slug.
     epSlug = canonicalDytSlug(rawId.slice("dyt:".length));
-  } else if (rawId.startsWith("doramasub:")) {
-    epSlug = canonicalDoramaSubSlug(rawId.slice("doramasub:".length));
+  } else if (rawId.startsWith("dsub:")) {
+    epSlug = canonicalDoramaSubSlug(rawId.slice("dsub:".length));
   } else if (rawId.startsWith("tudorama:")) {
     epSlug = rawId.slice("tudorama:".length);
   } else if (rawId.startsWith("kplay:")) {
@@ -188,10 +188,10 @@ async function getStreams(rawId: string, env: Env) {
     tasks.push(getDoramaYtStreams(`dyt:${epSlug}`, env));
   }
 
-  if (rawId.startsWith("doramasub:")) {
+  if (rawId.startsWith("dsub:")) {
     tasks.push(getDoramaSubStreams(rawId, env));
   } else if (epSlug) {
-    tasks.push(getDoramaSubStreams(`doramasub:${epSlug}`, env));
+    tasks.push(getDoramaSubStreams(`dsub:${epSlug}`, env));
   }
 
   const results = await Promise.allSettled(tasks);
@@ -226,7 +226,7 @@ const DEBUG_SOURCES: { source: string; catalogId: string }[] = [
   { source: "tudorama", catalogId: "tudorama" },
   { source: "pandrama", catalogId: "pandrama" },
   { source: "dyt", catalogId: "doramasyt" },
-  { source: "doramasub", catalogId: "doramasub" },
+  { source: "dsub", catalogId: "doramasub" },
 ];
 
 const DEBUG_TIMEOUT_MS = 45000;
@@ -244,7 +244,7 @@ type DebugCheck = {
 function debugIsEpisodeId(source: string, id: string): boolean {
   if (source === "pandrama") return /^pandrama:\d+:ep:\d+$/.test(id);
   if (source === "dyt") return /^dyt:.+-episodio-\d+$/.test(id);
-  if (source === "doramasub") return /^doramasub:.+capitulo-\d+$/.test(id);
+  if (source === "dsub") return /^dsub:.+capitulo-\d+$/.test(id);
   if (source === "kplay")
     return /^kplay:(?:ep:.+-\d+x\d+|movie:.+)$/.test(id);
   return new RegExp(`^${source}:.+-\\d+x\\d+$`).test(id);
@@ -261,7 +261,7 @@ function debugCheckFor(prefix: string, id: string, env: Env): DebugCheck | null 
   if (prefix === "tudorama") return { source: prefix, id, run: () => getTudoramaStreams(id, env) };
   if (prefix === "pandrama") return { source: prefix, id, run: () => getPandramaStreams(id, env) };
   if (prefix === "dyt") return { source: prefix, id, run: () => getDoramaYtStreams(id, env) };
-  if (prefix === "doramasub") return { source: prefix, id, run: () => getDoramaSubStreams(id, env) };
+  if (prefix === "dsub") return { source: prefix, id, run: () => getDoramaSubStreams(id, env) };
   return null;
 }
 

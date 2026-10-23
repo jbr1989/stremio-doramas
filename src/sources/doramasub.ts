@@ -57,7 +57,7 @@ function parseFeedEntryCard(entry: any) {
   const cleanName = cleanTitle(titleRaw.replace(/\s*\(\d{4}\).*$/, "")) || titleRaw;
 
   return {
-    id: `doramasub:${slug}`,
+    id: `dsub:${slug}`,
     name: cleanName,
     poster,
   };
@@ -76,7 +76,7 @@ export async function getDoramaSubCatalog(
       q
     )}&max-results=50`;
   } else if (g) {
-    const gslug = genreSlug("doramasub", g) || g.toLowerCase();
+    const gslug = genreSlug("dsub", g) || g.toLowerCase();
     const page = Math.floor(parseInt(extra.skip || "0", 10) / 24) + 1;
     const startIndex = (page - 1) * 24 + 1;
     feedUrl = `${DORAMASUB_BASE}/feeds/posts/default/-/${encodeURIComponent(
@@ -142,7 +142,7 @@ export async function getDoramaSubMeta(
   tmdbKey: string,
   env?: Env
 ) {
-  const slug = id.replace(/^doramasub:/, "");
+  const slug = id.replace(/^dsub:/, "");
   const pageUrl = `${DORAMASUB_BASE}/${slug}.html`;
 
   let html = "";
@@ -239,7 +239,7 @@ export async function getDoramaSubMeta(
   const videos = sortedEpNums.map((epNum) => {
     const ep = epMap.get(epNum)!;
     return {
-      id: `doramasub:${ep.slug}`,
+      id: `dsub:${ep.slug}`,
       title: ep.title,
       season: 1,
       episode: epNum,
@@ -269,7 +269,7 @@ async function resolveDoramaSubEpisodeSlug(
 ): Promise<string | null> {
   return resolveEpisodeSlug(
     {
-      site: "doramasub",
+      site: "dsub",
       searchSeries: (title) =>
         (async () => {
           const slugs = new Set<string>();
@@ -283,7 +283,7 @@ async function resolveDoramaSubEpisodeSlug(
               for (const entry of data?.feed?.entry || []) {
                 const card = parseFeedEntryCard(entry);
                 if (card) {
-                  slugs.add(card.id.replace(/^doramasub:/, ""));
+                  slugs.add(card.id.replace(/^dsub:/, ""));
                 }
               }
             } catch {}
@@ -293,7 +293,7 @@ async function resolveDoramaSubEpisodeSlug(
       fetchEpisodes: (seriesSlug) =>
         (async () => {
           const metaRes = await getDoramaSubMeta(
-            `doramasub:${seriesSlug}`,
+            `dsub:${seriesSlug}`,
             "",
             env
           );
@@ -302,7 +302,7 @@ async function resolveDoramaSubEpisodeSlug(
             episodes.push({
               s: v.season,
               e: v.episode,
-              epSlug: v.id.replace(/^doramasub:/, ""),
+              epSlug: v.id.replace(/^dsub:/, ""),
             });
           }
           return episodes;
@@ -314,7 +314,7 @@ async function resolveDoramaSubEpisodeSlug(
 }
 
 export async function getDoramaSubStreams(rawId: string, env: Env) {
-  let slug = rawId.replace(/^doramasub:/, "");
+  let slug = rawId.replace(/^dsub:/, "");
   let pageUrl = "";
 
   if (slug.includes("/") && /capitulo/i.test(slug)) {
@@ -333,7 +333,7 @@ export async function getDoramaSubStreams(rawId: string, env: Env) {
   if (!html) {
     const resolved = await resolveDoramaSubEpisodeSlug(slug, env);
     if (resolved && resolved !== slug) {
-      console.log(`[doramasub] slug resuelto: ${slug} → ${resolved}`);
+      console.log(`[dsub] slug resuelto: ${slug} → ${resolved}`);
       slug = resolved;
       try {
         html = await fetchHtml(`${DORAMASUB_BASE}/${slug}.html`, env);
@@ -380,7 +380,7 @@ export async function getDoramaSubStreams(rawId: string, env: Env) {
       embed,
       epSlug: canonicalDoramaSubSlug(slug),
       label: "DoramaSub",
-      prefix: "doramasub",
+      prefix: "dsub",
       denoBase,
       add,
     });
