@@ -1,9 +1,7 @@
 import { Env } from "../types";
-import { genreSlug } from "../genres";
 import { kisskhKkeyFn } from "../kisskhKey";
 import {
   cleanTitle,
-  decodeEntities,
   denoBaseFromEnv,
   fetchHtml,
   fetchTmdb,

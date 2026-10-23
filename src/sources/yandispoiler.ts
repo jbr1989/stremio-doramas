@@ -1,6 +1,6 @@
 import { Env } from "../types";
 import { genreSlug } from "../genres";
-import { CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchHtml, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
+import { cleanTitle, decodeEntities, denoBaseFromEnv, fetchHtml, fetchTmdb, makeStreamDeduper, toMetaPreview } from "../utils";
 import { addEmbedStreams } from "../extractors";
 import { genresFromDooPlay } from "./dooplay";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";

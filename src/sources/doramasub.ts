@@ -218,7 +218,6 @@ export async function getDoramaSubMeta(
   for (const m of html.matchAll(
     /href=["'](https?:\/\/(?:www\.)?doramasub\.com\/([^"']*?capitulo[^"']*?)\.html)["']/gi
   )) {
-    const fullUrl = m[1];
     const epSlug = m[2];
     const epNumM = epSlug.match(/capitulo-(\d+)/i);
     if (epNumM) {
