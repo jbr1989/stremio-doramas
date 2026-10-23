@@ -54,6 +54,12 @@ import {
   getDoramaYtStreams,
   canonicalDytSlug,
 } from "./sources/doramasyt";
+import {
+  getDoramaSubCatalog,
+  getDoramaSubMeta,
+  getDoramaSubStreams,
+  canonicalDoramaSubSlug,
+} from "./sources/doramasub";
 import { getAllAlldoramasCatalog } from "./sources/alldoramas";
 
 async function getCatalog(
@@ -64,9 +70,9 @@ async function getCatalog(
   if (catalogId.startsWith("alldoramas"))
     return getAllAlldoramasCatalog(extra, env);
   if (catalogId.startsWith("doramaslat"))
-    return getDoramaCatalog(DORAMA_SOURCES.dorama, extra, env);
+    return getDoramaCatalog(DORAMA_SOURCES.dlat, extra, env);
   if (catalogId.startsWith("doramedplay"))
-    return getDoramaCatalog(DORAMA_SOURCES.dsub, extra, env);
+    return getDoramaCatalog(DORAMA_SOURCES.dplay, extra, env);
   if (catalogId.startsWith("kplay")) return getKplayCatalog(extra, env);
   if (catalogId.startsWith("doramasflix"))
     return getDoramasflixCatalog(extra);
@@ -76,35 +82,40 @@ async function getCatalog(
     return getPandramaCatalog(extra, env);
   if (catalogId.startsWith("doramasyt"))
     return getDoramaYtCatalog(extra, env);
+  if (catalogId.startsWith("doramasub"))
+    return getDoramaSubCatalog(extra, env);
   return getDoramasflixCatalog(extra);
 }
 
 async function getMeta(id: string, tmdbKey: string, env?: Env) {
-  if (id.startsWith("dorama:"))
-    return getDoramaMeta(DORAMA_SOURCES.dorama, id, tmdbKey, env);
-  if (id.startsWith("dsub:"))
-    return getDoramaMeta(DORAMA_SOURCES.dsub, id, tmdbKey, env);
+  if (id.startsWith("dlat:"))
+    return getDoramaMeta(DORAMA_SOURCES.dlat, id, tmdbKey, env);
+  if (id.startsWith("dplay:"))
+    return getDoramaMeta(DORAMA_SOURCES.dplay, id, tmdbKey, env);
   if (id.startsWith("kplay:")) return getKplayMeta(id, tmdbKey, env);
   if (id.startsWith("dflix:")) return getDoramasflixMeta(id, tmdbKey);
   if (id.startsWith("tudorama:")) return getTudoramaMeta(id, tmdbKey, env);
   if (id.startsWith("pandrama:")) return getPandramaMeta(id, tmdbKey, env);
   if (id.startsWith("dyt:")) return getDoramaYtMeta(id, tmdbKey, env);
+  if (id.startsWith("dsub:")) return getDoramaSubMeta(id, tmdbKey, env);
   return { meta: null };
 }
 
 async function getStreams(rawId: string, env: Env) {
   let epSlug = "";
   let pandramaVideoId = "";
-  if (rawId.startsWith("dorama:")) {
-    epSlug = rawId.slice("dorama:".length);
-  } else if (rawId.startsWith("dsub:")) {
-    epSlug = rawId.slice("dsub:".length);
+  if (rawId.startsWith("dlat:")) {
+    epSlug = rawId.slice("dlat:".length);
+  } else if (rawId.startsWith("dplay:")) {
+    epSlug = rawId.slice("dplay:".length);
   } else if (rawId.startsWith("dflix:")) {
     epSlug = rawId.slice("dflix:".length);
   } else if (rawId.startsWith("dyt:")) {
     // DYT usa "titulo-episodio-N": a la forma canónica "titulo-1xN" para que
     // las demás fuentes (guardean sobre -\d+x\d+$) acepten el slug.
     epSlug = canonicalDytSlug(rawId.slice("dyt:".length));
+  } else if (rawId.startsWith("dsub:")) {
+    epSlug = canonicalDoramaSubSlug(rawId.slice("dsub:".length));
   } else if (rawId.startsWith("tudorama:")) {
     epSlug = rawId.slice("tudorama:".length);
   } else if (rawId.startsWith("kplay:")) {
@@ -135,16 +146,16 @@ async function getStreams(rawId: string, env: Env) {
 
   const tasks: Promise<{ streams: any[] }>[] = [];
 
-  if (rawId.startsWith("dorama:")) {
-    tasks.push(getDoramaStreams(DORAMA_SOURCES.dorama, rawId, env));
+  if (rawId.startsWith("dlat:")) {
+    tasks.push(getDoramaStreams(DORAMA_SOURCES.dlat, rawId, env));
   } else if (epSlug) {
-    tasks.push(getDoramaStreams(DORAMA_SOURCES.dorama, `dorama:${epSlug}`, env));
+    tasks.push(getDoramaStreams(DORAMA_SOURCES.dlat, `dlat:${epSlug}`, env));
   }
 
-  if (rawId.startsWith("dsub:")) {
-    tasks.push(getDoramaStreams(DORAMA_SOURCES.dsub, rawId, env));
+  if (rawId.startsWith("dplay:")) {
+    tasks.push(getDoramaStreams(DORAMA_SOURCES.dplay, rawId, env));
   } else if (epSlug) {
-    tasks.push(getDoramaStreams(DORAMA_SOURCES.dsub, `dsub:${epSlug}`, env));
+    tasks.push(getDoramaStreams(DORAMA_SOURCES.dplay, `dplay:${epSlug}`, env));
   }
 
   if (rawId.startsWith("kplay:")) {
@@ -177,6 +188,12 @@ async function getStreams(rawId: string, env: Env) {
     tasks.push(getDoramaYtStreams(`dyt:${epSlug}`, env));
   }
 
+  if (rawId.startsWith("dsub:")) {
+    tasks.push(getDoramaSubStreams(rawId, env));
+  } else if (epSlug) {
+    tasks.push(getDoramaSubStreams(`dsub:${epSlug}`, env));
+  }
+
   const results = await Promise.allSettled(tasks);
   const { add, streams } = makeStreamDeduper();
 
@@ -202,13 +219,14 @@ async function getStreams(rawId: string, env: Env) {
 
 /** Cada fuente con el catalogId que la resuelve en getCatalog(). */
 const DEBUG_SOURCES: { source: string; catalogId: string }[] = [
-  { source: "dorama", catalogId: "doramaslat" },
-  { source: "dsub", catalogId: "doramedplay" },
+  { source: "dlat", catalogId: "doramaslat" },
+  { source: "dplay", catalogId: "doramedplay" },
   { source: "kplay", catalogId: "kplay" },
   { source: "dflix", catalogId: "doramasflix" },
   { source: "tudorama", catalogId: "tudorama" },
   { source: "pandrama", catalogId: "pandrama" },
   { source: "dyt", catalogId: "doramasyt" },
+  { source: "dsub", catalogId: "doramasub" },
 ];
 
 const DEBUG_TIMEOUT_MS = 45000;
@@ -226,6 +244,7 @@ type DebugCheck = {
 function debugIsEpisodeId(source: string, id: string): boolean {
   if (source === "pandrama") return /^pandrama:\d+:ep:\d+$/.test(id);
   if (source === "dyt") return /^dyt:.+-episodio-\d+$/.test(id);
+  if (source === "dsub") return /^dsub:.+capitulo-\d+$/.test(id);
   if (source === "kplay")
     return /^kplay:(?:ep:.+-\d+x\d+|movie:.+)$/.test(id);
   return new RegExp(`^${source}:.+-\\d+x\\d+$`).test(id);
@@ -233,15 +252,16 @@ function debugIsEpisodeId(source: string, id: string): boolean {
 
 /** Dado un stream id con prefijo `fuente:`, construye la llamada al getter de esa fuente. */
 function debugCheckFor(prefix: string, id: string, env: Env): DebugCheck | null {
-  if (prefix === "dorama")
-    return { source: prefix, id, run: () => getDoramaStreams(DORAMA_SOURCES.dorama, id, env) };
-  if (prefix === "dsub")
-    return { source: prefix, id, run: () => getDoramaStreams(DORAMA_SOURCES.dsub, id, env) };
+  if (prefix === "dlat")
+    return { source: prefix, id, run: () => getDoramaStreams(DORAMA_SOURCES.dlat, id, env) };
+  if (prefix === "dplay")
+    return { source: prefix, id, run: () => getDoramaStreams(DORAMA_SOURCES.dplay, id, env) };
   if (prefix === "kplay") return { source: prefix, id, run: () => getKplayStreams(id, env) };
   if (prefix === "dflix") return { source: prefix, id, run: () => getDoramasflixStreams(id, env) };
   if (prefix === "tudorama") return { source: prefix, id, run: () => getTudoramaStreams(id, env) };
   if (prefix === "pandrama") return { source: prefix, id, run: () => getPandramaStreams(id, env) };
   if (prefix === "dyt") return { source: prefix, id, run: () => getDoramaYtStreams(id, env) };
+  if (prefix === "dsub") return { source: prefix, id, run: () => getDoramaSubStreams(id, env) };
   return null;
 }
 
@@ -389,7 +409,7 @@ export default {
       if (!id)
         return json({
           error:
-            "Missing ?id= (e.g. dflix:slug-1x1 or dorama:slug-1x1 or kplay:ep:slug)",
+            "Missing ?id= (e.g. dflix:slug-1x1 or dlat:slug-1x1 or kplay:ep:slug)",
         });
       const t0 = Date.now();
       try {

@@ -13,7 +13,7 @@
 // dflix, /api/v1/value-lists/genres en pandrama, menú en dyt/tudorama).
 //
 // Cobertura de fuentes:
-//   dorama (DoramasLat)  → /genero/{slug}/page/N/  (27/31 términos del
+//   dlat (DoramasLat)    → /genero/{slug}/page/N/  (27/31 términos del
 //              registry; descartados: descargar-peliculas, peliculas-anime,
 //              series-anime, series-turcas). Archivo de género MIXTO
 //              (tvshows+peliculas, 60 posts/página): parseDoramaCards ya
@@ -22,9 +22,9 @@
 //              /genero/comedia/). Dato upstream: romance va solo a
 //              películas hoy (0 tvshows etiquetados) →dropdown honesto
 //              vacío hasta que etiqueten series.
-//   dsub (DoramasSub)    → /genre/{slug}/page/N/   (24/39 términos; sin
+//   dplay (DoramasSub)   → /genre/{slug}/page/N/   (24/39 términos; sin
 //              emision/proximamente, dups EN colapsados al ES). Mixto igual
-//              que dorama. Validado in-vivo (comedia: 2/2 fichas con tag).
+//              que dlat. Validado in-vivo (comedia: 2/2 fichas con tag).
 //   kplay (KDramasPlay)  → /genero/{slug}/ (21/33 términos; sin
 //              canales/series/peliculas, dups EN colapsados). SIN
 //              paginación real: ?page=2 repite página 1 (verificado
@@ -51,13 +51,14 @@
 //              upstream etiqueta series).
 
 type GenreSourceName =
-  | "dorama"
-  | "dsub"
+  | "dlat"
+  | "dplay"
   | "kplay"
   | "dflix"
   | "pandrama"
   | "tudorama"
-  | "dyt";
+  | "dyt"
+  | "dsub";
 
 interface GenreEntry {
   /** Label ES que ve el usuario en el dropdown de Stremio. */
@@ -75,40 +76,43 @@ interface GenreEntry {
 const MASTER_GENRES: GenreEntry[] = [
   { label: "Romance", slugs: 
     { 
-      dorama: "romance", 
-      dsub: "romance", 
+      dlat: "romance", 
+      dplay: "romance", 
       kplay: "romance", 
       dyt: "romance", 
       pandrama: "2", 
       dflix: "romance", 
+      dsub: "romance",
     } 
   },
   { label: "Comedia", slugs:
     { 
-      dorama: "comedia", 
-      dsub: "comedia", 
+      dlat: "comedia", 
+      dplay: "comedia", 
       kplay: "comedia", 
       dyt: "comedia", 
       tudorama: "comedia", 
       pandrama: "4", 
       dflix: "comedia",
+      dsub: "Comedia",
     }
   },
   { label: "Drama", slugs: 
     {
-      dorama: "drama", 
-      dsub: "drama", 
+      dlat: "drama", 
+      dplay: "drama", 
       kplay: "drama",
       dyt: "drama", 
       tudorama: "drama", 
       pandrama: "3", 
       dflix: "drama",
+      dsub: "Drama",
     } 
   },
   { label: "Acción", slugs: 
     {
-      dorama: "accion", 
-      dsub: "accion", 
+      dlat: "accion", 
+      dplay: "accion", 
       kplay: "accion",
       dyt: "accion", 
       tudorama: "accion", 
@@ -118,16 +122,16 @@ const MASTER_GENRES: GenreEntry[] = [
   },
   { label: "Acción y aventura", slugs: 
     {
-      dorama: "action-adventure",
-      dsub: "action-adventure", 
+      dlat: "action-adventure",
+      dplay: "action-adventure", 
       kplay: "action-adventure",
       pandrama: "12",
     } 
   },
   { label: "Aventura", slugs: 
     {
-      dorama: "aventura", 
-      dsub: "aventura", 
+      dlat: "aventura", 
+      dplay: "aventura", 
       kplay: "aventura",
       tudorama: "adventure", 
       pandrama: "11", 
@@ -136,8 +140,8 @@ const MASTER_GENRES: GenreEntry[] = [
   },
   { label: "Misterio", slugs: 
     {
-      dorama: "misterio", 
-      dsub: "misterio", 
+      dlat: "misterio", 
+      dplay: "misterio", 
       kplay: "misterio",
       dyt: "misterio", 
       tudorama: "misterio",
@@ -147,23 +151,23 @@ const MASTER_GENRES: GenreEntry[] = [
   },
   { label: "Suspense", slugs: 
     {
-      dorama: "suspense", 
-      dsub: "suspense", 
+      dlat: "suspense", 
+      dplay: "suspense", 
       kplay: "suspense",
       pandrama: "16",
     } 
   },
   { label: "Thriller", slugs: 
     {
-      dsub: "thriller", 
+      dplay: "thriller", 
       kplay: "thriller",
       dflix: "thriller",
     } 
   },
   { label: "Crimen", slugs: 
     {
-      dorama: "crimen", 
-      dsub: "crimen", 
+      dlat: "crimen", 
+      dplay: "crimen", 
       kplay: "crimen",
       tudorama: "crimen", 
       pandrama: "13", 
@@ -178,13 +182,13 @@ const MASTER_GENRES: GenreEntry[] = [
   },
   { label: "Horror", slugs: 
     { 
-      dsub: "horror" 
+      dplay: "horror" 
     } 
   },
   { label: "Fantasía", slugs: 
     {
-      dorama: "fantasia", 
-      dsub: "fantasia", 
+      dlat: "fantasia", 
+      dplay: "fantasia", 
       kplay: "fantasy",
       dyt: "fantasia", 
       pandrama: "28", 
@@ -193,8 +197,8 @@ const MASTER_GENRES: GenreEntry[] = [
   },
   { label: "Ciencia ficción", slugs: 
     {
-      dorama: "ciencia-ficcion", 
-      dsub: "ciencia-ficcion", 
+      dlat: "ciencia-ficcion", 
+      dplay: "ciencia-ficcion", 
       kplay: "ciencia-ficcion",
       pandrama: "10", 
       dflix: "ciencia-ficcion",
@@ -202,16 +206,16 @@ const MASTER_GENRES: GenreEntry[] = [
   },
   { label: "Sci-Fi y fantasía", slugs: 
     {
-      dorama: "sci-fi-fantasy",
-      dsub: "sci-fi-fantasy",
+      dlat: "sci-fi-fantasy",
+      dplay: "sci-fi-fantasy",
       kplay: "sci-fi-fantasy",
       pandrama: "5",
     } 
   },
   { label: "Histórico", slugs: 
     {
-      dorama: "historia", 
-      dsub: "historia", 
+      dlat: "historia", 
+      dplay: "historia", 
       kplay: "historia",
       dyt: "historico", 
       dflix: "history",
@@ -224,16 +228,16 @@ const MASTER_GENRES: GenreEntry[] = [
   },
   { label: "Melodrama", slugs: 
     {
-      dorama: "soap", 
-      dsub: "soap",
+      dlat: "soap", 
+      dplay: "soap",
       pandrama: "56", 
       dflix: "soap",
     } 
   },
   { label: "Guerra y política", slugs: 
     {
-      dorama: "war-politics",
-      dsub: "war-politics",
+      dlat: "war-politics",
+      dplay: "war-politics",
       kplay: "war-politics",
       pandrama: "7",
       dflix: "politica",
@@ -241,14 +245,14 @@ const MASTER_GENRES: GenreEntry[] = [
   },
   { label: "Bélica", slugs:
     {
-      dorama: "belica",
-      dsub: "belica",
+      dlat: "belica",
+      dplay: "belica",
       dflix: "war",
     }
   },
   { label: "Western", slugs: 
     {
-      dorama: "western",
+      dlat: "western",
       dflix: "western",
     } 
   },
@@ -259,8 +263,8 @@ const MASTER_GENRES: GenreEntry[] = [
   },
   { label: "Familia", slugs: 
     { 
-      dorama: "familia", 
-      dsub: "familia", 
+      dlat: "familia", 
+      dplay: "familia", 
       kplay: "familia",
       tudorama: "familia",
       pandrama: "6",
@@ -269,8 +273,8 @@ const MASTER_GENRES: GenreEntry[] = [
   },
   { label: "Música", slugs: 
     {
-      dorama: "musica", 
-      dsub: "musica", 
+      dlat: "musica", 
+      dplay: "musica", 
       kplay: "music",
       pandrama: "14",
       dflix: "music",
@@ -278,23 +282,23 @@ const MASTER_GENRES: GenreEntry[] = [
   },
   { label: "Documental", slugs: 
     {
-      dorama: "documental", 
-      dsub: "documental", 
+      dlat: "documental", 
+      dplay: "documental", 
       kplay: "documental",
       dflix: "documental",
     } 
   },
   { label: "Reality", slugs: 
     {
-      dorama: "reality", 
-      dsub: "reality", 
+      dlat: "reality", 
+      dplay: "reality", 
       kplay: "reality",
       tudorama: "reality", 
       dflix: "reality",
     } 
   },
   { label: "Talk", slugs: 
-    { dsub: "talk" } 
+    { dplay: "talk" } 
   },
   { label: "Infantil", slugs: 
     {
@@ -304,8 +308,8 @@ const MASTER_GENRES: GenreEntry[] = [
   },
   { label: "Animación", slugs: 
     {
-      dorama: "animacion", 
-      dsub: "animacion",
+      dlat: "animacion", 
+      dplay: "animacion",
       kplay: "animacion",
       pandrama: "33", 
       dflix: "animacion",
@@ -318,12 +322,12 @@ const MASTER_GENRES: GenreEntry[] = [
   },
   { label: "Doramas cortos", slugs: 
     { 
-      dorama: "dramas-cortos"
+      dlat: "dramas-cortos"
     }
   },
   { label: "Duanju", slugs: 
     { 
-      dorama: "duanju"
+      dlat: "duanju"
     } 
   },
   { label: "Girls Love", slugs: 
@@ -333,7 +337,7 @@ const MASTER_GENRES: GenreEntry[] = [
   },
   { label: "Boys Love", slugs: 
     {
-      dorama: "dramas-lgtb",
+      dlat: "dramas-lgtb",
       pandrama: "1",
     } 
   },

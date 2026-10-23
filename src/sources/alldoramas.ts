@@ -7,6 +7,7 @@ import { getDoramasflixCatalog } from "./doramasflix";
 import { getTudoramaCatalog } from "./tudorama";
 import { getPandramaCatalog } from "./pandrama";
 import { getDoramaYtCatalog } from "./doramasyt";
+import { getDoramaSubCatalog } from "./doramasub";
 
 // ─── Catálogo consolidado "Todos los Doramas" ───────────────────────────────
 // Orquesta los catálogos ya existentes en paralelo, fusiona, y de-duplica por
@@ -38,16 +39,17 @@ type SourceSpec = {
 const SOURCES: SourceSpec[] = [
   { name: "dflix", page: 20, fetch: (e) => getDoramasflixCatalog(e) },
   {
-    name: "dorama",
+    name: "dlat",
     page: 45,
-    fetch: (e, env) => getDoramaCatalog(DORAMA_SOURCES.dorama, e, env),
+    fetch: (e, env) => getDoramaCatalog(DORAMA_SOURCES.dlat, e, env),
   },
   {
-    name: "dsub",
+    name: "dplay",
     page: 45,
-    fetch: (e, env) => getDoramaCatalog(DORAMA_SOURCES.dsub, e, env),
+    fetch: (e, env) => getDoramaCatalog(DORAMA_SOURCES.dplay, e, env),
   },
   { name: "dyt", page: 24, fetch: (e, env) => getDoramaYtCatalog(e, env) },
+  { name: "dsub", page: 24, fetch: (e, env) => getDoramaSubCatalog(e, env) },
   { name: "tudorama", page: 24, fetch: (e, env) => getTudoramaCatalog(e, env) },
   { name: "kplay", page: 24, fetch: (e, env) => getKplayCatalog(e, env) },
   { name: "pandrama", page: 48, fetch: (e, env) => getPandramaCatalog(e, env) },
@@ -77,7 +79,7 @@ export async function getAllAlldoramasCatalog(
   const perSource = await Promise.all(
     SOURCES.map(async (src) => {
       // Género solo en fuentes que lo tienen en la lista maestra canónica
-      // (src/genres.ts): skip de las demás — dorama/dsub/kplay ahora SÍ
+      // (src/genres.ts): skip de las demás — dlat/dplay/kplay ahora SÍ
       // integran género (Opción B: archivos de término upstream, aunque
       // algunos devuelvan vacío hoy).
       if (extra.genre && !genreSlug(src.name, extra.genre)) return [];
