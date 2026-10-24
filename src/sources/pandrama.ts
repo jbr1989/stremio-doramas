@@ -1,4 +1,4 @@
-import { Env } from "../types";
+import { Env, MetaPreview } from "../types";
 import { genreLabelForMeta, genreSlug } from "../genres";
 import {
   cacheGet,
@@ -14,7 +14,7 @@ import {
   toMetaPreview,
 } from "../utils";
 import { extractDood, extractMp4upload } from "../extractors";
-
+import { SourceBase } from "./sourceBase";
 const PANDRAMA_BASE = "https://www.pandrama.tv";
 
 // /explorar acepta filters=<encodeURIComponent(btoa(JSON))>. mainTypes id 2
@@ -41,7 +41,7 @@ const PANDRAMA_PAGE_SIZE = 48;
 
 // El fan-out de src/index.ts consulta las demás fuentes con un slug canónico
 // "titulo-NxM", pero los IDs pandrama son videos (`pandrama:{titleId}:ep:{videoId}`).
-// Esta función resuelve el video a episodio vía /ver/{videoId} (que trae
+// Resuelve el video a episodio vía /ver/{videoId} (que trae
 // episodePage.title.slug y episode.season_number/episode_number) y cachea el
 // resultado en KV: acierto 24h, fallo 15 min (para no martillar /ver en bucle).
 const PANDRAMA_FANOUT_TTL = 24 * 60 * 60;
@@ -112,66 +112,350 @@ function isPandramaShort(item: any): boolean {
   return String(item?.main_type || "").toLowerCase() === "shorts";
 }
 
+/** Pandrama: SPA Laravel con `window.bootstrapData` — NO es scraping de
+ * grilla ni usa el esqueleto HTML de la base: los tres templates son
+ * override completo. La clase aporta identidad + los overrides delegando el
+ * desarmado de bootstrapData (fetchPandramaData). */
+class PandramaSource extends SourceBase {
+  get prefix() {
+    return "pandrama";
+  }
+  get label() {
+    return "Pandrama";
+  }
+
+  // No aplican: esta fuente no baja páginas HTML de episodio ni extrae
+  // embeds del player (los streams vienen de bootstrapData).
+  protected buildPageUrl(slug: string): string {
+    return slug;
+  }
+
+  protected extractEmbeds(): Promise<string[]> {
+    return Promise.resolve([]);
+  }
+
+  // ── Catálogo (override: search / genre-channel / directorio bootstrapData) ──
+  override async getCatalog(
+    extra: Record<string, string>,
+    env?: Env
+  ): Promise<{ metas: MetaPreview[] }> {
+    const q = (extra.search || "").trim();
+    if (q) {
+      const data = await fetchPandramaData(`/search/${encodeURIComponent(q)}`, env);
+      const results = data?.loaders?.searchPage?.results || [];
+      return this.toMetas(results.filter((item: any) => !isPandramaShort(item)));
+    }
+    // Género (label ES → id pandrama vía la lista maestra, src/genres.ts):
+    // el filtro genres=[id] hasAll devuelve el catálogo propio del género
+    // (validado in-vivo); paginado y shape idénticos al directorio.
+    const g = (extra.genre || "").trim();
+    if (g) {
+      const genreId = genreSlug("pandrama", g);
+      if (!genreId) return { metas: [] };
+      const gpage = Math.floor(Number(extra.skip || 0) / PANDRAMA_PAGE_SIZE) + 1;
+      const data = await fetchPandramaData(
+        `${pandramaExplorePath([Number(genreId)])}&page=${gpage}`,
+        env
+      );
+      return this.toMetas(
+        (data?.loaders?.channelPage?.channel?.content?.data || []).filter(
+          (item: any) => !isPandramaShort(item)
+        )
+      );
+    }
+    const page = Math.floor(Number(extra.skip || 0) / PANDRAMA_PAGE_SIZE) + 1;
+    const data = await fetchPandramaData(
+      `${pandramaExplorePath()}&page=${page}`,
+      env
+    );
+    return this.toMetas(
+      (data?.loaders?.channelPage?.channel?.content?.data || []).filter(
+        (item: any) => !isPandramaShort(item)
+      )
+    );
+  }
+
+  private toMetas(items: any[]) {
+    return {
+      metas: items.map((item: any) =>
+        toMetaPreview({
+          id: `pandrama:${item.id}:${item.slug || "dorama"}`,
+          name: decodeEntities(item.name || "Dorama"),
+          poster: normalizePoster(item.poster),
+        })
+      ),
+    };
+  }
+
+  // ── Meta (override: bootstrapData — titlePage.title + episodes.map) ──
+  override async getMeta(
+    id: string,
+    tmdbKey: string,
+    env?: Env
+  ): Promise<{ meta: unknown }> {
+    // id format: pandrama:{titleId}:{slug} or pandrama:{titleId}
+    const raw = id.slice("pandrama:".length);
+    const parts = raw.split(":");
+    const titleId = parts[0];
+    const slug = parts[1] || "dorama";
+
+    const data = await fetchPandramaData(`/titulo/${titleId}/${slug}`, env);
+    const titlePage = data?.loaders?.titlePage;
+    if (!titlePage || !titlePage.title) {
+      return { meta: null };
+    }
+
+    const titleObj = titlePage.title;
+    const name = decodeEntities(titleObj.name || "Dorama");
+    const poster = normalizePoster(titleObj.poster);
+    const description = decodeEntities(titleObj.description || "");
+    const episodesData = titlePage.episodes?.data || [];
+
+    // Géneros de la ficha: titlePage.title.genres llega inline en el propio
+    // bootstrapData con {id, name, display_name}. La lista maestra registra
+    // los slugs pandrama como IDs numéricos (src/genres.ts), así que id=12 →
+    // "Acción y aventura" canónica; los no registrados muestran su
+    // display_name tal cual. Dedup por label, en orden de llegada de la API.
+    const genres: string[] = [];
+    const gSeen = new Set<string>();
+    for (const g of titleObj.genres || []) {
+      if (!g?.id && g?.id !== 0) continue;
+      const label = genreLabelForMeta(
+        "pandrama",
+        String(g.id),
+        g.display_name || g.name
+      );
+      if (!label || gSeen.has(label)) continue;
+      gSeen.add(label);
+      genres.push(label);
+    }
+
+    const videos: any[] = [];
+    if (Array.isArray(episodesData) && episodesData.length > 0) {
+      episodesData.forEach((ep: any) => {
+        const s = ep.season_number || 1;
+        const e = ep.episode_number || 1;
+        const videoId = ep.primary_video?.id || ep.id;
+        videos.push({
+          id: `pandrama:${titleObj.id}:ep:${videoId}`,
+          title: `T${s} · Episodio ${e}`,
+          season: s,
+          episode: e,
+          // El bootstrapData trae el still de TMDB por episodio; si falta,
+          // usa el póster de la serie.
+          thumbnail: normalizePoster(ep.poster) || poster,
+        });
+      });
+    } else if (titleObj.primary_video?.id) {
+      videos.push({
+        id: `pandrama:${titleObj.id}:ep:${titleObj.primary_video.id}`,
+        title: name,
+        season: 1,
+        episode: 1,
+      });
+    }
+
+    const tmdb = await fetchTmdb(name, tmdbKey);
+
+    return {
+      meta: {
+        id,
+        type: "series",
+        name,
+        poster: tmdb?.poster || poster,
+        background: tmdb?.background || poster,
+        description: tmdb?.description || description,
+        posterShape: "poster",
+        releaseInfo: tmdb?.year || (titleObj.year ? String(titleObj.year) : ""),
+        genres,
+        videos,
+      },
+    };
+  }
+
+  // ── Streams (override completo: alternative_videos, no es HTML embeds) ──
+  override async getStreams(rawId: string, env: Env) {
+    let videoId: string | null = null;
+    let epSlug = "";
+
+    if (rawId.startsWith("pandrama:")) {
+      const content = rawId.slice("pandrama:".length);
+      if (content.includes(":ep:")) {
+        videoId = content.split(":ep:")[1];
+      } else {
+        epSlug = content;
+      }
+    } else {
+      epSlug = rawId;
+    }
+
+    // Si no hay videoId pero hay epSlug (ej: tu-taxi-personal-1x1 desde
+    // fan-out de otra fuente): resolver video vía búsqueda + /titulo.
+    if (!videoId && epSlug) {
+      const sxeM = epSlug.match(/^(.*?)-(\d+)x(\d+)$/);
+      if (sxeM) {
+        const seriesSlug = sxeM[1];
+        const targetS = parseInt(sxeM[2], 10);
+        const targetE = parseInt(sxeM[3], 10);
+
+        const searchData = await fetchPandramaData(
+          `/search/${encodeURIComponent(seriesSlug.replace(/-/g, " "))}`,
+          env
+        );
+        const results = searchData?.loaders?.searchPage?.results || [];
+        const best = results[0];
+        if (best?.id) {
+          const titleData = await fetchPandramaData(
+            `/titulo/${best.id}/${best.slug || "dorama"}`,
+            env
+          );
+          const episodes = titleData?.loaders?.titlePage?.episodes?.data || [];
+          const ep = episodes.find(
+            (e: any) =>
+              (e.season_number || 1) === targetS &&
+              (e.episode_number || 1) === targetE
+          );
+          if (ep?.primary_video?.id) videoId = String(ep.primary_video.id);
+        }
+      }
+    }
+
+    if (!videoId) return { streams: [] };
+
+    const data = await fetchPandramaData(`/ver/${videoId}`, env);
+    const epPage = data?.loaders?.episodePage;
+    if (!epPage) return { streams: [] };
+
+    const altVideos: any[] = epPage.alternative_videos || [];
+    if (altVideos.length === 0 && epPage.current_video) {
+      altVideos.push(epPage.current_video);
+    }
+
+    const denoBase = denoBaseFromEnv(env);
+    const { add, streams } = makeStreamDeduper();
+
+    for (const v of altVideos) {
+      let src = v.src || "";
+      if (!src) continue;
+      if (src.startsWith("/")) src = `${PANDRAMA_BASE}${src}`;
+
+      const serverName = v.server_info?.display_name || v.name || "Pandrama";
+
+      // Direct HLS stream
+      if (
+        src.includes(".m3u8") ||
+        v.type === "shaka" ||
+        src.includes("pandrama.tv/hls")
+      ) {
+        add({
+          url: src,
+          name: "Pandrama HLS",
+          title: `▶ ${serverName} — Pandrama`,
+          behaviorHints: {
+            notWebReady: false,
+            filename: "episode.m3u8",
+            bingeGroup: "pandrama-hls",
+          },
+        });
+        add({
+          externalUrl: src,
+          name: "Pandrama 🌐",
+          title: `🌐 ${serverName} (HLS Directo) — Pandrama`,
+        });
+        continue;
+      }
+
+      // Família Dood: MP4 vía pass_md5, relay /mp4 en Deno
+      if (DOOD_HOSTS_RE.test(src)) {
+        const u = await extractDood(src, env);
+        if (u && denoBase) {
+          const doodOrigin = (() => {
+            try {
+              return new URL(src).origin;
+            } catch {
+              return "https://playmogo.com/";
+            }
+          })();
+          add({
+            url: `${denoBase}/mp4?url=${encodeURIComponent(u)}&r=${encodeURIComponent(
+              doodOrigin
+            )}`,
+            name: "Pandrama MP4",
+            title: `▶ dood (${serverName}) — Pandrama`,
+            behaviorHints: {
+              notWebReady: false,
+              filename: "episode.mp4",
+              bingeGroup: "pandrama-dood",
+            },
+          });
+        } else {
+          add({
+            externalUrl: src,
+            name: "Pandrama 🌐",
+            title: `🌐 ${serverName} — Pandrama`,
+          });
+        }
+        continue;
+      }
+
+      // StreamWish & mirrors (sincronizado con deno/fetch.ts)
+      if (STREAMWISH_HOSTS_RE.test(src)) {
+        if (denoBase) {
+          add({
+            url: `${denoBase}/streamwish?url=${encodeURIComponent(src)}`,
+            name: "Pandrama HLS",
+            title: `▶ ${serverName} — Pandrama`,
+            behaviorHints: {
+              notWebReady: false,
+              filename: "episode.m3u8",
+              bingeGroup: "pandrama-streamwish",
+            },
+          });
+        } else {
+          add({
+            externalUrl: src,
+            name: "Pandrama 🌐",
+            title: `🌐 ${serverName} — Pandrama`,
+          });
+        }
+        continue;
+      }
+
+      if (src.includes("mp4upload.com")) {
+        const u = await extractMp4upload(src);
+        if (u) {
+          add({
+            url: u,
+            name: "Pandrama MP4",
+            title: `▶ mp4upload — Pandrama (${serverName})`,
+            behaviorHints: {
+              notWebReady: false,
+              filename: "episode.mp4",
+              bingeGroup: "pandrama-mp4upload",
+            },
+          });
+          continue;
+        }
+      }
+
+      add({
+        externalUrl: src,
+        name: "Pandrama 🌐",
+        title: `🌐 ${serverName} — Pandrama`,
+      });
+    }
+
+    return { streams };
+  }
+}
+
+export const pandramaSource = new PandramaSource();
+
 export async function getPandramaCatalog(
   extra: Record<string, string>,
   env?: Env
 ) {
-  const q = (extra.search || "").trim();
-  if (q) {
-    const data = await fetchPandramaData(`/search/${encodeURIComponent(q)}`, env);
-    const results = data?.loaders?.searchPage?.results || [];
-    const items = results.filter((item: any) => !isPandramaShort(item));
-    const metas = items.map((item: any) =>
-      toMetaPreview({
-        id: `pandrama:${item.id}:${item.slug || "dorama"}`,
-        name: decodeEntities(item.name || "Dorama"),
-        poster: normalizePoster(item.poster),
-      })
-    );
-    return { metas };
-  }
-
-  // Género (label ES → id pandrama vía la lista maestra, src/genres.ts).
-  // El filtro genres=[id] hasAll devuelve el catálogo propio del género
-  // (validado in-vivo); paginado y shape de respuesta idénticos al directorio.
-  const g = (extra.genre || "").trim();
-  if (g) {
-    const genreId = genreSlug("pandrama", g);
-    if (!genreId) return { metas: [] };
-    const gpage = Math.floor(Number(extra.skip || 0) / PANDRAMA_PAGE_SIZE) + 1;
-    const data = await fetchPandramaData(
-      `${pandramaExplorePath([Number(genreId)])}&page=${gpage}`,
-      env
-    );
-    const items = (
-      data?.loaders?.channelPage?.channel?.content?.data || []
-    ).filter((item: any) => !isPandramaShort(item));
-    const metas = items.map((item: any) =>
-      toMetaPreview({
-        id: `pandrama:${item.id}:${item.slug || "dorama"}`,
-        name: decodeEntities(item.name || "Dorama"),
-        poster: normalizePoster(item.poster),
-      })
-    );
-    return { metas };
-  }
-
-  const page = Math.floor(Number(extra.skip || 0) / PANDRAMA_PAGE_SIZE) + 1;
-  const data = await fetchPandramaData(
-    `${pandramaExplorePath()}&page=${page}`,
-    env
-  );
-  const items = (data?.loaders?.channelPage?.channel?.content?.data || []).filter(
-    (item: any) => !isPandramaShort(item)
-  );
-  const metas = items.map((item: any) =>
-    toMetaPreview({
-      id: `pandrama:${item.id}:${item.slug || "dorama"}`,
-      name: decodeEntities(item.name || "Dorama"),
-      poster: normalizePoster(item.poster),
-    })
-  );
-  return { metas };
+  return pandramaSource.getCatalog(extra, env);
 }
 
 export async function getPandramaMeta(
@@ -179,256 +463,9 @@ export async function getPandramaMeta(
   tmdbKey: string,
   env?: Env
 ) {
-  // id format: pandrama:{titleId}:{slug} or pandrama:{titleId}
-  const raw = id.slice("pandrama:".length);
-  const parts = raw.split(":");
-  const titleId = parts[0];
-  const slug = parts[1] || "dorama";
-
-  const data = await fetchPandramaData(`/titulo/${titleId}/${slug}`, env);
-  const titlePage = data?.loaders?.titlePage;
-  if (!titlePage || !titlePage.title) {
-    return { meta: null };
-  }
-
-  const titleObj = titlePage.title;
-  const name = decodeEntities(titleObj.name || "Dorama");
-  const poster = normalizePoster(titleObj.poster);
-  const description = decodeEntities(titleObj.description || "");
-  const episodesData = titlePage.episodes?.data || [];
-
-  // Géneros de la ficha: titlePage.title.genres llega inline en el propio
-  // bootstrapData con {id, name, display_name} (no hay scraping ni llamadas
-  // extra: el /api/v1/value-lists/genres existe pero es innecesario). La
-  // lista maestra registra los slugs pandrama como IDs numéricos
-  // (src/genres.ts), así que id=12 → "Acción y aventura" canónica mejor que
-  // el "Action & Adventure" de la API; los no registrados muestran su
-  // display_name tal cual (decisión del usuario). Dedup por label, en orden
-  // de llegada de la API.
-  const genres: string[] = [];
-  const gSeen = new Set<string>();
-  for (const g of titleObj.genres || []) {
-    if (!g?.id && g?.id !== 0) continue;
-    const label = genreLabelForMeta(
-      "pandrama",
-      String(g.id),
-      g.display_name || g.name
-    );
-    if (!label || gSeen.has(label)) continue;
-    gSeen.add(label);
-    genres.push(label);
-  }
-
-  const videos: any[] = [];
-  if (Array.isArray(episodesData) && episodesData.length > 0) {
-    episodesData.forEach((ep: any) => {
-      const s = ep.season_number || 1;
-      const e = ep.episode_number || 1;
-      const videoId = ep.primary_video?.id || ep.id;
-      videos.push({
-        id: `pandrama:${titleObj.id}:ep:${videoId}`,
-        title: `T${s} · Episodio ${e}`,
-        season: s,
-        episode: e,
-        // El bootstrapData trae el still de TMDB por episodio; si falta, usa
-        // el póster de la serie.
-        thumbnail: normalizePoster(ep.poster) || poster,
-      });
-    });
-  } else if (titleObj.primary_video?.id) {
-    videos.push({
-      id: `pandrama:${titleObj.id}:ep:${titleObj.primary_video.id}`,
-      title: name,
-      season: 1,
-      episode: 1,
-    });
-  }
-
-  const tmdb = await fetchTmdb(name, tmdbKey);
-
-  return {
-    meta: {
-      id,
-      type: "series",
-      name,
-      poster: tmdb?.poster || poster,
-      background: tmdb?.background || poster,
-      description: tmdb?.description || description,
-      posterShape: "poster",
-      releaseInfo: tmdb?.year || (titleObj.year ? String(titleObj.year) : ""),
-      genres,
-      videos,
-    },
-  };
+  return pandramaSource.getMeta(id, tmdbKey, env);
 }
 
-export async function getPandramaStreams(
-  rawId: string,
-  env: Env
-) {
-  let videoId: string | null = null;
-  let epSlug = "";
-
-  if (rawId.startsWith("pandrama:")) {
-    const content = rawId.slice("pandrama:".length);
-    if (content.includes(":ep:")) {
-      videoId = content.split(":ep:")[1];
-    } else {
-      epSlug = content;
-    }
-  } else {
-    epSlug = rawId;
-  }
-
-  // Si no tenemos videoId pero tenemos epSlug (ej: tu-taxi-personal-1x1 desde fan-out)
-  if (!videoId && epSlug) {
-    const sxeM = epSlug.match(/^(.*?)-(\d+)x(\d+)$/);
-    if (sxeM) {
-      const seriesSlug = sxeM[1];
-      const targetS = parseInt(sxeM[2], 10);
-      const targetE = parseInt(sxeM[3], 10);
-
-      // Búsqueda por slug o título
-      const searchData = await fetchPandramaData(`/search/${encodeURIComponent(seriesSlug.replace(/-/g, " "))}`, env);
-      const results = searchData?.loaders?.searchPage?.results || [];
-      const best = results[0];
-      if (best?.id) {
-        const titleData = await fetchPandramaData(`/titulo/${best.id}/${best.slug || "dorama"}`, env);
-        const episodes = titleData?.loaders?.titlePage?.episodes?.data || [];
-        const ep = episodes.find(
-          (e: any) => (e.season_number || 1) === targetS && (e.episode_number || 1) === targetE
-        );
-        if (ep?.primary_video?.id) {
-          videoId = String(ep.primary_video.id);
-        }
-      }
-    }
-  }
-
-  if (!videoId) {
-    return { streams: [] };
-  }
-
-  const data = await fetchPandramaData(`/ver/${videoId}`, env);
-  const epPage = data?.loaders?.episodePage;
-  if (!epPage) return { streams: [] };
-
-  const altVideos: any[] = epPage.alternative_videos || [];
-  if (altVideos.length === 0 && epPage.current_video) {
-    altVideos.push(epPage.current_video);
-  }
-
-  const denoBase = denoBaseFromEnv(env);
-
-  const { add, streams } = makeStreamDeduper();
-
-  for (const v of altVideos) {
-    let src = v.src || "";
-    if (!src) continue;
-    if (src.startsWith("/")) src = `${PANDRAMA_BASE}${src}`;
-
-    const serverName = v.server_info?.display_name || v.name || "Pandrama";
-
-    // Direct HLS stream
-    if (src.includes(".m3u8") || v.type === "shaka" || src.includes("pandrama.tv/hls")) {
-      add({
-        url: src,
-        name: "Pandrama HLS",
-        title: `▶ ${serverName} — Pandrama`,
-        behaviorHints: {
-          notWebReady: false,
-          filename: "episode.m3u8",
-          bingeGroup: "pandrama-hls",
-        },
-      });
-      add({
-        externalUrl: src,
-        name: "Pandrama 🌐",
-        title: `🌐 ${serverName} (HLS Directo) — Pandrama`,
-      });
-      continue;
-    }
-
-    // Família Dood (do7go/playmogo/dood*): MP4 vía pass_md5, relay /mp4 en Deno
-    if (DOOD_HOSTS_RE.test(src)) {
-      const u = await extractDood(src, env);
-      if (u && denoBase) {
-        const doodOrigin = (() => {
-          try {
-            return new URL(src).origin;
-          } catch {
-            return "https://playmogo.com/";
-          }
-        })();
-        add({
-          url: `${denoBase}/mp4?url=${encodeURIComponent(u)}&r=${encodeURIComponent(
-            doodOrigin
-          )}`,
-          name: "Pandrama MP4",
-          title: `▶ dood (${serverName}) — Pandrama`,
-          behaviorHints: {
-            notWebReady: false,
-            filename: "episode.mp4",
-            bingeGroup: "pandrama-dood",
-          },
-        });
-      } else {
-        add({
-          externalUrl: src,
-          name: "Pandrama 🌐",
-          title: `🌐 ${serverName} — Pandrama`,
-        });
-      }
-      continue;
-    }
-
-    // StreamWish or mirrors (STREAMWISH_HOSTS_RE — sincronizado con deno/fetch.ts)
-    if (STREAMWISH_HOSTS_RE.test(src)) {
-      if (denoBase) {
-        add({
-          url: `${denoBase}/streamwish?url=${encodeURIComponent(src)}`,
-          name: "Pandrama HLS",
-          title: `▶ ${serverName} — Pandrama`,
-          behaviorHints: {
-            notWebReady: false,
-            filename: "episode.m3u8",
-            bingeGroup: "pandrama-streamwish",
-          },
-        });
-      } else {
-        add({
-          externalUrl: src,
-          name: "Pandrama 🌐",
-          title: `🌐 ${serverName} — Pandrama`,
-        });
-      }
-      continue;
-    }
-
-    if (src.includes("mp4upload.com")) {
-      const u = await extractMp4upload(src);
-      if (u) {
-        add({
-          url: u,
-          name: "Pandrama MP4",
-          title: `▶ mp4upload — Pandrama (${serverName})`,
-          behaviorHints: {
-            notWebReady: false,
-            filename: "episode.mp4",
-            bingeGroup: "pandrama-mp4upload",
-          },
-        });
-        continue;
-      }
-    }
-
-    // Default externalUrl fallback for any other embed (bysekoze, lulustream, vk, etc)
-    add({
-      externalUrl: src,
-      name: "Pandrama 🌐",
-      title: `🌐 ${serverName} — Pandrama`,
-    });
-  }
-
-  return { streams };
+export async function getPandramaStreams(rawId: string, env: Env) {
+  return pandramaSource.getStreams(rawId, env);
 }

@@ -1,184 +1,10 @@
 import { Env } from "../types";
-import { genreSlug } from "../genres";
-import { CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchHtml, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
-import { addEmbedStreams } from "../extractors";
+import { CHROME_UA, cleanTitle, decodeEntities, fetchHtml, netFetch } from "../utils";
 import { genresFromBadgeBlock } from "./dooplay";
-import { resolveEpisodeSlug, searchVariants } from "./slugmap";
+import { fetchWithSlugRescue, resolveEpisodeSlug, searchVariants } from "./slugmap";
+import { SourceBase, SourceCard, SourceEpisode } from "./sourceBase";
 
 const DORAMASYT_BASE = "https://www.doramasyt.com";
-
-function parseDoramaYtCards(html: string) {
-  const results: { id: string; name: string; poster: string }[] = [];
-  const seen = new Set<string>();
-
-  const push = (slug: string, rawPoster: string, rawName: string) => {
-    if (!slug || seen.has(slug)) return;
-    seen.add(slug);
-    const poster = rawPoster.startsWith("http")
-      ? rawPoster
-      : rawPoster
-      ? `${DORAMASYT_BASE}${rawPoster}`
-      : "";
-    results.push({
-      id: `dyt:${slug}`,
-      name: cleanTitle(rawName) || slug,
-      poster,
-    });
-  };
-
-  for (const m of html.matchAll(
-    /\/dorama\/([a-z0-9-]+)"[\s\S]*?data-src="([^"]+)"[\s\S]*?<h3[^>]*>([\s\S]*?)<\/h3>/gi
-  )) {
-    push(m[1], m[2], m[3].trim());
-  }
-
-  for (const m of html.matchAll(
-    /\/dorama\/([a-z0-9-]+)"[\s\S]*?alt="Ver\s+([^"]+?)\s+online[\s\S]*?data-src="([^"]+)"/gi
-  )) {
-    push(m[1], m[3], m[2].trim());
-  }
-
-  return results.slice(0, 100);
-}
-
-export async function getDoramaYtCatalog(
-  extra: Record<string, string>,
-  env?: Env
-) {
-  const q = (extra.search || "").trim();
-  if (q) {
-    let html = "";
-    try {
-      html = await fetchHtml(`${DORAMASYT_BASE}/buscar?q=${encodeURIComponent(q)}`, env);
-    } catch {
-      html = "";
-    }
-    if (!html || !html.includes("/dorama/")) {
-      try {
-        html = await fetchHtml(`${DORAMASYT_BASE}/doramas`, env);
-      } catch {
-        html = "";
-      }
-    }
-    const cards = parseDoramaYtCards(html);
-    const filtered = q
-      ? cards.filter(
-          (c) =>
-            c.name.toLowerCase().includes(q.toLowerCase()) ||
-            c.id.toLowerCase().includes(q.toLowerCase())
-        )
-      : cards;
-    return { metas: (filtered.length > 0 ? filtered : cards).map(toMetaPreview) };
-  }
-
-  // Género (label ES → slug vía la lista maestra canónica, src/genres.ts).
-  // doramasyt pagina sus archivos de género con ?p=N (el /page/N/ da 404 y
-  // ?page= redirige a ?p=): usamos ?p= directo.
-  const g = (extra.genre || "").trim();
-  if (g) {
-    const slug = genreSlug("dyt", g);
-    if (!slug) return { metas: [] };
-    const gpage = Math.floor(parseInt(extra.skip || "0", 10) / 24) + 1;
-    const gpath =
-      gpage > 1
-        ? `${DORAMASYT_BASE}/genero/${slug}?p=${gpage}`
-        : `${DORAMASYT_BASE}/genero/${slug}`;
-    let ghtml = "";
-    try {
-      ghtml = await fetchHtml(gpath, env);
-    } catch {
-      ghtml = "";
-    }
-    return { metas: parseDoramaYtCards(ghtml).map(toMetaPreview) };
-  }
-
-  const page = Math.floor(parseInt(extra.skip || "0", 10) / 24) + 1;
-  const path = page > 1 ? `${DORAMASYT_BASE}/doramas?p=${page}` : `${DORAMASYT_BASE}/doramas`;
-  let html = "";
-  try {
-    html = await fetchHtml(path, env);
-  } catch {
-    html = "";
-  }
-  return {
-    metas: parseDoramaYtCards(html).map(toMetaPreview),
-  };
-}
-
-export async function getDoramaYtMeta(
-  id: string,
-  tmdbKey: string,
-  env?: Env
-) {
-  const slug = id.replace("dyt:", "");
-  let html = "";
-  try {
-    html = await fetchHtml(`${DORAMASYT_BASE}/dorama/${slug}`, env);
-  } catch {
-    return { meta: null };
-  }
-
-  const name =
-    cleanTitle(
-      html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1] ||
-        html.match(/<meta[^>]+property="og:title"[^>]+content="([^"]+)"/i)?.[1] ||
-        html.match(/<title>([\s\S]*?)<\/title>/i)?.[1] ||
-        slug
-    ) || slug;
-
-  const poster =
-    html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/i)?.[1] ||
-    html.match(/data-src=["'](https?:\/\/[^"'\s]+\/thumbs\/imagen\/[^"'\s]+)["']/i)?.[1] ||
-    "";
-
-  const description = decodeEntities(
-    html.match(/<meta[^>]+property="og:description"[^>]+content="([^"]+)"/i)?.[1] ||
-      html.match(/<p>([\s\S]*?)<\/p>/i)?.[1] ||
-      ""
-  )
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  const ep1Match = html.match(/\/ver\/([a-z0-9-]+-episodio-)1["'\s>]/i);
-  const baseEpSlug = ep1Match ? ep1Match[1] : `${slug.replace(/-sub-espanol$/, "")}-episodio-`;
-
-  // Géneros de la ficha: badges del bloque lh-lg (server-rendered, base
-  // /genero/ sin slash final). Label canónico (src/genres.ts) o texto del
-  // sitio tal cual (dooplay.ts).
-  const genres = genresFromBadgeBlock(html, "genero", "dyt");
-
-  const tmdb = await fetchTmdb(name, tmdbKey);
-  const epCount = tmdb?.year ? 24 : 32;
-
-  const videos = [];
-  for (let i = 1; i <= epCount; i++) {
-    videos.push({
-      id: `dyt:${baseEpSlug}${i}`,
-      title: `T1 · Episodio ${i}`,
-      season: 1,
-      episode: i,
-      // doramasyt no expone stills por episodio (su listado real llega por
-      // AJAX con sesión) — caemos al póster de la serie.
-      thumbnail: tmdb?.poster || poster,
-    });
-  }
-
-  return {
-    meta: {
-      id,
-      type: "series",
-      name,
-      poster: tmdb?.poster || poster,
-      background: tmdb?.background || poster,
-      description: tmdb?.description || description,
-      posterShape: "poster",
-      releaseInfo: tmdb?.year || "",
-      genres,
-      videos,
-    },
-  };
-}
 
 // DoramasYT emite slugs "titulo(-latino)?-episodio-N"; las demás fuentes exigen
 // "titulo-NxM" (guard de doramas.ts y parseSxE de slugmap.ts). Convierte el slug
@@ -234,76 +60,259 @@ async function resolveDytEpisodeSlug(
   );
 }
 
-export async function getDoramaYtStreams(
-  rawId: string,
-  env: Env
-) {
-  const epSlug = rawId.replace("dyt:", "");
-  let html = "";
-  try {
-    html = await fetchHtml(`${DORAMASYT_BASE}/ver/${epSlug}`, env);
-  } catch {
-    html = "";
+class DoramaYtSource extends SourceBase {
+  get prefix() {
+    return "dyt";
   }
-  if (!html) {
-    const resolved = await resolveDytEpisodeSlug(epSlug, env);
-    if (resolved && resolved !== epSlug) {
-      console.log(`[dyt] slug resuelto: ${epSlug} → ${resolved}`);
+  get label() {
+    return "DoramasYT";
+  }
+
+  // ── Streams ──
+  protected buildPageUrl(slug: string): string {
+    return `${DORAMASYT_BASE}/ver/${slug}`;
+  }
+
+  // Tokens data-player de los botones → GET /reproductor?video=token → iframe.
+  protected async extractEmbeds(
+    html: string,
+    slug: string
+  ): Promise<string[]> {
+    const playerTokens: { token: string; server: string }[] = [];
+    for (const m of html.matchAll(
+      /<button[^>]*data-player="([^"]+)"[^>]*>(.*?)<\/button>/gi
+    )) {
+      playerTokens.push({ token: m[1], server: m[2].trim() });
+    }
+    if (playerTokens.length === 0) return [];
+
+    const embeds = await Promise.all(
+      playerTokens.map(async (p) => {
+        try {
+          const r = await netFetch(
+            "direct",
+            `${DORAMASYT_BASE}/reproductor?video=${encodeURIComponent(p.token)}`,
+            {
+              headers: {
+                "User-Agent": CHROME_UA,
+                Referer: `${DORAMASYT_BASE}/ver/${slug}`,
+              },
+              signal: AbortSignal.timeout(9000),
+            }
+          );
+          if (!r.ok) return null;
+          const pageHtml = await r.text();
+          const iframeSrc =
+            pageHtml.match(/<iframe[^>]+src=["']([^"']+)["']/i)?.[1];
+          if (!iframeSrc) return null;
+          let url = iframeSrc.trim();
+          if (url.startsWith("//")) url = `https:${url}`;
+          return /^https?:\/\//i.test(url) ? url : null;
+        } catch {
+          return null;
+        }
+      })
+    );
+    return embeds.filter((u): u is string => !!u);
+  }
+
+  // El rescate de slug NO es común (SourceBase no lo hace): decisión de
+  // esta fuente (su /ver/ es sensible a slugs envejecidos del catálogo).
+  protected override async fetchEpisodePage(
+    slug: string,
+    env: Env
+  ): Promise<string> {
+    return fetchWithSlugRescue(
+      (s) => `${DORAMASYT_BASE}/ver/${s}`,
+      slug,
+      env,
+      (u, e) => this.fetchPage(u, e),
+      resolveDytEpisodeSlug,
+      this.prefix
+    );
+  }
+
+  // ── Catálogo ──
+  // doramasyt pagina sus archivos (género y directorio) con ?p=N — el
+  // /page/N/ da 404 y ?page= redirige a ?p=. (pageSize = 24, el default.)
+
+  protected buildSearchUrl(q: string): string {
+    return `${DORAMASYT_BASE}/buscar?q=${encodeURIComponent(q)}`;
+  }
+
+  protected buildGenreUrl(gslug: string, page: number): string {
+    return page > 1
+      ? `${DORAMASYT_BASE}/genero/${gslug}?p=${page}`
+      : `${DORAMASYT_BASE}/genero/${gslug}`;
+  }
+
+  protected buildListUrl(page: number): string {
+    return page > 1 ? `${DORAMASYT_BASE}/doramas?p=${page}` : `${DORAMASYT_BASE}/doramas`;
+  }
+
+  // /buscar?q= a veces no encuentra nada server-side: fallback al listado
+  // (el filtro local de filterCards recorta a lo relevante). En la base
+  // estricta no hay hook de fetch de búsqueda: se absorbe aquí reintentando
+  // solo cuando la URL es de búsqueda y la página vino sin tarjetas.
+  protected override async fetchPage(url: string, env: Env): Promise<string> {
+    const html = await super.fetchPage(url, env);
+    if (
+      url.startsWith(`${DORAMASYT_BASE}/buscar`) &&
+      html &&
+      !html.includes("/dorama/")
+    ) {
       try {
-        html = await fetchHtml(`${DORAMASYT_BASE}/ver/${resolved}`, env);
+        return await fetchHtml(`${DORAMASYT_BASE}/doramas`, env);
       } catch {
-        html = "";
+        return html;
       }
     }
-  }
-  if (!html) return { streams: [] };
-
-  const playerTokens: { token: string; server: string }[] = [];
-  for (const m of html.matchAll(/<button[^>]*data-player="([^"]+)"[^>]*>(.*?)<\/button>/gi)) {
-    playerTokens.push({ token: m[1], server: m[2].trim() });
+    return html;
   }
 
-  if (playerTokens.length === 0) return { streams: [] };
+  protected parseCards(html: string): SourceCard[] {
+    const results: SourceCard[] = [];
+    const seen = new Set<string>();
 
-  const denoBase = denoBaseFromEnv(env);
+    const push = (slug: string, rawPoster: string, rawName: string) => {
+      if (!slug || seen.has(slug)) return;
+      seen.add(slug);
+      const poster = rawPoster.startsWith("http")
+        ? rawPoster
+        : rawPoster
+        ? `${DORAMASYT_BASE}${rawPoster}`
+        : "";
+      results.push({
+        slug,
+        name: cleanTitle(rawName) || slug,
+        poster,
+      });
+    };
 
-  const embeds = await Promise.all(
-    playerTokens.map(async (p) => {
-      try {
-        const r = await netFetch("direct", `${DORAMASYT_BASE}/reproductor?video=${encodeURIComponent(p.token)}`, {
-          headers: {
-            "User-Agent": CHROME_UA,
-            Referer: `${DORAMASYT_BASE}/ver/${epSlug}`,
-          },
-          signal: AbortSignal.timeout(9000),
-        });
-        if (!r.ok) return null;
-        const pageHtml = await r.text();
-        const iframeSrc = pageHtml.match(/<iframe[^>]+src=["']([^"']+)["']/i)?.[1];
-        if (!iframeSrc) return null;
-        let url = iframeSrc.trim();
-        if (url.startsWith("//")) url = `https:${url}`;
-        return /^https?:\/\//i.test(url) ? url : null;
-      } catch {
-        return null;
-      }
-    })
-  );
+    for (const m of html.matchAll(
+      /\/dorama\/([a-z0-9-]+)"[\s\S]*?data-src="([^"]+)"[\s\S]*?<h3[^>]*>([\s\S]*?)<\/h3>/gi
+    )) {
+      push(m[1], m[2], m[3].trim());
+    }
 
-  const { add, streams } = makeStreamDeduper();
+    for (const m of html.matchAll(
+      /\/dorama\/([a-z0-9-]+)"[\s\S]*?alt="Ver\s+([^"]+?)\s+online[\s\S]*?data-src="([^"]+)"/gi
+    )) {
+      push(m[1], m[3], m[2].trim());
+    }
 
-  for (const embed of embeds) {
-    if (!embed) continue;
-    await addEmbedStreams({
-      embed,
-      epSlug,
-      label: "DoramasYT",
-      prefix: "dyt",
-      denoBase,
-      add,
-      env,
-    });
+    return results.slice(0, 100);
   }
 
-  return { streams };
+  // /buscar no filtra server-side: recorte local del resultado (la template
+  // de la base ya reintenta con las cards sin filtrar si esto vacía).
+  protected override filterCards(
+    cards: SourceCard[],
+    q: string,
+    isSearch: boolean
+  ): SourceCard[] {
+    if (!isSearch || !q) return cards;
+    const lc = q.toLowerCase();
+    return cards.filter(
+      (c) => c.name.toLowerCase().includes(lc) || c.slug.toLowerCase().includes(lc)
+    );
+  }
+
+  // ── Meta ──
+  protected buildSeriesPageUrl(slug: string): string {
+    return `${DORAMASYT_BASE}/dorama/${slug}`;
+  }
+
+  // parseMetaBasics → listEpisodes (el hook no recibe poster, lo guardo aquí).
+  private sitePoster = "";
+
+  // doramasyt no es DooPlay puro: el <h1> manda sobre og:title, el poster
+  // puede venir de data-src /thumbs/imagen/ y la sinopsis de un <p> llano.
+  protected override parseMetaBasics(html: string, slug: string) {
+    const name =
+      cleanTitle(
+        html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1] ||
+          html.match(/<meta[^>]+property="og:title"[^>]+content="([^"]+)"/i)?.[1] ||
+          html.match(/<title>([\s\S]*?)<\/title>/i)?.[1] ||
+          slug
+      ) || slug;
+
+    const poster =
+      html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/i)?.[1] ||
+      html.match(/data-src=["'](https?:\/\/[^"'\s]+\/thumbs\/imagen\/[^"'\s]+)["']/i)?.[1] ||
+      "";
+
+    const description = decodeEntities(
+      html.match(/<meta[^>]+property="og:description"[^>]+content="([^"]+)"/i)?.[1] ||
+        html.match(/<p>([\s\S]*?)<\/p>/i)?.[1] ||
+        ""
+    )
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    return { name, poster: (this.sitePoster = poster), description };
+  }
+
+  // Géneros de la ficha: badges del bloque lh-lg (server-rendered, base
+  // /genero/ sin slash final). Label canónico (src/genres.ts) o texto del
+  // sitio tal cual (dooplay.ts).
+  protected override parseGenres(html: string): string[] {
+    return genresFromBadgeBlock(html, "genero", "dyt");
+  }
+
+  // doramasyt no expone el listado real de episodios (llega por AJAX con
+  // sesión): rango sintético 1..epCount a partir del patrón del ep1. El
+  // epCount sale de TMDB (24 tiene año; 32 sin match).
+  protected override listEpisodes(
+    html: string,
+    slug: string,
+    tmdb: {
+      poster?: string;
+      background?: string;
+      description?: string;
+      year?: string;
+    } | null
+  ): SourceEpisode[] {
+    const ep1Match = html.match(/\/ver\/([a-z0-9-]+-episodio-)1["'\s>]/i);
+    const baseEpSlug = ep1Match ? ep1Match[1] : `${slug.replace(/-sub-espanol$/, "")}-episodio-`;
+    const epCount = tmdb?.year ? 24 : 32;
+
+    const eps: SourceEpisode[] = [];
+    for (let i = 1; i <= epCount; i++) {
+      eps.push({
+        slug: `${baseEpSlug}${i}`,
+        s: 1,
+        e: i,
+        // doramasyt no expone stills por episodio — caemos al póster de la serie.
+        thumb: tmdb?.poster || this.sitePoster,
+      });
+    }
+    return eps;
+  }
+
+  protected override videoId(ep: SourceEpisode): string {
+    return `dyt:${canonicalDytSlug(ep.slug ?? "")}`;
+  }
+}
+
+export const doramaYtSource = new DoramaYtSource();
+
+export async function getDoramaYtCatalog(
+  extra: Record<string, string>,
+  env?: Env
+) {
+  return doramaYtSource.getCatalog(extra, env);
+}
+
+export async function getDoramaYtMeta(
+  id: string,
+  tmdbKey: string,
+  env?: Env
+) {
+  return doramaYtSource.getMeta(id, tmdbKey, env);
+}
+
+export async function getDoramaYtStreams(rawId: string, env: Env) {
+  return doramaYtSource.getStreams(rawId, env);
 }
