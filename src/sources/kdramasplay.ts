@@ -197,22 +197,3 @@ export class KplaySource extends YandiSource {
 }
 
 export const kplaySource = new KplaySource();
-
-export async function getKplayCatalog(
-  extra: Record<string, string>,
-  env?: Env
-) {
-  return kplaySource.getCatalog(extra, env);
-}
-
-export async function getKplayMeta(
-  id: string,
-  tmdbKey: string,
-  env?: Env
-) {
-  return kplaySource.getMeta(id, tmdbKey, env);
-}
-
-export async function getKplayStreams(rawId: string, env: Env) {
-  return kplaySource.getStreams(rawId, env);
-}

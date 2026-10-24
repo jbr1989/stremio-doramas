@@ -1,41 +1,18 @@
-// Registro único de fuentes: cada fuente declara aquí sus getters y cómo
-// traducir su id de stream al slug canónico compartido (fan-out). getCatalog,
-// getMeta, getStreams y el chequeo /debug-all de index.ts recorren esta tabla,
-// así que añadir una fuente es añadir una entrada aquí y nada más.
+// Registro único de fuentes: la tabla apunta a los singletons de cada clase
+// (SourceBase) y a cómo traducir su id de stream al slug canónico compartido
+// (fan-out). getCatalog, getMeta, getStreams y el chequeo /debug-all de
+// index.ts recorren esta tabla, así que añadir una fuente es crear la clase,
+// instanciar el singleton en su archivo y añadir una entrada aquí.
 import { Env } from "../types";
-import {
-  DORAMA_SOURCES,
-  getDoramaCatalog,
-  getDoramaMeta,
-  getDoramaStreams,
-} from "./doramas";
-import { getKplayCatalog, getKplayMeta, getKplayStreams } from "./kdramasplay";
-import { getYandiCatalog, getYandiMeta, getYandiStreams } from "./yandispoiler";
-import {
-  getDoramasflixCatalog,
-  getDoramasflixMeta,
-  getDoramasflixStreams,
-} from "./doramasflix";
-import { getTudoramaCatalog, getTudoramaMeta, getTudoramaStreams } from "./tudorama";
-import {
-  getPandramaCatalog,
-  getPandramaMeta,
-  getPandramaStreams,
-  pandramaEpCanonicalSlug,
-} from "./pandrama";
-import {
-  canonicalDytSlug,
-  getDoramaYtCatalog,
-  getDoramaYtMeta,
-  getDoramaYtStreams,
-} from "./doramasyt";
-import {
-  canonicalDoramaSubSlug,
-  getDoramaSubCatalog,
-  getDoramaSubMeta,
-  getDoramaSubStreams,
-} from "./doramasub";
-import { getKisskhCatalog, getKisskhMeta, getKisskhStreams } from "./kisskh";
+import { dlatSource, dplaySource } from "./doramas";
+import { kplaySource } from "./kdramasplay";
+import { yandiSource } from "./yandispoiler";
+import { doramasflixSource } from "./doramasflix";
+import { tudoramaSource } from "./tudorama";
+import { pandramaSource, pandramaEpCanonicalSlug } from "./pandrama";
+import { canonicalDytSlug, doramaYtSource } from "./doramasyt";
+import { canonicalDoramaSubSlug, doramaSubSource } from "./doramasub";
+import { kisskhSource } from "./kisskh";
 
 export type SourceDef = {
   /** Prefijo de id de stream/meta, p.ej. "kplay" → "kplay:ep:slug-1x2". */
@@ -71,23 +48,23 @@ export const SOURCES: SourceDef[] = [
   {
     prefix: "dlat",
     catalogId: "doramaslat",
-    getCatalog: (extra, env) => getDoramaCatalog(DORAMA_SOURCES.dlat, extra, env),
-    getMeta: (id, tmdbKey, env) => getDoramaMeta(DORAMA_SOURCES.dlat, id, tmdbKey, env),
-    getStreams: (id, env) => getDoramaStreams(DORAMA_SOURCES.dlat, id, env),
+    getCatalog: (extra, env) => dlatSource.getCatalog(extra, env),
+    getMeta: (id, tmdbKey, env) => dlatSource.getMeta(id, tmdbKey, env),
+    getStreams: (id, env) => dlatSource.getStreams(id, env),
   },
   {
     prefix: "dplay",
     catalogId: "doramedplay",
-    getCatalog: (extra, env) => getDoramaCatalog(DORAMA_SOURCES.dplay, extra, env),
-    getMeta: (id, tmdbKey, env) => getDoramaMeta(DORAMA_SOURCES.dplay, id, tmdbKey, env),
-    getStreams: (id, env) => getDoramaStreams(DORAMA_SOURCES.dplay, id, env),
+    getCatalog: (extra, env) => dplaySource.getCatalog(extra, env),
+    getMeta: (id, tmdbKey, env) => dplaySource.getMeta(id, tmdbKey, env),
+    getStreams: (id, env) => dplaySource.getStreams(id, env),
   },
   {
     prefix: "kplay",
     catalogId: "kplay",
-    getCatalog: (extra, env) => getKplayCatalog(extra, env),
-    getMeta: (id, tmdbKey, env) => getKplayMeta(id, tmdbKey, env),
-    getStreams: (id, env) => getKplayStreams(id, env),
+    getCatalog: (extra, env) => kplaySource.getCatalog(extra, env),
+    getMeta: (id, tmdbKey, env) => kplaySource.getMeta(id, tmdbKey, env),
+    getStreams: (id, env) => kplaySource.getStreams(id, env),
     toEpSlug: kplayYandiEpSlug,
     buildId: (epSlug) => `kplay:ep:${epSlug}`,
     episodeIdRe: /^kplay:(?:ep:.+-\d+x\d+|movie:.+)$/,
@@ -95,9 +72,9 @@ export const SOURCES: SourceDef[] = [
   {
     prefix: "yandi",
     catalogId: "yandispoiler",
-    getCatalog: (extra, env) => getYandiCatalog(extra, env),
-    getMeta: (id, tmdbKey, env) => getYandiMeta(id, tmdbKey, env),
-    getStreams: (id, env) => getYandiStreams(id, env),
+    getCatalog: (extra, env) => yandiSource.getCatalog(extra, env),
+    getMeta: (id, tmdbKey, env) => yandiSource.getMeta(id, tmdbKey, env),
+    getStreams: (id, env) => yandiSource.getStreams(id, env),
     toEpSlug: kplayYandiEpSlug,
     buildId: (epSlug) => `yandi:ep:${epSlug}`,
     episodeIdRe: /^yandi:(?:ep:.+-\d+x\d+|movie:.+)$/,
@@ -105,23 +82,23 @@ export const SOURCES: SourceDef[] = [
   {
     prefix: "dflix",
     catalogId: "doramasflix",
-    getCatalog: (extra) => getDoramasflixCatalog(extra),
-    getMeta: (id, tmdbKey) => getDoramasflixMeta(id, tmdbKey),
-    getStreams: (id, env) => getDoramasflixStreams(id, env),
+    getCatalog: (extra) => doramasflixSource.getCatalog(extra),
+    getMeta: (id, tmdbKey) => doramasflixSource.getMeta(id, tmdbKey),
+    getStreams: (id, env) => doramasflixSource.getStreams(id, env),
   },
   {
     prefix: "tudorama",
     catalogId: "tudorama",
-    getCatalog: (extra, env) => getTudoramaCatalog(extra, env),
-    getMeta: (id, tmdbKey, env) => getTudoramaMeta(id, tmdbKey, env),
-    getStreams: (id, env) => getTudoramaStreams(id, env),
+    getCatalog: (extra, env) => tudoramaSource.getCatalog(extra, env),
+    getMeta: (id, tmdbKey, env) => tudoramaSource.getMeta(id, tmdbKey, env),
+    getStreams: (id, env) => tudoramaSource.getStreams(id, env),
   },
   {
     prefix: "pandrama",
     catalogId: "pandrama",
-    getCatalog: (extra, env) => getPandramaCatalog(extra, env),
-    getMeta: (id, tmdbKey, env) => getPandramaMeta(id, tmdbKey, env),
-    getStreams: (id, env) => getPandramaStreams(id, env),
+    getCatalog: (extra, env) => pandramaSource.getCatalog(extra, env),
+    getMeta: (id, tmdbKey, env) => pandramaSource.getMeta(id, tmdbKey, env),
+    getStreams: (id, env) => pandramaSource.getStreams(id, env),
     toEpSlug: async (rawId, env) => {
       const content = rawId.slice("pandrama:".length);
       if (!content.includes(":ep:")) return content;
@@ -133,9 +110,9 @@ export const SOURCES: SourceDef[] = [
   {
     prefix: "dyt",
     catalogId: "doramasyt",
-    getCatalog: (extra, env) => getDoramaYtCatalog(extra, env),
-    getMeta: (id, tmdbKey, env) => getDoramaYtMeta(id, tmdbKey, env),
-    getStreams: (id, env) => getDoramaYtStreams(id, env),
+    getCatalog: (extra, env) => doramaYtSource.getCatalog(extra, env),
+    getMeta: (id, tmdbKey, env) => doramaYtSource.getMeta(id, tmdbKey, env),
+    getStreams: (id, env) => doramaYtSource.getStreams(id, env),
     // DYT usa "titulo-episodio-N": a la forma canónica "titulo-1xN" para que
     // las demás fuentes (que guardan sobre -\d+x\d+$) acepten el slug.
     toEpSlug: (rawId) => canonicalDytSlug(rawId.slice("dyt:".length)),
@@ -143,17 +120,17 @@ export const SOURCES: SourceDef[] = [
   {
     prefix: "dsub",
     catalogId: "doramasub",
-    getCatalog: (extra, env) => getDoramaSubCatalog(extra, env),
-    getMeta: (id, tmdbKey, env) => getDoramaSubMeta(id, tmdbKey, env),
-    getStreams: (id, env) => getDoramaSubStreams(id, env),
+    getCatalog: (extra, env) => doramaSubSource.getCatalog(extra, env),
+    getMeta: (id, tmdbKey, env) => doramaSubSource.getMeta(id, tmdbKey, env),
+    getStreams: (id, env) => doramaSubSource.getStreams(id, env),
     toEpSlug: (rawId) => canonicalDoramaSubSlug(rawId.slice("dsub:".length)),
   },
   {
     prefix: "kisskh",
     catalogId: "kisskh",
-    getCatalog: (extra, env) => getKisskhCatalog(extra, env),
-    getMeta: (id, tmdbKey, env) => getKisskhMeta(id, tmdbKey, env),
-    getStreams: (id, env) => getKisskhStreams(id, env),
+    getCatalog: (extra, env) => kisskhSource.getCatalog(extra, env),
+    getMeta: (id, tmdbKey, env) => kisskhSource.getMeta(id, tmdbKey, env),
+    getStreams: (id, env) => kisskhSource.getStreams(id, env),
   },
 ];
 

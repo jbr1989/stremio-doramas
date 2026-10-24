@@ -275,14 +275,14 @@ class DoramaSubSource extends SourceBase {
       slug.includes("/") && /capitulo/i.test(slug)
         ? `${DORAMASUB_BASE}/${slug}.html`
         : "";
-    let html = pageUrl ? await this.fetchPage(pageUrl, env) : "";
+    let html = pageUrl ? await this.fetchBody(pageUrl, env) : "";
 
     if (!html) {
       const resolved = await resolveDoramaSubEpisodeSlug(slug, env);
       if (resolved && resolved !== slug) {
         console.log(`[dsub] slug resuelto: ${slug} → ${resolved}`);
         this.lastResolvedSlug = resolved;
-        html = await this.fetchPage(
+        html = await this.fetchBody(
           `${DORAMASUB_BASE}/${resolved}.html`,
           env
         );
@@ -354,7 +354,7 @@ async function resolveDoramaSubEpisodeSlug(
         })(),
       fetchEpisodes: (seriesSlug) =>
         (async () => {
-          const metaRes = await getDoramaSubMeta(
+          const metaRes = await doramaSubSource.getMeta(
             `dsub:${seriesSlug}`,
             "",
             env
@@ -377,22 +377,3 @@ async function resolveDoramaSubEpisodeSlug(
 }
 
 export const doramaSubSource = new DoramaSubSource();
-
-export async function getDoramaSubCatalog(
-  extra: Record<string, string>,
-  env?: Env
-) {
-  return doramaSubSource.getCatalog(extra, env);
-}
-
-export async function getDoramaSubMeta(
-  id: string,
-  tmdbKey: string,
-  env?: Env
-) {
-  return doramaSubSource.getMeta(id, tmdbKey, env);
-}
-
-export async function getDoramaSubStreams(rawId: string, env: Env) {
-  return doramaSubSource.getStreams(rawId, env);
-}

@@ -126,7 +126,7 @@ class DoramaYtSource extends SourceBase {
       (s) => `${DORAMASYT_BASE}/ver/${s}`,
       slug,
       env,
-      (u, e) => this.fetchPage(u, e),
+      (u, e) => this.fetchBody(u, e),
       resolveDytEpisodeSlug,
       this.prefix
     );
@@ -154,8 +154,8 @@ class DoramaYtSource extends SourceBase {
   // (el filtro local de filterCards recorta a lo relevante). En la base
   // estricta no hay hook de fetch de búsqueda: se absorbe aquí reintentando
   // solo cuando la URL es de búsqueda y la página vino sin tarjetas.
-  protected override async fetchPage(url: string, env: Env): Promise<string> {
-    const html = await super.fetchPage(url, env);
+  protected override async fetchBody(url: string, env: Env): Promise<string> {
+    const html = await super.fetchBody(url, env);
     if (
       url.startsWith(`${DORAMASYT_BASE}/buscar`) &&
       html &&
@@ -297,22 +297,3 @@ class DoramaYtSource extends SourceBase {
 }
 
 export const doramaYtSource = new DoramaYtSource();
-
-export async function getDoramaYtCatalog(
-  extra: Record<string, string>,
-  env?: Env
-) {
-  return doramaYtSource.getCatalog(extra, env);
-}
-
-export async function getDoramaYtMeta(
-  id: string,
-  tmdbKey: string,
-  env?: Env
-) {
-  return doramaYtSource.getMeta(id, tmdbKey, env);
-}
-
-export async function getDoramaYtStreams(rawId: string, env: Env) {
-  return doramaYtSource.getStreams(rawId, env);
-}

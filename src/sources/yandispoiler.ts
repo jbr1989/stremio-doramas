@@ -64,13 +64,13 @@ export class YandiSource extends SourceBase {
     env: Env
   ): Promise<string> {
     if (idSlug.startsWith("movie:"))
-      return this.fetchPage(this.buildPageUrl(idSlug), env);
+      return this.fetchBody(this.buildPageUrl(idSlug), env);
     const slug = idSlug.slice(3);
     return fetchWithSlugRescue(
       (s) => `${this.cfg.base}/${this.cfg.epPath}/${s}/`,
       slug,
       env,
-      (u, e) => this.fetchPage(u, e),
+      (u, e) => this.fetchBody(u, e),
       (s, e) => this.resolveEpisodeSlug?.(s, e) ?? Promise.resolve(null),
       this.prefix
     );
@@ -347,21 +347,3 @@ export const yandiSource = new YandiSource({
   genreBase: "generos",
 });
 
-export async function getYandiCatalog(
-  extra: Record<string, string>,
-  env?: Env
-) {
-  return yandiSource.getCatalog(extra, env);
-}
-
-export async function getYandiMeta(
-  id: string,
-  tmdbKey: string,
-  env?: Env
-) {
-  return yandiSource.getMeta(id, tmdbKey, env);
-}
-
-export async function getYandiStreams(rawId: string, env: Env) {
-  return yandiSource.getStreams(rawId, env);
-}

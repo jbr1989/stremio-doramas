@@ -24,7 +24,7 @@ class TudoramaSource extends SourceBase {
 
   // ── Streams ──
   // Racer (direct vs relay Deno, minLen 300) de esta familia de sitios.
-  protected override async fetchPage(url: string, env: Env): Promise<string> {
+  protected override async fetchBody(url: string, env: Env): Promise<string> {
     try {
       return await racerFetch(url, env, { minLen: 300, proxyTimeoutMs: 12000 });
     } catch {
@@ -52,7 +52,7 @@ class TudoramaSource extends SourceBase {
       (s) => this.buildPageUrl(s),
       slug,
       env,
-      (u, e) => this.fetchPage(u, e),
+      (u, e) => this.fetchBody(u, e),
       (s, e) => resolveTudoramaEpisodeSlug(s, e),
       this.prefix
     );
@@ -373,22 +373,3 @@ async function resolveTudoramaEpisodeSlug(
 }
 
 export const tudoramaSource = new TudoramaSource();
-
-export async function getTudoramaCatalog(
-  extra: Record<string, string>,
-  env?: Env
-) {
-  return tudoramaSource.getCatalog(extra, env);
-}
-
-export async function getTudoramaMeta(
-  id: string,
-  tmdbKey: string,
-  env?: Env
-) {
-  return tudoramaSource.getMeta(id, tmdbKey, env);
-}
-
-export async function getTudoramaStreams(rawId: string, env: Env) {
-  return tudoramaSource.getStreams(rawId, env);
-}

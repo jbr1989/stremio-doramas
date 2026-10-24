@@ -450,22 +450,3 @@ class PandramaSource extends SourceBase {
 }
 
 export const pandramaSource = new PandramaSource();
-
-export async function getPandramaCatalog(
-  extra: Record<string, string>,
-  env?: Env
-) {
-  return pandramaSource.getCatalog(extra, env);
-}
-
-export async function getPandramaMeta(
-  id: string,
-  tmdbKey: string,
-  env?: Env
-) {
-  return pandramaSource.getMeta(id, tmdbKey, env);
-}
-
-export async function getPandramaStreams(rawId: string, env: Env) {
-  return pandramaSource.getStreams(rawId, env);
-}

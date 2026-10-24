@@ -29,7 +29,7 @@ class KisskhSource extends SourceBase {
 
   // ── Fetch: toda la fuente narra el API con allowShort (respuestas cortas
   // válidas del JSON — el default de fetchHtml las trataría como fracaso). ──
-  protected override async fetchPage(url: string, env: Env): Promise<string> {
+  protected override async fetchBody(url: string, env: Env): Promise<string> {
     try {
       return await fetchHtml(url, env, { allowShort: true });
     } catch {
@@ -92,7 +92,7 @@ class KisskhSource extends SourceBase {
     const pageUrl = `${KISSKH_BASE}/api/DramaList/Drama/${dramaId}?isq=false`;
     let resText = "";
     try {
-      resText = await this.fetchPage(pageUrl, env!);
+      resText = await this.fetchBody(pageUrl, env!);
     } catch (e) {
       console.error(`[kisskh] meta falló para ${pageUrl}: ${e}`);
       return "";
@@ -172,7 +172,7 @@ class KisskhSource extends SourceBase {
     const apiUrl = `${KISSKH_BASE}/api/DramaList/Episode/${epId}.png?err=false&ts=null&time=null&kkey=${kkey}`;
     let resText = "";
     try {
-      resText = await this.fetchPage(apiUrl, env);
+      resText = await this.fetchBody(apiUrl, env);
     } catch (e) {
       console.error(`[kisskh] streams falló para ${apiUrl}: ${e}`);
       resText = "";
@@ -241,7 +241,7 @@ class KisskhSource extends SourceBase {
         KISSKH_PLATFORM_VER,
         KISSKH_APP, KISSKH_APP, KISSKH_APP, KISSKH_APP, KISSKH_APP, KISSKH_APP
       );
-      const subText = await this.fetchPage(
+      const subText = await this.fetchBody(
         `${KISSKH_BASE}/api/Sub/${epId}?kkey=${subKey}`,
         env
       );
@@ -320,22 +320,3 @@ class KisskhSource extends SourceBase {
 }
 
 export const kisskhSource = new KisskhSource();
-
-export async function getKisskhCatalog(
-  extra: Record<string, string>,
-  env?: Env
-) {
-  return kisskhSource.getCatalog(extra, env);
-}
-
-export async function getKisskhMeta(
-  id: string,
-  tmdbKey: string,
-  env?: Env
-) {
-  return kisskhSource.getMeta(id, tmdbKey, env);
-}
-
-export async function getKisskhStreams(rawId: string, env: Env) {
-  return kisskhSource.getStreams(rawId, env);
-}

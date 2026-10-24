@@ -49,7 +49,7 @@ type TmdbInfo = NonNullable<Awaited<ReturnType<typeof fetchTmdb>>>;
  *
  *   getStreams: página de episodio → embeds → addEmbedStreams con dedupe.
  *               Obligatorios: buildPageUrl + extractEmbeds. Opcionales:
- *               parseId, fetchPage, fetchEpisodePage (rescate/racer).
+ *               parseId, fetchBody, fetchEpisodePage (rescate/racer).
  *
  * Ver doramas.ts / kdramasplay.ts / etc. (migración pendiente).
  */
@@ -71,7 +71,7 @@ export abstract class SourceBase {
 
   /** Fetch genérico de página (default fetchHtml; sobrecargar si la fuente
    * tiene fetcher propio — racer, GraphQL, bootstrapData…). */
-  protected async fetchPage(url: string, env: Env): Promise<string> {
+  protected async fetchBody(url: string, env: Env): Promise<string> {
     try {
       return await fetchHtml(url, env);
     } catch {
@@ -81,13 +81,13 @@ export abstract class SourceBase {
 
   /**
    * Fetch del HTML de la página del episodio. Default: buildPageUrl +
-   * fetchPage (un solo intento). El rescate de slug NO es universal
+   * fetchBody (un solo intento). El rescate de slug NO es universal
    * (kisskh/pandrama/doramasflix no descargan una página de episodio):
    * las fuentes que lo necesitan lo implementan aquí con el helper
    * fetchWithSlugRescue (slugmap.ts).
    */
   protected async fetchEpisodePage(slug: string, env: Env): Promise<string> {
-    return this.fetchPage(this.buildPageUrl(slug), env);
+    return this.fetchBody(this.buildPageUrl(slug), env);
   }
 
   /** Dónde vive el player del episodio. */
@@ -182,7 +182,7 @@ export abstract class SourceBase {
     if (q) {
       if (!this.buildSearchUrl || !this.parseCards) return { metas: [] };
       const cards = this.parseCards(
-        await this.fetchPage(this.buildSearchUrl(q), env!)
+        await this.fetchBody(this.buildSearchUrl(q), env!)
       );
       const filtered = this.filterCards
         ? this.filterCards(cards, q, true)
@@ -198,7 +198,7 @@ export abstract class SourceBase {
         return { metas: [] };
       const gurl = this.buildGenreUrl(gslug, this.pageFromSkip(extra.skip));
       if (!gurl) return { metas: [] };
-      const cards = this.parseCards(await this.fetchPage(gurl, env!));
+      const cards = this.parseCards(await this.fetchBody(gurl, env!));
       return {
         metas: toMetas(
           this.filterCards ? this.filterCards(cards, "", false) : cards
@@ -208,7 +208,7 @@ export abstract class SourceBase {
 
     if (!this.buildListUrl || !this.parseCards) return { metas: [] };
     const cards = this.parseCards(
-      await this.fetchPage(
+      await this.fetchBody(
         this.buildListUrl(this.pageFromSkip(extra.skip)),
         env!
       )
@@ -224,14 +224,14 @@ export abstract class SourceBase {
   /** Dónde vive la ficha de la serie. */
   protected buildSeriesPageUrl?(slug: string): string;
 
-  /** Fetch de la ficha. Default: buildSeriesPageUrl + fetchPage (HTML);
+  /** Fetch de la ficha. Default: buildSeriesPageUrl + fetchBody (HTML);
    * fuentes JSON (kisskh, feeds Blogger) lo sobrecargan. */
   protected async fetchMetaPage(
     slug: string,
     env?: Env
   ): Promise<string | unknown> {
     return this.buildSeriesPageUrl
-      ? this.fetchPage(this.buildSeriesPageUrl(slug), env!)
+      ? this.fetchBody(this.buildSeriesPageUrl(slug), env!)
       : "";
   }
 

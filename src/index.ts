@@ -26,7 +26,7 @@ import {
   sourceByPrefix,
   episodeIdReFor,
 } from "./sources/registry";
-import { getDoramasflixCatalog } from "./sources/doramasflix";
+import { doramasflixSource } from "./sources/doramasflix";
 import { getAllAlldoramasCatalog } from "./sources/alldoramas";
 
 async function getCatalog(
@@ -39,7 +39,7 @@ async function getCatalog(
   // El orden de SOURCES importa: los catalogId no se solapan, pero se
   // respeta el orden de registro igual que en la cadena original.
   const def = SOURCES.find((s) => catalogId.startsWith(s.catalogId));
-  return def ? def.getCatalog(extra, env) : getDoramasflixCatalog(extra);
+  return def ? def.getCatalog(extra, env) : doramasflixSource.getCatalog(extra);
 }
 
 async function getMeta(id: string, tmdbKey: string, env?: Env) {

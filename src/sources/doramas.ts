@@ -54,7 +54,7 @@ class DoramaDooPlaySource extends SourceBase {
 
   // ── Streams ──
   // El racer (direct vs relay Deno, minLen 400) es de esta familia de sitios.
-  protected override async fetchPage(url: string, env: Env): Promise<string> {
+  protected override async fetchBody(url: string, env: Env): Promise<string> {
     try {
       return await racerFetch(url, env, { minLen: 400, proxyTimeoutMs: 12000 });
     } catch {
@@ -73,7 +73,7 @@ class DoramaDooPlaySource extends SourceBase {
       (s) => `${this.base}/episodes/${s}/`,
       slug,
       env,
-      (u, e) => this.fetchPage(u, e),
+      (u, e) => this.fetchBody(u, e),
       (s, e) => resolveDooPlayEpisodeSlug(this.cfg, s, e),
       this.prefix
     );
@@ -220,7 +220,7 @@ async function resolveDooPlayEpisodeSlug(
               `${src.base}/?s=${encodeURIComponent(v)}`,
               env,
               { minLen: 400, proxyTimeoutMs: 12000 }
-            );
+            ).catch(() => "");
             for (const m of html.matchAll(/\/tvshows\/([a-z0-9-]+)\//gi))
               slugs.add(m[1]);
           }
@@ -232,7 +232,7 @@ async function resolveDooPlayEpisodeSlug(
             `${src.base}/tvshows/${seriesSlug}/`,
             env,
             { minLen: 400, proxyTimeoutMs: 12000 }
-          );
+          ).catch(() => "");
           const episodes: { s: number; e: number; epSlug: string }[] = [];
           const seen = new Set<string>();
           for (const m of html.matchAll(
@@ -254,43 +254,7 @@ async function resolveDooPlayEpisodeSlug(
   );
 }
 
-// Una clase, dos instancias.
-const dlatSource = new DoramaDooPlaySource(DORAMA_SOURCES.dlat);
-const dplaySource = new DoramaDooPlaySource(DORAMA_SOURCES.dplay);
-
-// Wrappers con las firmas históricas (registry.ts y alldoramas.ts discrepan
-// el src por parámetro; index.ts las sigue tal cual).
-export async function getDoramaCatalog(
-  src: DoramaSource,
-  extra: Record<string, string>,
-  env?: Env
-) {
-  return (src.prefix === "dlat" ? dlatSource : dplaySource).getCatalog(
-    extra,
-    env
-  );
-}
-
-export async function getDoramaMeta(
-  src: DoramaSource,
-  id: string,
-  tmdbKey: string,
-  env?: Env
-) {
-  return (src.prefix === "dlat" ? dlatSource : dplaySource).getMeta(
-    id,
-    tmdbKey,
-    env
-  );
-}
-
-export async function getDoramaStreams(
-  src: DoramaSource,
-  rawId: string,
-  env: Env
-) {
-  return (src.prefix === "dlat" ? dlatSource : dplaySource).getStreams(
-    rawId,
-    env
-  );
-}
+// Una clase, dos instancias: los consumidores (registry/alldoramas) las
+// importan directamente desde la migración a SourceBase.
+export const dlatSource = new DoramaDooPlaySource(DORAMA_SOURCES.dlat);
+export const dplaySource = new DoramaDooPlaySource(DORAMA_SOURCES.dplay);

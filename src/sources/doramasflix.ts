@@ -460,7 +460,7 @@ async function resolveDflixEpisodeSlug(
           // detailDorama (query del meta) trae seasons {season_number,
           // number_of_episodes}: de ahí sale el mapa completo SxE → slug con
           // el mismo criterio que el meta usa para sus videos.
-          const detail = await getDoramasflixMeta(
+          const detail = await doramasflixSource.getMeta(
             `dflix:${seriesSlug}`,
             "" // sin TMDB: solo se necesitan las seasons
           );
@@ -482,20 +482,3 @@ async function resolveDflixEpisodeSlug(
 }
 
 export const doramasflixSource = new DoramasflixSource();
-
-export async function getDoramasflixCatalog(
-  extra: Record<string, string>
-) {
-  return doramasflixSource.getCatalog(extra);
-}
-
-export async function getDoramasflixMeta(
-  id: string,
-  tmdbKey: string
-) {
-  return doramasflixSource.getMeta(id, tmdbKey);
-}
-
-export async function getDoramasflixStreams(rawId: string, env: Env) {
-  return doramasflixSource.getStreams(rawId, env);
-}
