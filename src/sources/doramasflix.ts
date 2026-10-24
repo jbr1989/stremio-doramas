@@ -1,8 +1,18 @@
-import { Env } from "../types";
+import { Env, MetaPreview } from "../types";
 import { genreLabelForMeta, genreSlug } from "../genres";
-import { CHROME_UA, cleanTitle, decodeEntities, denoBaseFromEnv, fetchTmdb, makeStreamDeduper, netFetch, toMetaPreview } from "../utils";
+import {
+  CHROME_UA,
+  cleanTitle,
+  decodeEntities,
+  denoBaseFromEnv,
+  fetchTmdb,
+  makeStreamDeduper,
+  netFetch,
+  toMetaPreview,
+} from "../utils";
 import { addEmbedStreams } from "../extractors";
 import { resolveEpisodeSlug, searchVariants } from "./slugmap";
+import { SourceBase } from "./sourceBase";
 
 const GRAPHQL_ENDPOINT = "https://user-api.seriesapi.co/graphql";
 const DORAMASFLIX_BASE = "https://doramasflix.in";
@@ -51,232 +61,318 @@ async function fetchGql(
       // Red fallida con este origen -> probar el siguiente (failover secuencial).
     }
   }
-  throw new Error(`Doramasflix GraphQL fallo en todos los orígenes — ${errors.join(" | ")}`);
+  throw new Error(
+    `Doramasflix GraphQL fallo en todos los orígenes — ${errors.join(" | ")}`
+  );
 }
 
-export async function getDoramasflixCatalog(
-  extra: Record<string, string>
-) {
-  const q = (extra.search || "").trim();
-  if (q) {
+/** Doramasflix: GraphQL nativa de su backend (sin HTML que raspar) — los
+ * tres templates son override completo. La clase aporta identidad + los
+ * overrides (el failover de orígenes es el transporte propio). */
+class DoramasflixSource extends SourceBase {
+  get prefix() {
+    return "dflix";
+  }
+  get label() {
+    return "Doramasflix";
+  }
+
+  // No aplican (no hay HTML de episodio que bajar ni embeds de player):
+  // los streams van por GraphQL getEpisodeLinks.
+  protected buildPageUrl(slug: string): string {
+    return slug;
+  }
+
+  protected extractEmbeds(): Promise<string[]> {
+    return Promise.resolve([]);
+  }
+
+  // ── Catálogo (override: 3 ramas con queries GraphQL distintas — la
+  // búsqueda pagina perPage=20, el género 24 con filter genreSlug, el
+  // directorio recupera limit=20*page y corta en memoria) ──
+  override async getCatalog(
+    extra: Record<string, string>,
+    _env?: Env
+  ): Promise<{ metas: MetaPreview[] }> {
+    const q = (extra.search || "").trim();
+    if (q) {
+      const page = Math.floor(parseInt(extra.skip || "0", 10) / 20) + 1;
+      const query = `
+        query SearchFullDoramas($input: String!, $page: Int, $perPage: Int) {
+          searchFullDoramas(input: $input, page: $page, perPage: $perPage) {
+            items {
+              _id
+              slug
+              name
+              name_es
+              poster_path
+            }
+          }
+        }
+      `;
+      const data = await fetchGql(query, { input: q, page, perPage: 20 });
+      const items = data?.searchFullDoramas?.items || [];
+      return { metas: items.map(dflixCardMeta) };
+    }
+
+    // Género vía la GraphQL nativa del sitio (query paginationDorama — la
+    // MISMA que usa su página SSR /generos/{slug}; capturada del tráfico real
+    // y validada in-vivo: romance count=1658, drama 2451…). Paginación
+    // page/limit con perPage=24 (el valor del sitio). Sort default del
+    // backend (_ID_DESC — recientes), igual que el sitio.
+    const g = (extra.genre || "").trim();
+    if (g) {
+      const gslug = genreSlug("dflix", g);
+      if (!gslug) return { metas: [] };
+      const gpage = Math.floor(parseInt(extra.skip || "0", 10) / 24) + 1;
+      const gqlGenre = `
+        query PaginationDorama($limit: Int, $filter: FilterDoramasInput, $page: Int) {
+          paginationDorama(limit: $limit, filter: $filter, page: $page) {
+            items {
+              slug
+              name
+              name_es
+              poster_path
+            }
+          }
+        }
+      `;
+      const gdata = await fetchGql(gqlGenre, {
+        page: gpage,
+        limit: 24,
+        filter: { genreSlug: gslug, isTVShow: false },
+      });
+      const gitems = gdata?.paginationDorama?.items || [];
+      return { metas: gitems.map(dflixCardMeta) };
+    }
+
     const page = Math.floor(parseInt(extra.skip || "0", 10) / 20) + 1;
+    const limit = 20 * page;
     const query = `
-      query SearchFullDoramas($input: String!, $page: Int, $perPage: Int) {
-        searchFullDoramas(input: $input, page: $page, perPage: $perPage) {
-          items {
-            _id
-            slug
-            name
-            name_es
-            poster_path
-          }
-        }
-      }
-    `;
-    const data = await fetchGql(query, { input: q, page, perPage: 20 });
-    const items = data?.searchFullDoramas?.items || [];
-    const metas = items.map((item: any) => {
-      const poster = item.poster_path
-        ? `https://image.tmdb.org/t/p/w342${item.poster_path}`
-        : "";
-      const name = cleanTitle(item.name || item.name_es || item.slug);
-      return toMetaPreview({
-        id: `dflix:${item.slug}`,
-        name,
-        poster,
-      });
-    });
-    return { metas };
-  }
-
-  // Género vía la GraphQL nativa del sitio (query paginationDorama — la MISMA
-  // que usa su página SSR /generos/{slug}; capturada del tráfico real y
-  // validada in-vivo: romance count=1658, drama 2451…). Paginación page/limit
-  // con perPage=24 (el valor del sitio). Sort default del backend
-  // (_ID_DESC — recientes), igual que el sitio.
-  const g = (extra.genre || "").trim();
-  if (g) {
-    const gslug = genreSlug("dflix", g);
-    if (!gslug) return { metas: [] };
-    const gpage = Math.floor(parseInt(extra.skip || "0", 10) / 24) + 1;
-    const gqlGenre = `
-      query PaginationDorama($limit: Int, $filter: FilterDoramasInput, $page: Int) {
-        paginationDorama(limit: $limit, filter: $filter, page: $page) {
-          items {
-            slug
-            name
-            name_es
-            poster_path
-          }
-        }
-      }
-    `;
-    const gdata = await fetchGql(gqlGenre, {
-      page: gpage,
-      limit: 24,
-      filter: { genreSlug: gslug, isTVShow: false },
-    });
-    const gitems = gdata?.paginationDorama?.items || [];
-    const gmetas = gitems.map((item: any) => {
-      const poster = item.poster_path
-        ? `https://image.tmdb.org/t/p/w342${item.poster_path}`
-        : "";
-      const name = cleanTitle(item.name || item.name_es || item.slug);
-      return toMetaPreview({
-        id: `dflix:${item.slug}`,
-        name,
-        poster,
-      });
-    });
-    return { metas: gmetas };
-  }
-
-  const page = Math.floor(parseInt(extra.skip || "0", 10) / 20) + 1;
-  const limit = 20 * page;
-  const query = `
-    query ListDoramas($limit: Int) {
-      listDoramas(limit: $limit) {
-        _id
-        name
-        name_es
-        slug
-        poster_path
-      }
-    }
-  `;
-  const data = await fetchGql(query, { limit });
-  const items = (data?.listDoramas || []).slice((page - 1) * 20, page * 20);
-  const metas = items.map((item: any) => {
-    const poster = item.poster_path
-      ? `https://image.tmdb.org/t/p/w342${item.poster_path}`
-      : "";
-    const name = cleanTitle(item.name || item.name_es || item.slug);
-    return toMetaPreview({
-      id: `dflix:${item.slug}`,
-      name,
-      poster,
-    });
-  });
-
-  return { metas };
-}
-
-export async function getDoramasflixMeta(
-  id: string,
-  tmdbKey: string
-) {
-  const slug = id.replace("dflix:", "");
-  const query = `
-    query DetailDoramaSlug($slug: String!) {
-      detailDorama(filter: { slug: $slug }) {
-        _id
-        name
-        slug
-        name_es
-        overview
-        poster_path
-        backdrop_path
-        number_of_seasons
-        number_of_episodes
-        seasons {
+      query ListDoramas($limit: Int) {
+        listDoramas(limit: $limit) {
           _id
-          season_number
-          number_of_episodes
-        }
-        genres {
-          slug
           name
+          name_es
+          slug
+          poster_path
         }
       }
+    `;
+    const data = await fetchGql(query, { limit });
+    const items = (data?.listDoramas || []).slice((page - 1) * 20, page * 20);
+    return { metas: items.map(dflixCardMeta) };
+  }
+
+  // ── Meta (override: detailDorama — seasons de la GraphQL, no scraping) ──
+  override async getMeta(
+    id: string,
+    tmdbKey: string
+  ): Promise<{ meta: unknown }> {
+    const slug = id.replace("dflix:", "");
+    const query = `
+      query DetailDoramaSlug($slug: String!) {
+        detailDorama(filter: { slug: $slug }) {
+          _id
+          name
+          slug
+          name_es
+          overview
+          poster_path
+          backdrop_path
+          number_of_seasons
+          number_of_episodes
+          seasons {
+            _id
+            season_number
+            number_of_episodes
+          }
+          genres {
+            slug
+            name
+          }
+        }
+      }
+    `;
+    const data = await fetchGql(query, { slug });
+    const detail = data?.detailDorama;
+    if (!detail) {
+      return { meta: null };
     }
-  `;
-  const data = await fetchGql(query, { slug });
-  const detail = data?.detailDorama;
-  if (!detail) {
-    return { meta: null };
-  }
 
-  const name = cleanTitle(detail.name || detail.name_es || slug);
-  const poster = detail.poster_path
-    ? `https://image.tmdb.org/t/p/w500${detail.poster_path}`
-    : "";
-  const background = detail.backdrop_path
-    ? `https://image.tmdb.org/t/p/w1280${detail.backdrop_path}`
-    : poster;
-  const description = decodeEntities(detail.overview || "").trim();
+    const name = cleanTitle(detail.name || detail.name_es || slug);
+    const poster = detail.poster_path
+      ? `https://image.tmdb.org/t/p/w500${detail.poster_path}`
+      : "";
+    const background = detail.backdrop_path
+      ? `https://image.tmdb.org/t/p/w1280${detail.backdrop_path}`
+      : poster;
+    const description = decodeEntities(detail.overview || "").trim();
 
-  // Géneros de la ficha: relation genres {slug, name} de la propia GraphQL
-  // (campo validado in-vivo contra la API de producción — los descartes
-  // genreSlug/genre/tags no existen en el tipo Dorama y matarían la query
-  // entera: MUST VALIDAR cualquier campo nuevo en una query de prueba antes
-  // de agregarlo aquí). Etiqueta: canónica ES de la lista maestra (dflix
-  // registra sus slugs, src/genres.ts) o el name de la API tal cual —
-  // DECISION DEL USUARIO para los no registrados — último recurso, slug
-  // humanizado. Las entradas con slug null (p.ej. "TV Movie" en listGenres)
-  // se saltan. Dedup por label con la orden de la API.
-  const genres: string[] = [];
-  const gSeen = new Set<string>();
-  for (const g of detail.genres || []) {
-    if (!g?.slug) continue;
-    const label = genreLabelForMeta("dflix", g.slug.toLowerCase(), g.name);
-    if (!label || gSeen.has(label)) continue;
-    gSeen.add(label);
-    genres.push(label);
-  }
+    // Géneros de la ficha: relation genres {slug, name} de la propia GraphQL
+    // (campo validado in-vivo contra la API de producción — los descartes
+    // genreSlug/genre/tags no existen en el tipo Dorama y matarían la query
+    // entera: MUST VALIDAR cualquier campo nuevo en una query de prueba antes
+    // de agregarlo aquí). Etiqueta: canónica ES de la lista maestra (dflix
+    // registra sus slugs, src/genres.ts) o el name de la API tal cual —
+    // DECISION DEL USUARIO para los no registrados — último recurso, slug
+    // humanizado. Las entradas con slug null (p.ej. "TV Movie" en listGenres)
+    // se saltan. Dedup por label con la orden de la API.
+    const genres: string[] = [];
+    const gSeen = new Set<string>();
+    for (const g of detail.genres || []) {
+      if (!g?.slug) continue;
+      const label = genreLabelForMeta("dflix", g.slug.toLowerCase(), g.name);
+      if (!label || gSeen.has(label)) continue;
+      gSeen.add(label);
+      genres.push(label);
+    }
 
-  const episodes: { id: string; season: number; episode: number; title: string }[] = [];
-  const seasons = detail.seasons || [];
-  if (seasons.length > 0) {
-    for (const s of seasons) {
-      const seasonNum = s.season_number || 1;
-      const count = s.number_of_episodes || detail.number_of_episodes || 1;
+    const episodes: {
+      id: string;
+      season: number;
+      episode: number;
+      title: string;
+    }[] = [];
+    const seasons = detail.seasons || [];
+    if (seasons.length > 0) {
+      for (const s of seasons) {
+        const seasonNum = s.season_number || 1;
+        const count = s.number_of_episodes || detail.number_of_episodes || 1;
+        for (let ep = 1; ep <= count; ep++) {
+          const epSlug = `${slug}-${seasonNum}x${ep}`;
+          episodes.push({
+            id: `dflix:${epSlug}`,
+            season: seasonNum,
+            episode: ep,
+            title: `T${seasonNum} · Episodio ${ep}`,
+          });
+        }
+      }
+    } else {
+      const count = detail.number_of_episodes || 1;
       for (let ep = 1; ep <= count; ep++) {
-        const epSlug = `${slug}-${seasonNum}x${ep}`;
+        const epSlug = `${slug}-1x${ep}`;
         episodes.push({
           id: `dflix:${epSlug}`,
-          season: seasonNum,
+          season: 1,
           episode: ep,
-          title: `T${seasonNum} · Episodio ${ep}`,
+          title: `T1 · Episodio ${ep}`,
         });
       }
     }
-  } else {
-    const count = detail.number_of_episodes || 1;
-    for (let ep = 1; ep <= count; ep++) {
-      const epSlug = `${slug}-1x${ep}`;
-      episodes.push({
-        id: `dflix:${epSlug}`,
-        season: 1,
-        episode: ep,
-        title: `T1 · Episodio ${ep}`,
-      });
-    }
+
+    const tmdb = await fetchTmdb(name, tmdbKey);
+
+    return {
+      meta: {
+        id,
+        type: "series",
+        name,
+        poster: tmdb?.poster || poster,
+        background: tmdb?.background || background,
+        description: tmdb?.description || description,
+        posterShape: "poster",
+        releaseInfo: tmdb?.year || "",
+        genres,
+        videos: episodes.map((ep) => ({
+          id: ep.id,
+          title: ep.title,
+          season: ep.season,
+          episode: ep.episode,
+          // dflix no expone still por episodio: su listEpisodes exigiría 1
+          // llamada GraphQL por capítulo — caemos al póster de la serie.
+          thumbnail: poster,
+        })),
+      },
+    };
   }
 
-  const tmdb = await fetchTmdb(name, tmdbKey);
+  // ── Streams (override completo: GraphQL getEpisodeLinks por episode-id) ──
+  override async getStreams(rawId: string, env: Env) {
+    const epSlug = rawId.replace("dflix:", "");
 
-  return {
-    meta: {
-      id,
-      type: "series",
-      name,
-      poster: tmdb?.poster || poster,
-      background: tmdb?.background || background,
-      description: tmdb?.description || description,
-      posterShape: "poster",
-      releaseInfo: tmdb?.year || "",
-      genres,
-      videos: episodes.map((ep) => ({
-        id: ep.id,
-        title: ep.title,
-        season: ep.season,
-        episode: ep.episode,
-        // dflix no expone still por episodio: su listEpisodes exigiría 1
-        // llamada GraphQL por capítulo — caemos al póster de la serie.
-        thumbnail: poster,
-      })),
-    },
-  };
+    const found = await getEpisodeBySlug(epSlug);
+    let epId = found?.id || "";
+    if (!epId) {
+      // Slug venido de otro sitio (o fallo transitorio): resolver por título
+      // y recomponer el id dflix (dflix:{serieSlug}-{s}x{e}) para reintentar.
+      // El re-intent vale aunque coincida el slug: barato (1 GraphQL) y
+      // cubre el caso de la primera query muerta por red.
+      const resolved = await resolveDflixEpisodeSlug(epSlug, env);
+      if (resolved) {
+        if (resolved !== epSlug)
+          console.log(`[dflix] slug resuelto: ${epSlug} → ${resolved}`);
+        const found2 = await getEpisodeBySlug(resolved);
+        epId = found2?.id || "";
+      }
+    }
+    if (!epId) return { streams: [] };
+
+    const linksQuery = `
+      query EpisodeLinksOnline($episode_id: ID!) {
+        getEpisodeLinks(id: $episode_id) {
+          links_online {
+            _id
+            server
+            lang
+            link
+          }
+        }
+      }
+    `;
+
+    let rawLinks = [];
+
+    try {
+      const linksData = await fetchGql(linksQuery, { episode_id: epId });
+      rawLinks = linksData?.getEpisodeLinks?.links_online || [];
+
+      console.log(`[dflix] ${rawLinks.length} links para ${epSlug}`);
+
+      if (rawLinks.length === 0) return { streams: [] };
+    } catch (e) {
+      console.error(`Error fetching Doramasflix episode links: ${e}`);
+      return { streams: [] };
+    }
+
+    const denoBase = denoBaseFromEnv(env);
+
+    const { add, streams } = makeStreamDeduper();
+
+    for (const item of rawLinks) {
+      if (!item.link) continue;
+      const decodedEmbed = decodeEmbedUrl(item.link);
+      if (!decodedEmbed) continue;
+      await addEmbedStreams({
+        embed: decodedEmbed,
+        epSlug,
+        label: "Doramasflix",
+        prefix: "dflix",
+        denoBase,
+        add,
+        env,
+      });
+    }
+
+    return { streams };
+  }
+}
+
+// Card de catálogo de cualquier query (searchFullDoramas/paginationDorama/
+// listDoramas): poster = TMDB CDN con la propia poster_path del backend; el
+// id = "dflix:{slug}" (el guard/base cumple con el fan-out de otros sits
+// (aunque este no viene de driver HTML).
+function dflixCardMeta(item: any) {
+  const poster = item.poster_path
+    ? `https://image.tmdb.org/t/p/w342${item.poster_path}`
+    : "";
+  const name = cleanTitle(item.name || item.name_es || item.slug);
+  return toMetaPreview({
+    id: `dflix:${item.slug}`,
+    name,
+    poster,
+  });
 }
 
 function decodeEmbedUrl(url: string): string {
@@ -330,7 +426,7 @@ async function getEpisodeBySlug(
  * la búsqueda es su GraphQL `searchFullDoramas` (por nombre, ya existente en
  * el catálogo) y el id del episodio se RECOMPOne aritméticamente con el
  * serieSlug de su BD: sus slugs de episodio siguen el patrón
- * `{serieSlug}-{s}x{e}` (el mismo que genera getDoramasflixMeta). */
+ * `{serieSlug}-{s}x{e}` (el mismo que genera el meta). */
 async function resolveDflixEpisodeSlug(
   epSlug: string,
   env: Env
@@ -363,8 +459,8 @@ async function resolveDflixEpisodeSlug(
         (async () => {
           // detailDorama (query del meta) trae seasons {season_number,
           // number_of_episodes}: de ahí sale el mapa completo SxE → slug con
-          // el mismo criterio que getDoramasflixMeta usa para sus videos.
-          const detail = await getDoramasflixMeta(
+          // el mismo criterio que el meta usa para sus videos.
+          const detail = await doramasflixSource.getMeta(
             `dflix:${seriesSlug}`,
             "" // sin TMDB: solo se necesitan las seasons
           );
@@ -385,75 +481,4 @@ async function resolveDflixEpisodeSlug(
   );
 }
 
-export async function getDoramasflixStreams(
-  rawId: string,
-  env: Env
-) {
-  const epSlug = rawId.replace("dflix:", "");
-
-  const found = await getEpisodeBySlug(epSlug);
-  let epId = found?.id || "";
-  if (!epId) {
-    // Slug venido de otro sitio (o fallo transitorio): resolver por título y
-    // recomponer el id dflix (dflix:{serieSlug}-{s}x{e}) para reintentar. El
-    // re-intent vale aunque coincida el slug: barato (1 GraphQL) y cubre el
-    // caso de la primera query muerta por red.
-    const resolved = await resolveDflixEpisodeSlug(epSlug, env);
-    if (resolved) {
-      if (resolved !== epSlug)
-        console.log(`[dflix] slug resuelto: ${epSlug} → ${resolved}`);
-      const found2 = await getEpisodeBySlug(resolved);
-      epId = found2?.id || "";
-    }
-  }
-  if (!epId) return { streams: [] };
-
-  const linksQuery = `
-    query EpisodeLinksOnline($episode_id: ID!) {
-      getEpisodeLinks(id: $episode_id) {
-        links_online {
-          _id
-          server
-          lang
-          link
-        }
-      }
-    }
-  `;
-
-  let rawLinks = [];
-
-  try {
-    const linksData = await fetchGql(linksQuery, { episode_id: epId });
-    rawLinks = linksData?.getEpisodeLinks?.links_online || [];
-
-    console.log(`[dflix] ${rawLinks.length} links para ${epSlug}`);
-
-    if (rawLinks.length === 0) return { streams: [] };
-  } catch (e) {
-    console.error(`Error fetching Doramasflix episode links: ${e}`);
-    return { streams: [] };
-  }
-
-
-  const denoBase = denoBaseFromEnv(env);
-
-  const { add, streams } = makeStreamDeduper();
-
-  for (const item of rawLinks) {
-    if (!item.link) continue;
-    const decodedEmbed = decodeEmbedUrl(item.link);
-    if (!decodedEmbed) continue;
-    await addEmbedStreams({
-      embed: decodedEmbed,
-      epSlug,
-      label: "Doramasflix",
-      prefix: "dflix",
-      denoBase,
-      add,
-      env,
-    });
-  }
-
-  return { streams };
-}
+export const doramasflixSource = new DoramasflixSource();

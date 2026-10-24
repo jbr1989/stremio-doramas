@@ -1,15 +1,15 @@
 import { Env } from "../types";
 import { cleanTitle } from "../utils";
 import { genreSlug } from "../genres";
-import { getDoramaCatalog, DORAMA_SOURCES } from "./doramas";
-import { getKplayCatalog } from "./kdramasplay";
-import { getYandiCatalog } from "./yandispoiler";
-import { getDoramasflixCatalog } from "./doramasflix";
-import { getTudoramaCatalog } from "./tudorama";
-import { getPandramaCatalog } from "./pandrama";
-import { getDoramaYtCatalog } from "./doramasyt";
-import { getDoramaSubCatalog } from "./doramasub";
-import { getKisskhCatalog } from "./kisskh";
+import { dlatSource, dplaySource } from "./doramas";
+import { kplaySource } from "./kdramasplay";
+import { yandiSource } from "./yandispoiler";
+import { doramasflixSource } from "./doramasflix";
+import { tudoramaSource } from "./tudorama";
+import { pandramaSource } from "./pandrama";
+import { doramaYtSource } from "./doramasyt";
+import { doramaSubSource } from "./doramasub";
+import { kisskhSource } from "./kisskh";
 
 // ─── Catálogo consolidado "Todos los Doramas" ───────────────────────────────
 // Orquesta los catálogos ya existentes en paralelo, fusiona, y de-duplica por
@@ -39,24 +39,16 @@ type SourceSpec = {
 // primero (GraphQL, estructura estable); pandrama al final (su orden
 // "views_day" cambia a diario, aporta variedad al final de la lista).
 const SOURCES: SourceSpec[] = [
-  { name: "dflix", page: 20, fetch: (e) => getDoramasflixCatalog(e) },
-  {
-    name: "dlat",
-    page: 45,
-    fetch: (e, env) => getDoramaCatalog(DORAMA_SOURCES.dlat, e, env),
-  },
-  {
-    name: "dplay",
-    page: 45,
-    fetch: (e, env) => getDoramaCatalog(DORAMA_SOURCES.dplay, e, env),
-  },
-  { name: "dyt", page: 24, fetch: (e, env) => getDoramaYtCatalog(e, env) },
-  { name: "dsub", page: 24, fetch: (e, env) => getDoramaSubCatalog(e, env) },
-  { name: "tudorama", page: 24, fetch: (e, env) => getTudoramaCatalog(e, env) },
-  { name: "kplay", page: 24, fetch: (e, env) => getKplayCatalog(e, env) },
-  { name: "yandi", page: 24, fetch: (e, env) => getYandiCatalog(e, env) },
-  { name: "kisskh", page: 24, fetch: (e, env) => getKisskhCatalog(e, env) },
-  { name: "pandrama", page: 48, fetch: (e, env) => getPandramaCatalog(e, env) },
+  { name: "dflix", page: 20, fetch: (e) => doramasflixSource.getCatalog(e) },
+  { name: "dlat", page: 45, fetch: (e, env) => dlatSource.getCatalog(e, env) },
+  { name: "dplay", page: 45, fetch: (e, env) => dplaySource.getCatalog(e, env) },
+  { name: "dyt", page: 24, fetch: (e, env) => doramaYtSource.getCatalog(e, env) },
+  { name: "dsub", page: 24, fetch: (e, env) => doramaSubSource.getCatalog(e, env) },
+  { name: "tudorama", page: 24, fetch: (e, env) => tudoramaSource.getCatalog(e, env) },
+  { name: "kplay", page: 24, fetch: (e, env) => kplaySource.getCatalog(e, env) },
+  { name: "yandi", page: 24, fetch: (e, env) => yandiSource.getCatalog(e, env) },
+  { name: "kisskh", page: 24, fetch: (e, env) => kisskhSource.getCatalog(e, env) },
+  { name: "pandrama", page: 48, fetch: (e, env) => pandramaSource.getCatalog(e, env) },
 ];
 
 /** Clave de dedup: cleanTitle ya limpia "Ver", "subtitulado", colas del tema;

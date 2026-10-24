@@ -1,6 +1,32 @@
 import { Env } from "../types";
 import { cacheGet, cacheSet } from "../utils";
 
+/**
+ * Baja la página del episodio; si viene vacía, resuelve el slug real vía
+ * slugmap y reintenta una vez. Lo usan las fuentes HTML con rescate
+ * (dlat/dplay, kplay, yandi, tudo, dyt, dsub) desde su fetchEpisodePage.
+ * Antes: bloque de rescate copiado dentro del esqueleto de getStreams de
+ * cada fuente; se sacó de SourceBase porque NO es universal (kisskh/
+ * pandrama/doramasflix no bajan una página de episodio).
+ */
+export async function fetchWithSlugRescue(
+  urlFor: (slug: string) => string,
+  slug: string,
+  env: Env,
+  fetcher: (url: string, env: Env) => Promise<string>,
+  resolve: (slug: string, env: Env) => Promise<string | null>,
+  tag: string
+): Promise<string> {
+  let html = await fetcher(urlFor(slug), env);
+  if (html) return html;
+  const resolved = await resolve(slug, env);
+  if (resolved && resolved !== slug) {
+    console.log(`[${tag}] slug resuelto: ${slug} → ${resolved}`);
+    return fetcher(urlFor(resolved), env);
+  }
+  return html;
+}
+
 // ─── slug mapping entre sitios ──────────────────────────────────────────────
 //
 // El fan-out de getStreams (index.ts) reutiliza el epSlug del sitio origen en

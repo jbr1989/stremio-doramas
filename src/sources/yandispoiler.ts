@@ -1,238 +1,303 @@
 import { Env } from "../types";
-import { genreSlug } from "../genres";
-import { cleanTitle, decodeEntities, denoBaseFromEnv, fetchHtml, fetchTmdb, makeStreamDeduper, toMetaPreview } from "../utils";
-import { addEmbedStreams } from "../extractors";
-import { genresFromDooPlay } from "./dooplay";
-import { resolveEpisodeSlug, searchVariants } from "./slugmap";
+import { cleanTitle, fetchHtml, fetchTmdb } from "../utils";
+import {
+  buildMovieMeta,
+  buildSeriesMeta,
+  dooplayEpisodeList,
+  genresFromDooPlay,
+  ogMetaFromHtml,
+} from "./dooplay";
+import { fetchWithSlugRescue, resolveEpisodeSlug, searchVariants } from "./slugmap";
+import { SourceBase, SourceCard } from "./sourceBase";
 
 const YANDI_BASE = "https://yandispoiler.net";
 
-export function parseYandiCards(html: string) {
-  const results: { id: string; name: string; poster: string }[] = [];
-  const seen = new Map<string, { id: string; name: string; poster: string }>();
-  const push = (type: "series" | "movie", slug: string, rawPoster: string, rawName: string) => {
-    if (!slug) return;
-    const key = `${type}:${slug}`;
-    const poster = rawPoster.startsWith("http")
-      ? rawPoster
-      : rawPoster
-      ? `${YANDI_BASE}${rawPoster}`
-      : "";
-    const name = cleanTitle(rawName) || slug;
-    const existing = seen.get(key);
-    // Fusiona duplicados: la primera aparición gana, pero se completa
-    // name/poster si faltan (p. ej. anchor vacío seguido de su <img>).
-    if (existing) {
-      if (!existing.poster && poster) existing.poster = poster;
-      if (existing.name === slug && name !== slug) existing.name = name;
-      return;
-    }
-    const entry = { id: `yandi:${type}:${slug}`, name, poster };
-    seen.set(key, entry);
-    results.push(entry);
-  };
+/** Config de los clones del tema "3-segmentos": yandi y kdramasplay son
+ * hermanos (mismo layout, ids {prefix}:{type}:{slug}) que difieren en base
+ * y en la torta del archivo de género. */
+export interface YandiCfg {
+  prefix: string;
+  label: string;
+  base: string;
+  /** Ruta del directorio de series: "series" (ambos). */
+  seriesPath: string;
+  /** Ruta del player de episodios: "episodios" (ambos). */
+  epPath: string;
+  /** Ruta del archivo de película: "peliculas" (ambos). */
+  moviePath: string;
+  /** Base taxonomía de género en el catálogo: "generos" (yandi) /
+   * "genero" (kplay). */
+  genreBase: string;
+}
 
-  // Cards del tema Dooplay. Dos variantes:
-  //  a) <a href=".../series/<slug>/" data-ptype="tvshows" title="TITULO">
-  //       <img class="thumb" alt="TITULO" src="poster.jpg">   <- img dentro del anchor
-  //     </a>
-  //  b) <a href=".../series/<slug>/" data-ptype="tvshows" title="TITULO"></a>
-  //     ... <img data-original="poster.jpg" alt="TITULO" src="poster.jpg">  <- img fuera
-  // En ambas el <img> usa "alt" ANTES de "src" y lazyload por "data-src"/"data-original".
-  const anchorRe = /<a\s[^>]*href="[^"]*\/(series|peliculas)\/([a-z0-9-]+)\/"[^>]*>/gi;
-  for (const m of html.matchAll(anchorRe)) {
-    const openTag = m[0];
-    const idx = m.index ?? 0;
-    // Ventana hasta el proximo anchor o item del tema (evita colarse el poster
-    // de la card siguiente); el <img> queda incluido dentro de la ventana.
-    const nextA = html.indexOf("<a ", idx + openTag.length);
-    const nextItem = html.indexOf('<div id="item-', idx + openTag.length);
-    const end = Math.min(
-      nextA === -1 ? html.length : nextA,
-      nextItem === -1 ? html.length : nextItem,
-      idx + 1500
+/** Classe base de los clones theme-3-segmentos (yandi, kdramasplay).
+ * Las hijas solo pisan lo genuinamente distinto: player (extractEmbeds),
+ * thumbs/grilla de episodios en el meta, parser de cards y rescatador de
+ * slug. */
+export class YandiSource extends SourceBase {
+  constructor(private cfg: YandiCfg) {
+    super();
+  }
+
+  get prefix() {
+    return this.cfg.prefix;
+  }
+  get label() {
+    return this.cfg.label;
+  }
+
+  // ── Streams ──
+  // Ids de 3 segmentos: "{prefix}:ep:{slug}" / "{prefix}:movie:{slug}". El
+  // parseId default deja "ep:{slug}" / "movie:{slug}" — buildPageUrl
+  // discrimina el subtipo.
+  protected buildPageUrl(idSlug: string): string {
+    return idSlug.startsWith("movie:")
+      ? `${this.cfg.base}/${this.cfg.moviePath}/${idSlug.slice(6)}/`
+      : `${this.cfg.base}/${this.cfg.epPath}/${idSlug.slice(3)}/`;
+  }
+
+  // El rescate de slug no es común (la base no lo hace): el catálogo envejece
+  // igual que el DooPlay hispano. Solo la rama "ep"; las películas van con
+  // fetch directo.
+  protected override async fetchEpisodePage(
+    idSlug: string,
+    env: Env
+  ): Promise<string> {
+    if (idSlug.startsWith("movie:"))
+      return this.fetchBody(this.buildPageUrl(idSlug), env);
+    const slug = idSlug.slice(3);
+    return fetchWithSlugRescue(
+      (s) => `${this.cfg.base}/${this.cfg.epPath}/${s}/`,
+      slug,
+      env,
+      (u, e) => this.fetchBody(u, e),
+      (s, e) => this.resolveEpisodeSlug?.(s, e) ?? Promise.resolve(null),
+      this.prefix
     );
-    const block = html.slice(idx, end);
-    const ptype = (openTag.match(/data-ptype="([^"]*)"/i)?.[1] || "").toLowerCase();
-    const type: "series" | "movie" = ptype.startsWith("tv")
-      ? "series"
-      : ptype === "movie"
-      ? "movie"
-      : m[1].toLowerCase() === "peliculas"
-      ? "movie"
-      : "series";
-    const poster = (
-      block.slice(openTag.length).match(/(?:data-src|data-original|src)="([^"]+)"/i)?.[1] || ""
-    ).trim();
-    // Variante "sideranking" (trending lateral): el anchor no trae <img> y el
-    // poster vive en el <li> contenedor, ANTES del anchor (data-bg-url).
-    const back = html.slice(Math.max(0, idx - 600), idx);
-    const bgPoster = back.match(/data-bg-url="([^"]+)"/i)?.[1] || "";
-    const name = (
-      openTag.match(/title="([^"]*)"/i)?.[1] ||
-      block.match(/alt="([^"]*)"/i)?.[1] ||
-      ""
-    ).trim();
-    push(type, m[2], poster || bgPoster, name);
   }
 
-  // Fallback: markup sin data-ptype (img con src antes de alt y link después)
-  for (const m of html.matchAll(
-    /<img[^>]+(?:data-src|src)="([^"]+)"[^>]*alt="([^"]*)"[\s\S]{0,250}?\/(series|peliculas)\/([a-z0-9-]+)\//gi
-  )) {
-    const type = m[3].toLowerCase() === "peliculas" ? "movie" : "series";
-    push(type, m[4], m[1], m[2]);
+  /** Rescatador de slug (slugmap). yandi usa el buscador del sitio (default);
+   * kplay lo pisa con el REST+nonce de DooPlay. */
+  protected async resolveEpisodeSlug(
+    epSlug: string,
+    env: Env
+  ): Promise<string | null> {
+    return resolveYandiEpisodeSlug(epSlug, env);
   }
-  for (const m of html.matchAll(
-    /\/(series|peliculas)\/([a-z0-9-]+)\/"[^>]*>[\s\S]{0,100}?<img[^>]+(?:data-src|src)="([^"]+)"[^>]*alt="([^"]*)"/gi
-  )) {
-    const type = m[1].toLowerCase() === "peliculas" ? "movie" : "series";
-    push(type, m[2], m[3], m[4]);
-  }
-  return results.slice(0, 100);
-}
 
-export async function getYandiCatalog(
-  extra: Record<string, string>,
-  env?: Env
-) {
-  const q = (extra.search || "").trim();
-  if (q) {
-    return {
-      metas: parseYandiCards(
-        await fetchHtml(
-          `${YANDI_BASE}/?s=${encodeURIComponent(q)}`,
-          env
-        )
-      ).map(toMetaPreview),
+  // Ids de 3 segmentos: quitar "ep:"/"movie:" para los behaviorHints.
+  protected override emitSlug(idSlug: string): string {
+    return idSlug.replace(/^(?:ep|movie):/, "");
+  }
+
+  // Embeds por defecto del tema: data-url="https://..." del player del
+  // episodio (sin fetch extra). Kplay lo pisa (AJAX DooPlay).
+  protected async extractEmbeds(
+    html: string,
+    _slug: string,
+    _env?: Env
+  ): Promise<string[]> {
+    const embeds: string[] = [];
+    for (const m of html.matchAll(/data-url=["'](https?:\/\/[^"']+)["']/gi)) {
+      const u = m[1].trim();
+      if (u && !embeds.includes(u)) embeds.push(u);
+    }
+    return embeds;
+  }
+
+  // ── Catálogo ──
+  protected buildSearchUrl(q: string): string {
+    return `${this.cfg.base}/?s=${encodeURIComponent(q)}`;
+  }
+
+  // Archivo de género SIN paginación upstream (?page=2 repite la página 1):
+  // el skip de Stremio se ignora en esta rama.
+  protected buildGenreUrl(gslug: string, _page: number): string {
+    return `${this.cfg.base}/${this.cfg.genreBase}/${gslug}/`;
+  }
+
+  protected buildListUrl(page: number): string {
+    return page > 1
+      ? `${this.cfg.base}/${this.cfg.seriesPath}/page/${page}/`
+      : `${this.cfg.base}/${this.cfg.seriesPath}/`;
+  }
+
+  // Ids de 3 segmentos: "{prefix}:{series|movie}:{slug}".
+  protected override cardId(entry: SourceCard): string {
+    return `${this.prefix}:${entry.type}:${entry.slug}`;
+  }
+
+  // El archivo de género mezcla series+películas: solo series. La búsqueda
+  // no filtra.
+  protected override filterCards(
+    cards: SourceCard[],
+    _q: string,
+    isSearch: boolean
+  ): SourceCard[] {
+    return isSearch ? cards : cards.filter((c) => c.type !== "movie");
+  }
+
+  // Parser de cards del tema (yandi): anchors con data-ptype (dos variantes:
+  // img dentro del anchor / img fuera, hasta próximo anchor o item del tema)
+  // + variante "sideranking" (poster en data-bg-url ANTES del anchor).
+  // Kplay lo pisa con sus 2 regex simples.
+  protected parseCards(html: string): SourceCard[] {
+    const results: SourceCard[] = [];
+    const seen = new Map<string, SourceCard>();
+    const push = (
+      type: "series" | "movie",
+      slug: string,
+      rawPoster: string,
+      rawName: string
+    ) => {
+      if (!slug) return;
+      const key = `${type}:${slug}`;
+      const poster = rawPoster.startsWith("http")
+        ? rawPoster
+        : rawPoster
+        ? `${this.cfg.base}${rawPoster}`
+        : "";
+      const name = cleanTitle(rawName) || slug;
+      const existing = seen.get(key);
+      // Fusiona duplicados: la primera aparición gana, pero se completa
+      // name/poster si faltan (p. ej. anchor vacío seguido de su <img>).
+      if (existing) {
+        if (!existing.poster && poster) existing.poster = poster;
+        if (existing.name === slug && name !== slug) existing.name = name;
+        return;
+      }
+      const entry = { slug, type, name, poster };
+      seen.set(key, entry);
+      results.push(entry);
     };
+
+    // Cards del tema Dooplay. Dos variantes:
+    //  a) <a href=".../series/<slug>/" data-ptype="tvshows" title="TITULO">
+    //       <img class="thumb" alt="TITULO" src="poster.jpg">  (img dentro)
+    //     </a>
+    //  b) <a href="..." title="TITULO"></a> ... <img data-original poster>(img fuera)
+    // En ambas el <img> usa "alt" ANTES de "src" y lazyload "data-src"/"data-original".
+    const anchorRe = /<a\s[^>]*href="[^"]*\/(?<dir>series|peliculas)\/(?<slug>[a-z0-9-]+)\/"[^>]*>/gi;
+    for (const m of html.matchAll(anchorRe)) {
+      const openTag = m[0];
+      const idx = m.index ?? 0;
+      // Ventana hasta el próximo anchor o item del tema (evita colarse el
+      // poster de la card siguiente); el <img> queda dentro de la ventana.
+      const nextA = html.indexOf("<a ", idx + openTag.length);
+      const nextItem = html.indexOf('<div id="item-', idx + openTag.length);
+      const end = Math.min(
+        nextA === -1 ? html.length : nextA,
+        nextItem === -1 ? html.length : nextItem,
+        idx + 1500
+      );
+      const block = html.slice(idx, end);
+      const ptype = (openTag.match(/data-ptype="([^"]*)"/i)?.[1] || "").toLowerCase();
+      const type: "series" | "movie" = ptype.startsWith("tv")
+        ? "series"
+        : ptype === "movie"
+        ? "movie"
+        : m.groups!.dir.toLowerCase() === "peliculas"
+        ? "movie"
+        : "series";
+      // poster: dentro del atributo del propio anchor o la ventana.
+      const poster = (
+        block.slice(openTag.length).match(/(?:data-src|data-original|src)="([^"]+)"/i)?.[1] ||
+        ""
+      ).trim();
+      // Variante "sideranking" (trending lateral): el anchor no trae <img> y
+      // el poster vive en el <li> contenedor ANTES del anchor (data-bg-url).
+      const back = html.slice(Math.max(0, idx - 600), idx);
+      const bgPoster = back.match(/data-bg-url="([^"]+)"/i)?.[1] || "";
+      const name = (
+        openTag.match(/title="([^"]*)"/i)?.[1] ||
+        block.match(/alt="([^"]*)"/i)?.[1] ||
+        ""
+      ).trim();
+      push(type, m.groups!.slug, poster || bgPoster, name);
+    }
+
+    // Fallback: markup sin data-ptype (img con src antes de alt y link después)
+    for (const m of html.matchAll(
+      /<img[^>]+(?:data-src|src)="([^"]+)"[^>]*alt="([^"]*)"[\s\S]{0,250}?\/(series|peliculas)\/([a-z0-9-]+)\//gi
+    )) {
+      const type = m[3].toLowerCase() === "peliculas" ? "movie" : "series";
+      push(type, m[4], m[1], m[2]);
+    }
+    for (const m of html.matchAll(
+      /\/(series|peliculas)\/([a-z0-9-]+)\/"[^>]*>[\s\S]{0,100}?<img[^>]+(?:data-src|src)="([^"]+)"[^>]*alt="([^"]*)"/gi
+    )) {
+      const type = m[1].toLowerCase() === "peliculas" ? "movie" : "series";
+      push(type, m[2], m[3], m[4]);
+    }
+    return results.slice(0, 100);
   }
 
-  const g = (extra.genre || "").trim();
-  if (g) {
-    const gslug = genreSlug("yandi", g);
-    if (!gslug) return { metas: [] };
-    return {
-      metas: parseYandiCards(
-        await fetchHtml(`${YANDI_BASE}/generos/${gslug}/`, env)
-      )
-        .filter((r) => r.id.startsWith("yandi:series:"))
-        .map(toMetaPreview),
-    };
+  // ── Meta ──
+  // Thumbs de la grilla de episodios; yandi no tiene → Map vacío (poster).
+  // Kplay lo pisa con dooplayEpThumbs (window 220).
+  protected episodeThumbs(_html: string): Map<string, string> {
+    return new Map();
   }
 
-  const page = Math.floor(parseInt(extra.skip || "0", 10) / 24) + 1;
-  const path = page > 1 ? `${YANDI_BASE}/series/page/${page}/` : `${YANDI_BASE}/series/`;
-  return {
-    metas: parseYandiCards(await fetchHtml(path, env)).map(toMetaPreview),
-  };
-}
+  // Ids de 3 segmentos y rama movie — sobrecarga completa del template:
+  // movie → buildMovieMeta; series → buildSeriesMeta con grilla DooPlay
+  // (/{epPath}/{slug}-SxE/) y thumbnail = poster de la ficha (sin stills).
+  async getMeta(
+    id: string,
+    tmdbKey: string,
+    env?: Env
+  ): Promise<{ meta: unknown }> {
+    const parts = id.split(":");
+    if (parts.length < 3) return { meta: null };
+    const type = parts[1]; // "series" or "movie"
+    const slug = parts[2];
 
-export async function getYandiMeta(
-  id: string,
-  tmdbKey: string,
-  env?: Env
-) {
-  const parts = id.split(":");
-  if (parts.length < 3) return { meta: null };
-  const type = parts[1]; // "series" or "movie"
-  const slug = parts[2];
-  const pageUrl =
-    type === "movie"
-      ? `${YANDI_BASE}/peliculas/${slug}/`
-      : `${YANDI_BASE}/series/${slug}/`;
+    let html = "";
+    try {
+      html = await fetchHtml(
+        type === "movie"
+          ? `${this.cfg.base}/${this.cfg.moviePath}/${slug}/`
+          : `${this.cfg.base}/${this.cfg.seriesPath}/${slug}/`,
+        env
+      );
+    } catch {
+      return { meta: null };
+    }
+    if (!html) return { meta: null };
 
-  let html = "";
-  try {
-    html = await fetchHtml(pageUrl, env);
-  } catch {
-    return { meta: null };
-  }
+    const og = ogMetaFromHtml(html, slug);
+    const genres = genresFromDooPlay(html, "genero", this.prefix);
+    const tmdb = await fetchTmdb(og.name, tmdbKey);
 
-  const name =
-    cleanTitle(
-      html.match(/<meta[^>]+property="og:title"[^>]+content="([^"]+)"/i)?.[1] ||
-        html.match(/<title>([\s\S]*?)<\/title>/i)?.[1] ||
-        slug
-    ) || slug;
-  const poster =
-    html.match(/<meta[^>]+property="og:image"[^>]+content="([^"]+)"/i)?.[1] ||
-    html.match(/<div class="poster">\s*<img[^>]+(?:data-src|src)="([^"]+)"/i)?.[1] ||
-    "";
-  const description = decodeEntities(
-    html.match(/<meta[^>]+property="og:description"[^>]+content="([^"]+)"/i)?.[1] ||
-      html.match(/<div[^>]+itemprop="description"[^>]*>([\s\S]*?)<\/div>/i)?.[1] ||
-      ""
-  )
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  const genres = genresFromDooPlay(html, "genero", "yandi");
-  const tmdb = await fetchTmdb(name, tmdbKey);
-
-  if (type === "movie") {
-    return {
-      meta: {
+    if (type === "movie") {
+      return buildMovieMeta({
         id,
-        type: "movie",
-        name,
-        poster: tmdb?.poster || poster,
-        background: tmdb?.background || poster,
-        description: tmdb?.description || description,
-        posterShape: "poster",
-        releaseInfo: tmdb?.year || "",
+        slug,
+        name: og.name,
+        poster: og.poster,
+        description: og.description,
         genres,
-        videos: [
-          {
-            id: `yandi:movie:${slug}`,
-            title: name,
-            season: 1,
-            episode: 1,
-          },
-        ],
-      },
-    };
-  }
+        tmdb,
+      });
+    }
 
-  // Episodes extraction:
-  // <a ... data-ep-num="4" ... onclick="window.location.href='https://yandispoiler.net/episodios/doctor-x-mafia-in-white-1x4/'">
-  // or href="/episodios/doctor-x-mafia-in-white-1x4/"
-  const episodes: { slug: string; s: number; e: number }[] = [];
-  const seen = new Set<string>();
-  for (const m of html.matchAll(
-    /\/episodios\/([a-z0-9-]+-(\d+)x(\d+))\/?/gi
-  )) {
-    if (seen.has(m[1])) continue;
-    seen.add(m[1]);
-    episodes.push({
-      slug: m[1],
-      s: parseInt(m[2], 10),
-      e: parseInt(m[3], 10),
-    });
-  }
-  episodes.sort((a, b) => a.s - b.s || a.e - b.e);
-
-  return {
-    meta: {
+    const thumbs = this.episodeThumbs(html);
+    return buildSeriesMeta({
       id,
-      type: "series",
-      name,
-      poster: tmdb?.poster || poster,
-      background: tmdb?.background || poster,
-      description: tmdb?.description || description,
-      posterShape: "poster",
-      releaseInfo: tmdb?.year || "",
+      name: og.name,
+      poster: og.poster,
+      description: og.description,
       genres,
-      videos: episodes.map((ep) => ({
-        id: `yandi:ep:${ep.slug}`,
-        title: `T${ep.s} · Episodio ${ep.e}`,
+      tmdb,
+      // Sin stills por episodio → poster siempre.
+      videos: dooplayEpisodeList(html, this.cfg.epPath).map((ep) => ({
+        id: `${this.prefix}:ep:${ep.slug}`,
         season: ep.s,
         episode: ep.e,
-        thumbnail: poster,
+        thumbnail: thumbs.get(ep.slug) || og.poster,
       })),
-    },
-  };
+    });
+  }
 }
 
 async function resolveYandiEpisodeSlug(
@@ -260,20 +325,11 @@ async function resolveYandiEpisodeSlug(
           `${YANDI_BASE}/series/${seriesSlug}/`,
           env
         );
-        const episodes: { s: number; e: number; epSlug: string }[] = [];
-        const seen = new Set<string>();
-        for (const m of html.matchAll(
-          /\/episodios\/([a-z0-9-]+-(\d+)x(\d+))\/?/gi
-        )) {
-          if (seen.has(m[1])) continue;
-          seen.add(m[1]);
-          episodes.push({
-            epSlug: m[1],
-            s: parseInt(m[2], 10),
-            e: parseInt(m[3], 10),
-          });
-        }
-        return episodes;
+        return dooplayEpisodeList(html, "episodios").map((ep) => ({
+          epSlug: ep.slug,
+          s: ep.s,
+          e: ep.e,
+        }));
       },
     },
     epSlug,
@@ -281,62 +337,13 @@ async function resolveYandiEpisodeSlug(
   );
 }
 
-export async function getYandiStreams(
-  rawId: string,
-  env: Env
-) {
-  const parts = rawId.split(":");
-  if (parts.length < 3) return { streams: [] };
-  const subType = parts[1]; // "ep" or "movie"
-  const slug = parts.slice(2).join(":");
+export const yandiSource = new YandiSource({
+  prefix: "yandi",
+  label: "Yandispoiler",
+  base: YANDI_BASE,
+  seriesPath: "series",
+  epPath: "episodios",
+  moviePath: "peliculas",
+  genreBase: "generos",
+});
 
-  const targetUrl =
-    subType === "movie"
-      ? `${YANDI_BASE}/peliculas/${slug}/`
-      : `${YANDI_BASE}/episodios/${slug}/`;
-
-  let html = "";
-  try {
-    html = await fetchHtml(targetUrl, env);
-  } catch {
-    html = "";
-  }
-
-  if (!html && subType === "ep") {
-    const resolved = await resolveYandiEpisodeSlug(slug, env);
-    if (resolved && resolved !== slug) {
-      console.log(`[yandi] slug resuelto: ${slug} → ${resolved}`);
-      try {
-        html = await fetchHtml(`${YANDI_BASE}/episodios/${resolved}/`, env);
-      } catch {
-        html = "";
-      }
-    }
-  }
-  if (!html) return { streams: [] };
-
-  // Embed extraction:
-  // Elements with data-url="https://..."
-  const embeds: string[] = [];
-  for (const m of html.matchAll(/data-url=["'](https?:\/\/[^"']+)["']/gi)) {
-    const u = m[1].trim();
-    if (u && !embeds.includes(u)) embeds.push(u);
-  }
-
-  const denoBase = denoBaseFromEnv(env);
-  const { add, streams } = makeStreamDeduper();
-
-  for (const embed of embeds) {
-    await addEmbedStreams({
-      embed,
-      epSlug: slug,
-      label: "Yandispoiler",
-      prefix: "yandi",
-      denoBase,
-      add,
-      env,
-    });
-  }
-
-  return { streams };
-}

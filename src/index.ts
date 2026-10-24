@@ -22,54 +22,11 @@ import {
   findMediaUrl,
 } from "./extractors";
 import {
-  getDoramaCatalog,
-  getDoramaMeta,
-  getDoramaStreams,
-  DORAMA_SOURCES,
-} from "./sources/doramas";
-import {
-  getKplayCatalog,
-  getKplayMeta,
-  getKplayStreams,
-} from "./sources/kdramasplay";
-import {
-  getYandiCatalog,
-  getYandiMeta,
-  getYandiStreams,
-} from "./sources/yandispoiler";
-import {
-  getDoramasflixCatalog,
-  getDoramasflixMeta,
-  getDoramasflixStreams,
-} from "./sources/doramasflix";
-import {
-  getTudoramaCatalog,
-  getTudoramaMeta,
-  getTudoramaStreams,
-} from "./sources/tudorama";
-import {
-  getPandramaCatalog,
-  getPandramaMeta,
-  getPandramaStreams,
-  pandramaEpCanonicalSlug,
-} from "./sources/pandrama";
-import {
-  getDoramaYtCatalog,
-  getDoramaYtMeta,
-  getDoramaYtStreams,
-  canonicalDytSlug,
-} from "./sources/doramasyt";
-import {
-  getDoramaSubCatalog,
-  getDoramaSubMeta,
-  getDoramaSubStreams,
-  canonicalDoramaSubSlug,
-} from "./sources/doramasub";
-import {
-  getKisskhCatalog,
-  getKisskhMeta,
-  getKisskhStreams,
-} from "./sources/kisskh";
+  SOURCES,
+  sourceByPrefix,
+  episodeIdReFor,
+} from "./sources/registry";
+import { doramasflixSource } from "./sources/doramasflix";
 import { getAllAlldoramasCatalog } from "./sources/alldoramas";
 
 async function getCatalog(
@@ -79,157 +36,34 @@ async function getCatalog(
 ) {
   if (catalogId.startsWith("alldoramas"))
     return getAllAlldoramasCatalog(extra, env);
-  if (catalogId.startsWith("doramaslat"))
-    return getDoramaCatalog(DORAMA_SOURCES.dlat, extra, env);
-  if (catalogId.startsWith("doramedplay"))
-    return getDoramaCatalog(DORAMA_SOURCES.dplay, extra, env);
-  if (catalogId.startsWith("kplay")) return getKplayCatalog(extra, env);
-  if (catalogId.startsWith("yandispoiler")) return getYandiCatalog(extra, env);
-  if (catalogId.startsWith("doramasflix"))
-    return getDoramasflixCatalog(extra);
-  if (catalogId.startsWith("tudorama"))
-    return getTudoramaCatalog(extra, env);
-  if (catalogId.startsWith("pandrama"))
-    return getPandramaCatalog(extra, env);
-  if (catalogId.startsWith("doramasyt"))
-    return getDoramaYtCatalog(extra, env);
-  if (catalogId.startsWith("doramasub"))
-    return getDoramaSubCatalog(extra, env);
-  if (catalogId.startsWith("kisskh"))
-    return getKisskhCatalog(extra, env);
-  return getDoramasflixCatalog(extra);
+  // El orden de SOURCES importa: los catalogId no se solapan, pero se
+  // respeta el orden de registro igual que en la cadena original.
+  const def = SOURCES.find((s) => catalogId.startsWith(s.catalogId));
+  return def ? def.getCatalog(extra, env) : doramasflixSource.getCatalog(extra);
 }
 
 async function getMeta(id: string, tmdbKey: string, env?: Env) {
-  if (id.startsWith("dlat:"))
-    return getDoramaMeta(DORAMA_SOURCES.dlat, id, tmdbKey, env);
-  if (id.startsWith("dplay:"))
-    return getDoramaMeta(DORAMA_SOURCES.dplay, id, tmdbKey, env);
-  if (id.startsWith("kplay:")) return getKplayMeta(id, tmdbKey, env);
-  if (id.startsWith("yandi:")) return getYandiMeta(id, tmdbKey, env);
-  if (id.startsWith("dflix:")) return getDoramasflixMeta(id, tmdbKey);
-  if (id.startsWith("tudorama:")) return getTudoramaMeta(id, tmdbKey, env);
-  if (id.startsWith("pandrama:")) return getPandramaMeta(id, tmdbKey, env);
-  if (id.startsWith("dyt:")) return getDoramaYtMeta(id, tmdbKey, env);
-  if (id.startsWith("dsub:")) return getDoramaSubMeta(id, tmdbKey, env);
-  if (id.startsWith("kisskh:")) return getKisskhMeta(id, tmdbKey, env);
-  return { meta: null };
+  const def = sourceByPrefix(id.split(":")[0]);
+  return def ? def.getMeta(id, tmdbKey, env) : { meta: null };
 }
 
 async function getStreams(rawId: string, env: Env) {
+  // Slug canónico compartido: cada fuente traduce su id propio (la tabla
+  // registry soporta toEpSlug async, p.ej. pandrama resuelve su video vía KV).
+  const def = sourceByPrefix(rawId.split(":")[0]);
   let epSlug = "";
-  let pandramaVideoId = "";
-  if (rawId.startsWith("dlat:")) {
-    epSlug = rawId.slice("dlat:".length);
-  } else if (rawId.startsWith("dplay:")) {
-    epSlug = rawId.slice("dplay:".length);
-  } else if (rawId.startsWith("yandi:")) {
-    const parts = rawId.split(":");
-    if (parts[1] === "ep") {
-      epSlug = parts.slice(2).join(":");
-    } else if (parts[1] === "movie") {
-      epSlug = `${parts.slice(2).join(":")}-1x1`;
-    } else {
-      epSlug = parts.slice(1).join(":");
-    }
-  } else if (rawId.startsWith("dflix:")) {
-    epSlug = rawId.slice("dflix:".length);
-  } else if (rawId.startsWith("dyt:")) {
-    // DYT usa "titulo-episodio-N": a la forma canónica "titulo-1xN" para que
-    // las demás fuentes (guardean sobre -\d+x\d+$) acepten el slug.
-    epSlug = canonicalDytSlug(rawId.slice("dyt:".length));
-  } else if (rawId.startsWith("dsub:")) {
-    epSlug = canonicalDoramaSubSlug(rawId.slice("dsub:".length));
-  } else if (rawId.startsWith("kisskh:")) {
-    epSlug = rawId.slice("kisskh:".length);
-  } else if (rawId.startsWith("tudorama:")) {
-    epSlug = rawId.slice("tudorama:".length);
-  } else if (rawId.startsWith("kplay:")) {
-    const parts = rawId.split(":");
-    if (parts[1] === "ep") {
-      epSlug = parts.slice(2).join(":");
-    } else if (parts[1] === "movie") {
-      epSlug = `${parts.slice(2).join(":")}-1x1`;
-    } else {
-      epSlug = parts.slice(1).join(":");
-    }
-  } else if (rawId.startsWith("pandrama:")) {
-    const content = rawId.slice("pandrama:".length);
-    if (content.includes(":ep:")) {
-      // pandrama:{titleId}:ep:{videoId} — el video no da slug comparable: se
-      // resuelve más abajo (async) a "titulo-NxM" para el fan-out.
-      pandramaVideoId = content.split(":ep:")[1] || "";
-    } else {
-      epSlug = content;
-    }
-  }
-
-  // Resolución async solo para pandrama: representa el video como episodio en
-  // el resto de fuentes (cacheada en KV); si falla, queda solo la fuente propia.
-  if (pandramaVideoId) {
-    epSlug = (await pandramaEpCanonicalSlug(pandramaVideoId, env)) || "";
+  if (def) {
+    epSlug = (def.toEpSlug ? await def.toEpSlug(rawId, env) : rawId.slice(def.prefix.length + 1)) || "";
   }
 
   const tasks: Promise<{ streams: any[] }>[] = [];
 
-  if (rawId.startsWith("dlat:")) {
-    tasks.push(getDoramaStreams(DORAMA_SOURCES.dlat, rawId, env));
-  } else if (epSlug) {
-    tasks.push(getDoramaStreams(DORAMA_SOURCES.dlat, `dlat:${epSlug}`, env));
-  }
-
-  if (rawId.startsWith("dplay:")) {
-    tasks.push(getDoramaStreams(DORAMA_SOURCES.dplay, rawId, env));
-  } else if (epSlug) {
-    tasks.push(getDoramaStreams(DORAMA_SOURCES.dplay, `dplay:${epSlug}`, env));
-  }
-
-  if (rawId.startsWith("kplay:")) {
-    tasks.push(getKplayStreams(rawId, env));
-  } else if (epSlug) {
-    tasks.push(getKplayStreams(`kplay:ep:${epSlug}`, env));
-  }
-
-  if (rawId.startsWith("yandi:")) {
-    tasks.push(getYandiStreams(rawId, env));
-  } else if (epSlug) {
-    tasks.push(getYandiStreams(`yandi:ep:${epSlug}`, env));
-  }
-
-  if (rawId.startsWith("dflix:")) {
-    tasks.push(getDoramasflixStreams(rawId, env));
-  } else if (epSlug) {
-    tasks.push(getDoramasflixStreams(`dflix:${epSlug}`, env));
-  }
-
-  if (rawId.startsWith("tudorama:")) {
-    tasks.push(getTudoramaStreams(rawId, env));
-  } else if (epSlug) {
-    tasks.push(getTudoramaStreams(`tudorama:${epSlug}`, env));
-  }
-
-  if (rawId.startsWith("pandrama:")) {
-    tasks.push(getPandramaStreams(rawId, env));
-  } else if (epSlug) {
-    tasks.push(getPandramaStreams(`pandrama:${epSlug}`, env));
-  }
-
-  if (rawId.startsWith("dyt:")) {
-    tasks.push(getDoramaYtStreams(rawId, env));
-  } else if (epSlug) {
-    tasks.push(getDoramaYtStreams(`dyt:${epSlug}`, env));
-  }
-
-  if (rawId.startsWith("dsub:")) {
-    tasks.push(getDoramaSubStreams(rawId, env));
-  } else if (epSlug) {
-    tasks.push(getDoramaSubStreams(`dsub:${epSlug}`, env));
-  }
-
-  if (rawId.startsWith("kisskh:")) {
-    tasks.push(getKisskhStreams(rawId, env));
-  } else if (epSlug) {
-    tasks.push(getKisskhStreams(`kisskh:${epSlug}`, env));
+  for (const s of SOURCES) {
+    if (rawId.startsWith(`${s.prefix}:`)) {
+      tasks.push(s.getStreams(rawId, env));
+    } else if (epSlug) {
+      tasks.push(s.getStreams(s.buildId?.(epSlug) ?? `${s.prefix}:${epSlug}`, env));
+    }
   }
 
   const results = await Promise.allSettled(tasks);
@@ -256,18 +90,9 @@ async function getStreams(rawId: string, env: Env) {
 // ---------------------------------------------------------------------------
 
 /** Cada fuente con el catalogId que la resuelve en getCatalog(). */
-const DEBUG_SOURCES: { source: string; catalogId: string }[] = [
-  { source: "dlat", catalogId: "doramaslat" },
-  { source: "dplay", catalogId: "doramedplay" },
-  { source: "kplay", catalogId: "kplay" },
-  { source: "yandi", catalogId: "yandispoiler" },
-  { source: "dflix", catalogId: "doramasflix" },
-  { source: "tudorama", catalogId: "tudorama" },
-  { source: "pandrama", catalogId: "pandrama" },
-  { source: "dyt", catalogId: "doramasyt" },
-  { source: "dsub", catalogId: "doramasub" },
-  { source: "kisskh", catalogId: "kisskh" },
-];
+const DEBUG_SOURCES: { source: string; catalogId: string }[] = SOURCES.map(
+  (s) => ({ source: s.prefix, catalogId: s.catalogId })
+);
 
 const DEBUG_TIMEOUT_MS = 45000;
 const DEBUG_CONCURRENCY = 3;
@@ -282,32 +107,14 @@ type DebugCheck = {
  *  traer metas de serie/lista; el getter de streams solo acepta episodios,
  *  así que filtramos por el formato del id de cada fuente. */
 function debugIsEpisodeId(source: string, id: string): boolean {
-  if (source === "pandrama") return /^pandrama:\d+:ep:\d+$/.test(id);
-  if (source === "kisskh") return /^kisskh:(?:ep:\d+|-1x\d+)$/.test(id);
-  if (source === "dyt") return /^dyt:.+-episodio-\d+$/.test(id);
-  if (source === "dsub") return /^dsub:.+capitulo-\d+$/.test(id);
-  if (source === "kplay")
-    return /^kplay:(?:ep:.+-\d+x\d+|movie:.+)$/.test(id);
-  if (source === "yandi")
-    return /^yandi:(?:ep:.+-\d+x\d+|movie:.+)$/.test(id);
-  return new RegExp(`^${source}:.+-\\d+x\\d+$`).test(id);
+  const re = episodeIdReFor(source);
+  return re ? re.test(id) : false;
 }
 
 /** Dado un stream id con prefijo `fuente:`, construye la llamada al getter de esa fuente. */
 function debugCheckFor(prefix: string, id: string, env: Env): DebugCheck | null {
-  if (prefix === "dlat")
-    return { source: prefix, id, run: () => getDoramaStreams(DORAMA_SOURCES.dlat, id, env) };
-  if (prefix === "dplay")
-    return { source: prefix, id, run: () => getDoramaStreams(DORAMA_SOURCES.dplay, id, env) };
-  if (prefix === "kplay") return { source: prefix, id, run: () => getKplayStreams(id, env) };
-  if (prefix === "yandi") return { source: prefix, id, run: () => getYandiStreams(id, env) };
-  if (prefix === "dflix") return { source: prefix, id, run: () => getDoramasflixStreams(id, env) };
-  if (prefix === "tudorama") return { source: prefix, id, run: () => getTudoramaStreams(id, env) };
-  if (prefix === "pandrama") return { source: prefix, id, run: () => getPandramaStreams(id, env) };
-  if (prefix === "dyt") return { source: prefix, id, run: () => getDoramaYtStreams(id, env) };
-  if (prefix === "dsub") return { source: prefix, id, run: () => getDoramaSubStreams(id, env) };
-  if (prefix === "kisskh") return { source: prefix, id, run: () => getKisskhStreams(id, env) };
-  return null;
+  const def = sourceByPrefix(prefix);
+  return def ? { source: prefix, id, run: () => def.getStreams(id, env) } : null;
 }
 
 /** Tipo de un stream individual: external (🌐, no reproducible), mp4 o hls. */
