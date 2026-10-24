@@ -42,6 +42,11 @@ class TudoramaSource extends SourceBase {
     return `${TUDORAMA_BASE}/ver/${pageSlug}/`;
   }
 
+  // Ficha de serie: /serie/{slug}/ (el listado de episodios vive ahí).
+  protected buildSeriesPageUrl(slug: string): string {
+    return `${TUDORAMA_BASE}/serie/${slug}/`;
+  }
+
   // Rescate propio: resolveTudoramaEpisodeSlug devuelve el epSlug en el
   // formato del propio sitio; urlFor (buildPageUrl) re-normaliza a la vez.
   protected override async fetchEpisodePage(

@@ -83,6 +83,10 @@ class DoramaDooPlaySource extends SourceBase {
     return `${this.base}/episodes/${slug}/`;
   }
 
+  protected buildSeriesPageUrl(slug: string): string {
+    return `${this.base}/tvshows/${slug}/`;
+  }
+
   // Player DooPlay: <li dooplay_player_option data-post/nume/type> →
   // doo_player_ajax → embed URL.
   protected async extractEmbeds(
