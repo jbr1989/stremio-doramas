@@ -61,11 +61,14 @@ async function resolveDytEpisodeSlug(
 }
 
 class DoramaYtSource extends SourceBase {
-  get prefix() {
-    return "dyt";
-  }
-  get label() {
-    return "DoramasYT";
+  readonly prefix = "dyt";
+  readonly label = "DoramasYT";
+  readonly catalogId = "doramasyt";
+
+  // DYT usa "titulo-episodio-N": a la forma canónica "titulo-1xN" para que
+  // las demás fuentes (que guardan sobre -\d+x\d+$) acepten el slug.
+  override async toEpSlug(rawId: string, _env?: Env): Promise<string> {
+    return canonicalDytSlug(rawId.slice(this.prefix.length + 1));
   }
 
   // ── Streams ──

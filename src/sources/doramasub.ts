@@ -60,21 +60,20 @@ function parseFeedEntryCard(entry: any): { slug: string; name: string; poster: s
  * no scraping de grilla — getCatalog es override completo del template.
  * Streams y meta SÍ van por la base (parseMetaBasics + listEpisodes). */
 class DoramaSubSource extends SourceBase {
-  get prefix() {
-    return "dsub";
-  }
-  get label() {
-    return "DoramaSub";
+  readonly prefix = "dsub";
+  readonly label = "DoramaSub";
+  readonly catalogId = "doramasub";
+
+  // La ruta de capítulo ("2026/10/serie-capitulo-N") a la forma canónica
+  // "serie-1xN" para el fan-out entre fuentes.
+  override async toEpSlug(rawId: string, _env?: Env): Promise<string> {
+    return canonicalDoramaSubSlug(rawId.slice(this.prefix.length + 1));
   }
 
   // Episodio = ruta completa de capítulo ("2026/10/serie-capitulo-N", sin
   // .html — así llegan los ep.slug de listEpisodes). Los ids de catálogo
   // nunca llevan "capitulo" (los filtra parseFeedEntryCard).
-  override isEpisodeId(rawId: string): boolean {
-    return /\d{4}\/\d{1,2}\/.+cap[ií]tulo-\d+(\.html)?$/.test(
-      rawId.slice("dsub:".length)
-    );
-  }
+  readonly epIdPattern = "\\d{4}/\\d{1,2}/.+cap[ií]tulo-\\d+(?:\\.html)?";
 
   // No aplica: la URL del capítulo se arma en fetchEpisodePage (depende de
   // si el slug trae la ruta completa de capítulo).

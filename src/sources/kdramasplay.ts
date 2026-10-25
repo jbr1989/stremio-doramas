@@ -106,6 +106,7 @@ export class KplaySource extends YandiSource {
     super({
       prefix: "kplay",
       label: "KDramas Play",
+      catalogId: "kplay",
       base: KPLAY_BASE,
       seriesPath: "series",
       epPath: "episodios",

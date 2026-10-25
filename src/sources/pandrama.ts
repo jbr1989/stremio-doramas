@@ -47,36 +47,6 @@ const PANDRAMA_PAGE_SIZE = 48;
 const PANDRAMA_FANOUT_TTL = 24 * 60 * 60;
 const PANDRAMA_FANOUT_MISS_TTL = 15 * 60;
 
-export async function pandramaEpCanonicalSlug(
-  videoId: string,
-  env: Env
-): Promise<string> {
-  const key = `pandrama:fanout:v1:${videoId}`;
-  const cached = (await cacheGet(key, env.STREAM_CACHE)) as
-    | { slug?: string }
-    | null;
-  if (cached) return cached.slug || "";
-
-  let slug = "";
-  try {
-    const data = await fetchPandramaData(`/ver/${videoId}`, env);
-    const page = data?.loaders?.episodePage;
-    const titleSlug = String(page?.title?.slug || "").toLowerCase();
-    const s = Number(page?.episode?.season_number || 1);
-    const e = Number(page?.episode?.episode_number || 1);
-    if (titleSlug) slug = `${titleSlug}-${s}x${e}`;
-  } catch {
-    slug = "";
-  }
-  await cacheSet(
-    key,
-    { slug },
-    slug ? PANDRAMA_FANOUT_TTL : PANDRAMA_FANOUT_MISS_TTL,
-    env.STREAM_CACHE
-  );
-  return slug;
-}
-
 async function fetchPandramaData(path: string, env?: Env): Promise<any | null> {
   const url = path.startsWith("http") ? path : `${PANDRAMA_BASE}${path.startsWith("/") ? "" : "/"}${path}`;
 
@@ -117,18 +87,53 @@ function isPandramaShort(item: any): boolean {
  * override completo. La clase aporta identidad + los overrides delegando el
  * desarmado de bootstrapData (fetchPandramaData). */
 class PandramaSource extends SourceBase {
-  get prefix() {
-    return "pandrama";
-  }
-  get label() {
-    return "Pandrama";
-  }
+  readonly prefix = "pandrama";
+  readonly label = "Pandrama";
+  readonly catalogId = "pandrama";
 
   // Episodio = "pandrama:{titleId}:ep:{videoId}" (getMeta). Los ids de
   // catálogo ("pandrama:{titleId}:{slug}") no llevan el marcador ":ep:" y
   // cuentan como serie.
-  override isEpisodeId(rawId: string): boolean {
-    return /^pandrama:\d+:ep:\d+$/.test(rawId);
+  readonly epIdPattern = "\\d+:ep:\\d+";
+
+  // Conversión pura id↔slug: el side effect (fetch + cache KV) vive en
+  // resolveVideoSlug. Los ids de catálogo no llevan ":ep:" y devuelven el
+  // content tal cual (el slice dejaría "{titleId}:{slug}").
+  override async toEpSlug(rawId: string, env?: Env): Promise<string> {
+    const content = rawId.slice(this.prefix.length + 1);
+    if (!content.includes(":ep:")) return content;
+    return this.resolveVideoSlug(content.split(":ep:")[1] || "", env!);
+  }
+
+  // El video no da slug comparable: se resuelve a "titulo-NxM" para el
+  // fan-out vía /ver/{videoId} (trae episodePage.title.slug y
+  // episode.season_number/episode_number), cacheado en KV: acierto 24h,
+  // fallo 15 min (para no martillar /ver en bucle).
+  private async resolveVideoSlug(videoId: string, env: Env): Promise<string> {
+    const key = `pandrama:fanout:v1:${videoId}`;
+    const cached = (await cacheGet(key, env.STREAM_CACHE)) as
+      | { slug?: string }
+      | null;
+    if (cached) return cached.slug || "";
+
+    let slug = "";
+    try {
+      const data = await fetchPandramaData(`/ver/${videoId}`, env);
+      const page = data?.loaders?.episodePage;
+      const titleSlug = String(page?.title?.slug || "").toLowerCase();
+      const s = Number(page?.episode?.season_number || 1);
+      const e = Number(page?.episode?.episode_number || 1);
+      if (titleSlug) slug = `${titleSlug}-${s}x${e}`;
+    } catch {
+      slug = "";
+    }
+    await cacheSet(
+      key,
+      { slug },
+      slug ? PANDRAMA_FANOUT_TTL : PANDRAMA_FANOUT_MISS_TTL,
+      env.STREAM_CACHE
+    );
+    return slug;
   }
 
   // No aplican: esta fuente no baja páginas HTML de episodio ni extrae

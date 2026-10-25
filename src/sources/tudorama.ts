@@ -15,12 +15,9 @@ const TUDORAMA_PREFIX = "tudorama";
  * con overrides — racer propio (minLen 300), player vía AJAX corvus + CDN
  * wrappers, meses SxE con sufijo `-s1x4`, meta/genre con taxonomía propia. */
 class TudoramaSource extends SourceBase {
-  get prefix() {
-    return TUDORAMA_PREFIX;
-  }
-  get label() {
-    return TUDORAMA_LABEL;
-  }
+  readonly prefix = TUDORAMA_PREFIX;
+  readonly label = TUDORAMA_LABEL;
+  readonly catalogId = "tudorama";
 
   // ── Streams ──
   // Racer (direct vs relay Deno, minLen 300) de esta familia de sitios.

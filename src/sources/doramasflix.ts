@@ -70,12 +70,9 @@ async function fetchGql(
  * tres templates son override completo. La clase aporta identidad + los
  * overrides (el failover de orígenes es el transporte propio). */
 class DoramasflixSource extends SourceBase {
-  get prefix() {
-    return "dflix";
-  }
-  get label() {
-    return "Doramasflix";
-  }
+  readonly prefix = "dflix";
+  readonly label = "Doramasflix";
+  readonly catalogId = "doramasflix";
 
   // No aplican (no hay HTML de episodio que bajar ni embeds de player):
   // los streams van por GraphQL getEpisodeLinks.

@@ -18,6 +18,8 @@ const YANDI_BASE = "https://yandispoiler.net";
 export interface YandiCfg {
   prefix: string;
   label: string;
+  /** catalogId que resuelve la fuente en /catalog (registry.ts). */
+  catalogId: string;
   base: string;
   /** Ruta del directorio de series: "series" (ambos). */
   seriesPath: string;
@@ -35,15 +37,15 @@ export interface YandiCfg {
  * thumbs/grilla de episodios en el meta, parser de cards y rescatador de
  * slug. */
 export class YandiSource extends SourceBase {
+  readonly prefix: string;
+  readonly label: string;
+  readonly catalogId: string;
+
   constructor(private cfg: YandiCfg) {
     super();
-  }
-
-  get prefix() {
-    return this.cfg.prefix;
-  }
-  get label() {
-    return this.cfg.label;
+    this.prefix = cfg.prefix;
+    this.label = cfg.label;
+    this.catalogId = cfg.catalogId;
   }
 
   // ── Streams ──
@@ -92,16 +94,16 @@ export class YandiSource extends SourceBase {
 
   // Episodio = "ep:slug-1x2" o película = "movie:slug" (1x1). Los ids de
   // serie del catálogo son "series:slug" y no pasan el filtro.
-  override isEpisodeId(rawId: string): boolean {
-    const idSlug = rawId.slice(this.prefix.length + 1);
-    return /^(?:ep:.+-\d+x\d+|movie:.+)$/.test(idSlug);
-  }
+  // Episodio = "{prefix}:ep:{slug-NxE}" o "{prefix}:movie:{slug}"; los ids
+  // de catálogo son "{prefix}:{season|series}:{slug}" y no cuentan como
+  // episodio (el alternate "suelto" del id tampoco).
+  readonly epIdPattern = "(?:ep:.+-\\d+x\\d+|movie:.+)";
 
   // ── Fan-out de streams (registry) ──
   // Id propio → slug canónico compartido entre fuentes. kplay y yandi usan
   // el mismo formato de id (independiente del prefijo: partes[1]), así que
   // kplay lo hereda de aquí. Las películas se representan como 1x1.
-  toEpSlug(rawId: string): string {
+  override async toEpSlug(rawId: string, _env?: Env): Promise<string> {
     const parts = rawId.split(":");
     if (parts[1] === "ep") return parts.slice(2).join(":");
     if (parts[1] === "movie") return `${parts.slice(2).join(":")}-1x1`;
@@ -363,6 +365,7 @@ async function resolveYandiEpisodeSlug(
 export const yandiSource = new YandiSource({
   prefix: "yandi",
   label: "Yandispoiler",
+  catalogId: "yandispoiler",
   base: YANDI_BASE,
   seriesPath: "series",
   epPath: "episodios",

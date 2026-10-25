@@ -32,6 +32,8 @@ export interface SourceEpisode {
 /** Info TMDB que usa el ensamblado del meta (retorno de fetchTmdb). */
 type TmdbInfo = NonNullable<Awaited<ReturnType<typeof fetchTmdb>>>;
 
+/** Identidad (prefix/label/catalogId) se declara como atributos abstractos:
+ *  cada subclase los define como campos readonly o getters (cfg-driven). */
 /**
  * Clase base de fuente (patrón Template Method) alineada al protocolo
  * Stremio: cada fuente implementa SOLO su traducción del sitio a los tres
@@ -55,10 +57,11 @@ type TmdbInfo = NonNullable<Awaited<ReturnType<typeof fetchTmdb>>>;
  */
 export abstract class SourceBase {
   /** Prefijo de id (idPrefix del manifest) p. ej. "kplay". */
-  abstract get prefix(): string;
-
+  abstract readonly prefix: string;
   /** Nombre visible en streams/cards ("KDramas Play"). */
-  abstract get label(): string;
+  abstract readonly label: string;
+  /** catalogId que resuelve la fuente en /catalog (registry.ts). */
+  abstract readonly catalogId: string;
 
   // ─────────────────────────────────────────────────────────────────────────
   // getStreams — GET /stream/{type}/{id}.json → { streams }
@@ -69,13 +72,33 @@ export abstract class SourceBase {
     return rawId.slice(this.prefix.length + 1);
   }
 
+  /** id propio → epSlug canónico compartido entre fuentes (fan-out de
+   *  streams). Default: quitar "{prefix}:" (el id propio coincide con el
+   *  slug). Las fuentes cuyo id NO es el slug compartido lo pisan
+   *  (yandi/kplay: 3 segmentos; pandrama: video → "titulo-NxM" vía KV;
+   *  dyt/dsub: "…-episodio-N"/"…-capitulo-N" → "titulo-1xN"). */
+  async toEpSlug(rawId: string, env?: Env): Promise<string> {
+    return rawId.slice(this.prefix.length + 1);
+  }
+
+  /** epSlug canónico → id propio de episodio (fan-out inverso). Default:
+   *  "{prefix}:{epSlug}". Las fuentes con ids de 3 segmentos lo pisan. */
+  buildId(epSlug: string): string {
+    return `${this.prefix}:${epSlug}`;
+  }
+
   /** ¿Es este un id de EPISODIO (aceptable por getStreams)? Los catálogos
    *  pueden traer ids de serie/movie y el debug (/debug-all) necesita
    *  separarlos para expandir series → episodios. Default: el formato
    *  genérico "{prefix}:…-SxE" que produce videoId(). Las fuentes con
    *  ids de otro formato (yandi/kplay, pandrama, dsub, kisskh) lo pisán. */
+  /** Cuerpo de la regex del id de EPISODIO, aplicado al content del id
+   *  ("{prefix}:{content}"). Default: "titulo-NxM". Las fuentes con ids en
+   *  otro formato lo pisan como atributo (sin sobrecargar el método). */
+  protected readonly epIdPattern: string = ".+-\\d+x\\d+";
+
   isEpisodeId(rawId: string): boolean {
-    return new RegExp(`^${this.prefix}:.+-\\d+x\\d+$`).test(rawId);
+    return new RegExp(`^${this.prefix}:(?:${this.epIdPattern})$`).test(rawId);
   }
 
   /** Fetch genérico de página (default fetchHtml; sobrecargar si la fuente

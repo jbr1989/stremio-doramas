@@ -14,6 +14,8 @@ interface DoramaSource {
   prefix: string;
   base: string;
   label: string;
+  /** catalogId que resuelve la fuente en /catalog (registry.ts). */
+  catalogId: string;
   /** Base del archivo de género del sitio: "genero" (doramaslat) o "genre"
    * (doramedplay). Consultas: {base}/{genreBase}/{slug}/page/N/. */
   genreBase: string;
@@ -24,12 +26,14 @@ export const DORAMA_SOURCES: Record<string, DoramaSource> = {
     prefix: "dlat",
     base: "https://doramaslat.com",
     label: "Doramas Latino",
+    catalogId: "doramaslat",
     genreBase: "genero",
   },
   dplay: {
     prefix: "dplay",
     base: "https://doramedplay.net",
     label: "Doramed Play",
+    catalogId: "doramedplay",
     genreBase: "genre",
   },
 };
@@ -37,15 +41,15 @@ export const DORAMA_SOURCES: Record<string, DoramaSource> = {
 /** Una clase, dos sitios: dlat y dplay comparten scraper/tema DooPlay y solo
  * cambian base/label/genreBase (config DoramaSource). */
 class DoramaDooPlaySource extends SourceBase {
+  readonly prefix: string;
+  readonly label: string;
+  readonly catalogId: string;
+
   constructor(private cfg: DoramaSource) {
     super();
-  }
-
-  get prefix() {
-    return this.cfg.prefix;
-  }
-  get label() {
-    return this.cfg.label;
+    this.prefix = cfg.prefix;
+    this.label = cfg.label;
+    this.catalogId = cfg.catalogId;
   }
 
   private get base() {

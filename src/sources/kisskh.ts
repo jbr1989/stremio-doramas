@@ -20,18 +20,13 @@ const KISSKH_APP = "kisskh";
  * directo, HLS→relay /hls) es override completo — NO es el esqueleto HTML
  * universal. */
 class KisskhSource extends SourceBase {
-  get prefix() {
-    return "kisskh";
-  }
-  get label() {
-    return "KissKH";
-  }
+  readonly prefix = "kisskh";
+  readonly label = "KissKH";
+  readonly catalogId = "kisskh";
 
   // Episodio = "kisskh:ep:{id-numérico}" (listEpisodes). Los ids de catálogo
   // son "kisskh:{dramaId}" y no llevan el marcador "ep:".
-  override isEpisodeId(rawId: string): boolean {
-    return /^kisskh:ep:\d+$/.test(rawId);
-  }
+  readonly epIdPattern = "ep:\\d+";
 
   // ── Fetch: toda la fuente narra el API con allowShort (respuestas cortas
   // válidas del JSON — el default de fetchHtml las trataría como fracaso). ──
