@@ -1,5 +1,5 @@
 import { Env } from "../types";
-import { kisskhKkeyFn } from "../kisskhKey";
+import { kisskhKkeyFn } from "../vendor/kisskh/kisskhKey";
 import { cleanTitle, fetchHtml } from "../utils";
 import { addEmbedStreams } from "../extractors";
 import { denoBaseFromEnv, makeStreamDeduper } from "../utils";
@@ -158,7 +158,7 @@ class KisskhSource extends SourceBase {
 
     // (2026) /api/Episode/<id> fue retirada del sitio (responde la SPA HTML).
     // Endpoint firmado: /api/DramaList/Episode/<epId>.png con kkey calculado
-    // por common.js (copiado literal en kisskhKey.js). Respuesta:
+    // por common.js (copiado literal en src/vendor/kisskh/kisskhKey.js). Respuesta:
     // { Video: mp4/hls directo, Video_tmp, ThirdParty: embed, Type: 0=mp4, 1=hls }.
     let kkey = "";
     try {
