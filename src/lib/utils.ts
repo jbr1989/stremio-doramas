@@ -10,6 +10,18 @@ export function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: CORS });
 }
 
+// decodeURIComponent que no lanza: un `%` suelto / `%2` truncado / `%ZZ`
+// inválido provocaba URIError fuera de todo try/catch en index.ts y mataba
+// la request entera (1101). Devuelve el texto original → el id no matchea
+// ninguna fuente → la ruta responde vacío (fail-soft) en vez de crashear.
+export function safeDecode(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
 // ─── request logging ────────────────────────────────────────────────────────
 // One [net] line per outgoing HTTP request of the addon, visible in the
 // wrangler terminal / wrangler tail. `how` marks the route: direct, proxy
@@ -591,4 +603,27 @@ export function makeStreamDeduper() {
     }
   };
   return { add, streams };
+}
+
+/** Ejecuta fn sobre items con concurrencia máxima `limit` (pool de workers).
+ *  Los resultados mantienen el orden original de los items (out[i] = resultado
+ *  de fn(items[i])), así que el consumo posterior es determinista.
+ *  Uso principal: extraer N embeds en paralelo sin pasarse del wall-clock
+ *  del Worker ni golpear a los origins con concurrencia descontrolada. */
+export async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i], i);
+    }
+  };
+  const n = Math.max(0, Math.min(limit, items.length));
+  await Promise.all(Array.from({ length: n }, worker));
+  return out;
 }

@@ -57,26 +57,10 @@ export function withTimeout<T>(p: Promise<T>, ms: number, tag: string): Promise<
   ]);
 }
 
-/** Ejecuta fn sobre items con un tope de concurrencia (resto en cola). */
-export async function debugMapLimit<T, R>(
-  items: T[],
-  limit: number,
-  fn: (item: T) => Promise<R>
-): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let next = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, () => {
-    return (async () => {
-      for (;;) {
-        const idx = next++;
-        if (idx >= items.length) return;
-        results[idx] = await fn(items[idx]);
-      }
-    })();
-  });
-  await Promise.all(workers);
-  return results;
-}
+/** Ejecuta fn sobre items con un tope de concurrencia (resto en cola).
+ *  Alias del mapLimit compartido (utils.ts): única implementación para
+ *  streams y debug. */
+export { mapLimit as debugMapLimit } from "../lib/utils";
 
 /** Chequeo de un episodio concreto: getter de la fuente + clasificación.
  *  Todos los streams se exponen en `sample` con servidor/tipo/name/url. */

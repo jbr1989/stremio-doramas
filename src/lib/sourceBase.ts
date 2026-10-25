@@ -4,6 +4,7 @@ import {
   fetchHtml,
   fetchTmdb,
   makeStreamDeduper,
+  mapLimit,
   toMetaPreview,
 } from "./utils";
 import { genreSlug } from "../genres";
@@ -160,18 +161,41 @@ export abstract class SourceBase {
 
     const denoBase = denoBaseFromEnv(env);
     const { add, streams } = makeStreamDeduper();
-    for (const embed of await this.extractEmbeds(html, slug, env)) {
-      if (!embed) continue;
-      await addEmbedStreams({
-        embed,
-        epSlug: this.emitSlug(slug),
-        label: this.label,
-        prefix: this.prefix,
-        denoBase,
-        add,
-        hostFallback: this.hostFor?.(embed),
-        env,
-      });
+
+    // Fase 1 (concurrente): cada embed colabora en su PROPIO deduper (sink),
+    // así no hay estado compartido mientras corre el pool. Los extractores
+    // con I/O (dood/mp4upload/hexload) pueden tardar varios segundos cada
+    // uno — en serie eran 4-12s+ por episodio; con límite 2 se corta por
+    // la mitad. El catch es por-embed: si uno falla, solo pierde él.
+    const perEmbed = await mapLimit(
+      (await this.extractEmbeds(html, slug, env)).filter(Boolean),
+      2,
+      async (embed) => {
+        const sink = makeStreamDeduper();
+        try {
+          await addEmbedStreams({
+            embed,
+            epSlug: this.emitSlug(slug),
+            label: this.label,
+            prefix: this.prefix,
+            denoBase,
+            add: sink.add,
+            hostFallback: this.hostFor?.(embed),
+            env,
+          });
+        } catch (e) {
+          console.log(
+            `[${this.prefix}] addEmbedStreams falló para ${embed}: ${e}`
+          );
+        }
+        return sink.streams;
+      }
+    );
+
+    // Fase 2 (sincrónica, barata): dedupe determinista en el orden original
+    // de los embeds — primer-entra por url/externalUrl, igual que antes.
+    for (const list of perEmbed) {
+      for (const st of list) add(st);
     }
     return { streams };
   }
