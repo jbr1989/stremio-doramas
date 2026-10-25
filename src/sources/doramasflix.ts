@@ -1,16 +1,8 @@
 import { Env, MetaPreview } from "../lib/types";
 import { genreLabelForMeta, genreSlug } from "../genres";
-import {
-  CHROME_UA,
-  cleanTitle,
-  decodeEntities,
-  denoBaseFromEnv,
-  fetchTmdb,
-  makeStreamDeduper,
-  netFetch,
-  toMetaPreview,
-} from "../lib/utils";
+import { cleanTitle, decodeEntities, denoBaseFromEnv, fetchTmdb, makeStreamDeduper, toMetaPreview } from "../lib/utils";
 import { addEmbedStreams } from "../lib/extractors";
+import { gqlFetch } from "../lib/gql";
 import { resolveEpisodeSlug, searchVariants } from "../lib/slugmap";
 import { SourceBase } from "../lib/sourceBase";
 
@@ -25,46 +17,6 @@ const GQL_ORIGINS = [
   "https://doramasflix.io",    // espejo: misma marca, web alternativa
   "https://doramasmp4.io",     // espejo: otra marca, mismo backend
 ];
-
-async function fetchGql(
-  query: string,
-  variables: Record<string, any> = {},
-  timeoutMs = 12000
-): Promise<any> {
-  const errors: string[] = [];
-  for (const base of GQL_ORIGINS) {
-    try {
-      const res = await netFetch("direct", GRAPHQL_ENDPOINT, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Origin: base,
-          Referer: `${base}/`,
-          "User-Agent": CHROME_UA,
-        },
-        body: JSON.stringify({ query, variables }),
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-
-      const json: any = await res.json();
-      if (json.errors && json.errors.length > 0) {
-        throw new Error(`GraphQL: ${json.errors[0].message}`);
-      }
-
-      return json.data;
-    } catch (e) {
-      errors.push(`${base}: ${e instanceof Error ? e.message : String(e)}`);
-      // Red fallida con este origen -> probar el siguiente (failover secuencial).
-    }
-  }
-  throw new Error(
-    `Doramasflix GraphQL fallo en todos los orígenes — ${errors.join(" | ")}`
-  );
-}
 
 /** Doramasflix: GraphQL nativa de su backend (sin HTML que raspar) — los
  * tres templates son override completo. La clase aporta identidad + los
@@ -107,7 +59,7 @@ class DoramasflixSource extends SourceBase {
           }
         }
       `;
-      const data = await fetchGql(query, { input: q, page, perPage: 20 });
+      const data = await gqlFetch(GRAPHQL_ENDPOINT, query, { input: q, page, perPage: 20 }, GQL_ORIGINS);
       const items = data?.searchFullDoramas?.items || [];
       return { metas: items.map(dflixCardMeta) };
     }
@@ -134,11 +86,11 @@ class DoramasflixSource extends SourceBase {
           }
         }
       `;
-      const gdata = await fetchGql(gqlGenre, {
+      const gdata = await gqlFetch(GRAPHQL_ENDPOINT, gqlGenre, {
         page: gpage,
         limit: 24,
         filter: { genreSlug: gslug, isTVShow: false },
-      });
+      }, GQL_ORIGINS);
       const gitems = gdata?.paginationDorama?.items || [];
       return { metas: gitems.map(dflixCardMeta) };
     }
@@ -156,7 +108,7 @@ class DoramasflixSource extends SourceBase {
         }
       }
     `;
-    const data = await fetchGql(query, { limit });
+    const data = await gqlFetch(GRAPHQL_ENDPOINT, query, { limit }, GQL_ORIGINS);
     const items = (data?.listDoramas || []).slice((page - 1) * 20, page * 20);
     return { metas: items.map(dflixCardMeta) };
   }
@@ -191,7 +143,7 @@ class DoramasflixSource extends SourceBase {
         }
       }
     `;
-    const data = await fetchGql(query, { slug });
+    const data = await gqlFetch(GRAPHQL_ENDPOINT, query, { slug }, GQL_ORIGINS);
     const detail = data?.detailDorama;
     if (!detail) {
       return { meta: null };
@@ -289,7 +241,7 @@ class DoramasflixSource extends SourceBase {
   override async getStreams(rawId: string, env: Env) {
     const epSlug = rawId.replace("dflix:", "");
 
-    const found = await getEpisodeBySlug(epSlug);
+    const found = await this.getEpisodeBySlug(epSlug);
     let epId = found?.id || "";
     if (!epId) {
       // Slug venido de otro sitio (o fallo transitorio): resolver por título
@@ -300,7 +252,7 @@ class DoramasflixSource extends SourceBase {
       if (resolved) {
         if (resolved !== epSlug)
           console.log(`[dflix] slug resuelto: ${epSlug} → ${resolved}`);
-        const found2 = await getEpisodeBySlug(resolved);
+        const found2 = await this.getEpisodeBySlug(resolved);
         epId = found2?.id || "";
       }
     }
@@ -322,7 +274,7 @@ class DoramasflixSource extends SourceBase {
     let rawLinks = [];
 
     try {
-      const linksData = await fetchGql(linksQuery, { episode_id: epId });
+      const linksData = await gqlFetch(GRAPHQL_ENDPOINT, linksQuery, { episode_id: epId }, GQL_ORIGINS);
       rawLinks = linksData?.getEpisodeLinks?.links_online || [];
 
       console.log(`[dflix] ${rawLinks.length} links para ${epSlug}`);
@@ -380,11 +332,11 @@ class DoramasflixSource extends SourceBase {
           (async () => {
             const slugs = new Set<string>();
             for (const v of searchVariants(title)) {
-              const data = await fetchGql(SEARCH_QUERY, {
+              const data = await gqlFetch(GRAPHQL_ENDPOINT, SEARCH_QUERY, {
                 input: v,
                 page: 1,
                 perPage: 20,
-              });
+              }, GQL_ORIGINS);
               for (const it of data?.searchFullDoramas?.items || [])
                 if (it?.slug) slugs.add(it.slug);
             }
@@ -414,6 +366,22 @@ class DoramasflixSource extends SourceBase {
       epSlug,
       env
     );
+  }
+
+  /** `_id` + `slug` del episodio por slug sintético ({serieSlug}-{s}x{e}) —
+   * o null si el slug no existe en su BD (detailEpisode null) o la GraphQL
+   * falla. Null NO distingue not-found de error: el llamador decide si
+   * resuelve (via hook) o termina. */
+  private async getEpisodeBySlug(
+    epSlug: string
+  ): Promise<{ id: string; slug: string } | null> {
+    try {
+      const data = await gqlFetch(GRAPHQL_ENDPOINT, EPISODE_DETAIL_QUERY, { slug: epSlug }, GQL_ORIGINS);
+      const ep = data?.detailEpisode;
+      return ep?._id ? { id: ep._id, slug: ep.slug } : null;
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -462,21 +430,5 @@ const EPISODE_DETAIL_QUERY = `
     }
   }
 `;
-
-/** `_id` + `slug` del episodio por slug sintético ({serieSlug}-{s}x{e}) —
- * o null si el slug no existe en su BD (detailEpisode null) o la GraphQL
- * falla/transcurre con error. Null NO distingue not-found de error: el
- * llamador decide si resuelve o termina. */
-async function getEpisodeBySlug(
-  epSlug: string
-): Promise<{ id: string; slug: string } | null> {
-  try {
-    const data = await fetchGql(EPISODE_DETAIL_QUERY, { slug: epSlug });
-    const ep = data?.detailEpisode;
-    return ep?._id ? { id: ep._id, slug: ep.slug } : null;
-  } catch {
-    return null;
-  }
-}
 
 export const doramasflixSource = new DoramasflixSource();
