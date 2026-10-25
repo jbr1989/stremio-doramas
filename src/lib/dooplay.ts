@@ -1,6 +1,5 @@
 // Helpers comunes a los sitios DooPlay (kdramasplay, doramas/doramaslat/
-// doramedplay, …). Antes: resolveKplayEmbed (kdramasplay.ts) y resolveDoramaEmbed
-// (doramas.ts) eran copias literales de la misma llamada admin-ajax.php.
+// doramedplay, …).
 import { CHROME_UA, cleanTitle, decodeEntities, netFetch } from "./utils";
 import { genreLabelForMeta } from "../genres";
 
