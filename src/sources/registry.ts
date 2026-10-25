@@ -29,10 +29,11 @@ export type SourceDef = {
   toEpSlug?: (rawId: string, env: Env) => string | Promise<string>;
   /** epSlug → id propio para el fan-out (default `${prefix}:${epSlug}`). */
   buildId?: (epSlug: string) => string;
-  /** Formato de id de EPISODIO de esta fuente (para /debug-all):
-   *  los catálogos traen ids de serie/lista y el getter de streams solo
-   *  acepta episodios. Default `^prefix:…-\d+x\d+$`. */
-  episodeIdRe?: RegExp;
+  /** ¿Es id de EPISODIO (aceptable por getStreams)? Delegado del método
+   *  isEpisodeId() de la clase fuente: los catálogos traen ids de
+   *  serie/lista y el getter de streams solo acepta episodios, así que
+   *  /debug-all separa por formato (ver sourceBase.ts). */
+  isEpisodeId: (rawId: string) => boolean;
 };
 
 /** kplay/yandi comparten formato de id: `x:ep:slug`, `x:movie:slug` o suelto;
@@ -51,6 +52,7 @@ export const SOURCES: SourceDef[] = [
     getCatalog: (extra, env) => dlatSource.getCatalog(extra, env),
     getMeta: (id, tmdbKey, env) => dlatSource.getMeta(id, tmdbKey, env),
     getStreams: (id, env) => dlatSource.getStreams(id, env),
+    isEpisodeId: (id) => dlatSource.isEpisodeId(id),
   },
   {
     prefix: "dplay",
@@ -58,6 +60,7 @@ export const SOURCES: SourceDef[] = [
     getCatalog: (extra, env) => dplaySource.getCatalog(extra, env),
     getMeta: (id, tmdbKey, env) => dplaySource.getMeta(id, tmdbKey, env),
     getStreams: (id, env) => dplaySource.getStreams(id, env),
+    isEpisodeId: (id) => dplaySource.isEpisodeId(id),
   },
   {
     prefix: "kplay",
@@ -67,7 +70,7 @@ export const SOURCES: SourceDef[] = [
     getStreams: (id, env) => kplaySource.getStreams(id, env),
     toEpSlug: kplayYandiEpSlug,
     buildId: (epSlug) => `kplay:ep:${epSlug}`,
-    episodeIdRe: /^kplay:(?:ep:.+-\d+x\d+|movie:.+)$/,
+    isEpisodeId: (id) => kplaySource.isEpisodeId(id),
   },
   {
     prefix: "yandi",
@@ -77,7 +80,7 @@ export const SOURCES: SourceDef[] = [
     getStreams: (id, env) => yandiSource.getStreams(id, env),
     toEpSlug: kplayYandiEpSlug,
     buildId: (epSlug) => `yandi:ep:${epSlug}`,
-    episodeIdRe: /^yandi:(?:ep:.+-\d+x\d+|movie:.+)$/,
+    isEpisodeId: (id) => yandiSource.isEpisodeId(id),
   },
   {
     prefix: "dflix",
@@ -85,6 +88,7 @@ export const SOURCES: SourceDef[] = [
     getCatalog: (extra) => doramasflixSource.getCatalog(extra),
     getMeta: (id, tmdbKey) => doramasflixSource.getMeta(id, tmdbKey),
     getStreams: (id, env) => doramasflixSource.getStreams(id, env),
+    isEpisodeId: (id) => doramasflixSource.isEpisodeId(id),
   },
   {
     prefix: "tudorama",
@@ -92,6 +96,7 @@ export const SOURCES: SourceDef[] = [
     getCatalog: (extra, env) => tudoramaSource.getCatalog(extra, env),
     getMeta: (id, tmdbKey, env) => tudoramaSource.getMeta(id, tmdbKey, env),
     getStreams: (id, env) => tudoramaSource.getStreams(id, env),
+    isEpisodeId: (id) => tudoramaSource.isEpisodeId(id),
   },
   {
     prefix: "pandrama",
@@ -99,6 +104,7 @@ export const SOURCES: SourceDef[] = [
     getCatalog: (extra, env) => pandramaSource.getCatalog(extra, env),
     getMeta: (id, tmdbKey, env) => pandramaSource.getMeta(id, tmdbKey, env),
     getStreams: (id, env) => pandramaSource.getStreams(id, env),
+    isEpisodeId: (id) => pandramaSource.isEpisodeId(id),
     toEpSlug: async (rawId, env) => {
       const content = rawId.slice("pandrama:".length);
       if (!content.includes(":ep:")) return content;
@@ -116,6 +122,7 @@ export const SOURCES: SourceDef[] = [
     // DYT usa "titulo-episodio-N": a la forma canónica "titulo-1xN" para que
     // las demás fuentes (que guardan sobre -\d+x\d+$) acepten el slug.
     toEpSlug: (rawId) => canonicalDytSlug(rawId.slice("dyt:".length)),
+    isEpisodeId: (id) => doramaYtSource.isEpisodeId(id),
   },
   {
     prefix: "dsub",
@@ -124,6 +131,7 @@ export const SOURCES: SourceDef[] = [
     getMeta: (id, tmdbKey, env) => doramaSubSource.getMeta(id, tmdbKey, env),
     getStreams: (id, env) => doramaSubSource.getStreams(id, env),
     toEpSlug: (rawId) => canonicalDoramaSubSlug(rawId.slice("dsub:".length)),
+    isEpisodeId: (id) => doramaSubSource.isEpisodeId(id),
   },
   {
     prefix: "kisskh",
@@ -131,15 +139,10 @@ export const SOURCES: SourceDef[] = [
     getCatalog: (extra, env) => kisskhSource.getCatalog(extra, env),
     getMeta: (id, tmdbKey, env) => kisskhSource.getMeta(id, tmdbKey, env),
     getStreams: (id, env) => kisskhSource.getStreams(id, env),
+    isEpisodeId: (id) => kisskhSource.isEpisodeId(id),
   },
 ];
 
 export function sourceByPrefix(prefix: string): SourceDef | undefined {
   return SOURCES.find((s) => s.prefix === prefix);
-}
-
-/** Regex de id de episodio de una fuente (con default genérico). */
-export function episodeIdReFor(source: string): RegExp | null {
-  const def = sourceByPrefix(source);
-  return def ? def.episodeIdRe ?? new RegExp(`^${def.prefix}:.+-\\d+x\\d+$`) : null;
 }

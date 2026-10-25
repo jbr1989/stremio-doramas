@@ -27,6 +27,12 @@ class KisskhSource extends SourceBase {
     return "KissKH";
   }
 
+  // Episodio = "kisskh:ep:{id-numérico}" (listEpisodes). Los ids de catálogo
+  // son "kisskh:{dramaId}" y no llevan el marcador "ep:".
+  override isEpisodeId(rawId: string): boolean {
+    return /^kisskh:ep:\d+$/.test(rawId);
+  }
+
   // ── Fetch: toda la fuente narra el API con allowShort (respuestas cortas
   // válidas del JSON — el default de fetchHtml las trataría como fracaso). ──
   protected override async fetchBody(url: string, env: Env): Promise<string> {

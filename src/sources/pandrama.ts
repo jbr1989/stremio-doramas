@@ -124,6 +124,13 @@ class PandramaSource extends SourceBase {
     return "Pandrama";
   }
 
+  // Episodio = "pandrama:{titleId}:ep:{videoId}" (getMeta). Los ids de
+  // catálogo ("pandrama:{titleId}:{slug}") no llevan el marcador ":ep:" y
+  // cuentan como serie.
+  override isEpisodeId(rawId: string): boolean {
+    return /^pandrama:\d+:ep:\d+$/.test(rawId);
+  }
+
   // No aplican: esta fuente no baja páginas HTML de episodio ni extrae
   // embeds del player (los streams vienen de bootstrapData).
   protected buildPageUrl(slug: string): string {

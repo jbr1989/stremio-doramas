@@ -69,6 +69,15 @@ export abstract class SourceBase {
     return rawId.slice(this.prefix.length + 1);
   }
 
+  /** ¿Es este un id de EPISODIO (aceptable por getStreams)? Los catálogos
+   *  pueden traer ids de serie/movie y el debug (/debug-all) necesita
+   *  separarlos para expandir series → episodios. Default: el formato
+   *  genérico "{prefix}:…-SxE" que produce videoId(). Las fuentes con
+   *  ids de otro formato (yandi/kplay, pandrama, dsub, kisskh) lo pisán. */
+  isEpisodeId(rawId: string): boolean {
+    return new RegExp(`^${this.prefix}:.+-\\d+x\\d+$`).test(rawId);
+  }
+
   /** Fetch genérico de página (default fetchHtml; sobrecargar si la fuente
    * tiene fetcher propio — racer, GraphQL, bootstrapData…). */
   protected async fetchBody(url: string, env: Env): Promise<string> {

@@ -67,6 +67,15 @@ class DoramaSubSource extends SourceBase {
     return "DoramaSub";
   }
 
+  // Episodio = ruta completa de capítulo ("2026/10/serie-capitulo-N", sin
+  // .html — así llegan los ep.slug de listEpisodes). Los ids de catálogo
+  // nunca llevan "capitulo" (los filtra parseFeedEntryCard).
+  override isEpisodeId(rawId: string): boolean {
+    return /\d{4}\/\d{1,2}\/.+cap[ií]tulo-\d+(\.html)?$/.test(
+      rawId.slice("dsub:".length)
+    );
+  }
+
   // No aplica: la URL del capítulo se arma en fetchEpisodePage (depende de
   // si el slug trae la ruta completa de capítulo).
   protected buildPageUrl(_slug: string): string {
@@ -251,7 +260,6 @@ class DoramaSubSource extends SourceBase {
     return [...epMap.keys()].sort((a, b) => a - b).map((epNum) => {
       const ep = epMap.get(epNum)!;
       return {
-        id: ep.slug,
         slug: ep.slug,
         s: 1,
         e: epNum,

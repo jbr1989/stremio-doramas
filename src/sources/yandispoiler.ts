@@ -90,6 +90,13 @@ export class YandiSource extends SourceBase {
     return idSlug.replace(/^(?:ep|movie):/, "");
   }
 
+  // Episodio = "ep:slug-1x2" o película = "movie:slug" (1x1). Los ids de
+  // serie del catálogo son "series:slug" y no pasan el filtro.
+  override isEpisodeId(rawId: string): boolean {
+    const idSlug = rawId.slice(this.prefix.length + 1);
+    return /^(?:ep:.+-\d+x\d+|movie:.+)$/.test(idSlug);
+  }
+
   // Embeds por defecto del tema: data-url="https://..." del player del
   // episodio (sin fetch extra). Kplay lo pisa (AJAX DooPlay).
   protected async extractEmbeds(

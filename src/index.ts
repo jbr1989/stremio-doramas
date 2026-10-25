@@ -24,7 +24,6 @@ import {
 import {
   SOURCES,
   sourceByPrefix,
-  episodeIdReFor,
 } from "./sources/registry";
 import { doramasflixSource } from "./sources/doramasflix";
 import { getAllAlldoramasCatalog } from "./sources/alldoramas";
@@ -107,8 +106,8 @@ type DebugCheck = {
  *  traer metas de serie/lista; el getter de streams solo acepta episodios,
  *  así que filtramos por el formato del id de cada fuente. */
 function debugIsEpisodeId(source: string, id: string): boolean {
-  const re = episodeIdReFor(source);
-  return re ? re.test(id) : false;
+  const def = sourceByPrefix(source);
+  return def ? def.isEpisodeId(id) : false;
 }
 
 /** Dado un stream id con prefijo `fuente:`, construye la llamada al getter de esa fuente. */
