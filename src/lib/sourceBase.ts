@@ -1,14 +1,15 @@
-import { Env, MetaPreview } from "../types";
+import { Env, MetaPreview } from "./types";
 import {
   denoBaseFromEnv,
   fetchHtml,
   fetchTmdb,
   makeStreamDeduper,
+  mapLimit,
   toMetaPreview,
-} from "../utils";
+} from "./utils";
 import { genreSlug } from "../genres";
 import { buildSeriesMeta, ogMetaFromHtml } from "./dooplay";
-import { addEmbedStreams } from "../extractors";
+import { addEmbedStreams } from "./extractors";
 
 /** Tarjeta de catálogo del hook parseCards. El id completo lo arma la base
  * con `cardId(entry)` ("{prefix}:{slug}", con hook para ids de 3 segmentos). */
@@ -32,6 +33,8 @@ export interface SourceEpisode {
 /** Info TMDB que usa el ensamblado del meta (retorno de fetchTmdb). */
 type TmdbInfo = NonNullable<Awaited<ReturnType<typeof fetchTmdb>>>;
 
+/** Identidad (prefix/label/catalogId) se declara como atributos abstractos:
+ *  cada subclase los define como campos readonly o getters (cfg-driven). */
 /**
  * Clase base de fuente (patrón Template Method) alineada al protocolo
  * Stremio: cada fuente implementa SOLO su traducción del sitio a los tres
@@ -55,10 +58,11 @@ type TmdbInfo = NonNullable<Awaited<ReturnType<typeof fetchTmdb>>>;
  */
 export abstract class SourceBase {
   /** Prefijo de id (idPrefix del manifest) p. ej. "kplay". */
-  abstract get prefix(): string;
-
+  abstract readonly prefix: string;
   /** Nombre visible en streams/cards ("KDramas Play"). */
-  abstract get label(): string;
+  abstract readonly label: string;
+  /** catalogId que resuelve la fuente en /catalog (registry.ts). */
+  abstract readonly catalogId: string;
 
   // ─────────────────────────────────────────────────────────────────────────
   // getStreams — GET /stream/{type}/{id}.json → { streams }
@@ -67,6 +71,35 @@ export abstract class SourceBase {
   /** Parseo del id de video → slug de página. Default: quitar "{prefix}:". */
   protected parseId(rawId: string): string {
     return rawId.slice(this.prefix.length + 1);
+  }
+
+  /** id propio → epSlug canónico compartido entre fuentes (fan-out de
+   *  streams). Default: quitar "{prefix}:" (el id propio coincide con el
+   *  slug). Las fuentes cuyo id NO es el slug compartido lo pisan
+   *  (yandi/kplay: 3 segmentos; pandrama: video → "titulo-NxM" vía KV;
+   *  dyt/dsub: "…-episodio-N"/"…-capitulo-N" → "titulo-1xN"). */
+  async toEpSlug(rawId: string, env?: Env): Promise<string> {
+    return rawId.slice(this.prefix.length + 1);
+  }
+
+  /** epSlug canónico → id propio de episodio (fan-out inverso). Default:
+   *  "{prefix}:{epSlug}". Las fuentes con ids de 3 segmentos lo pisan. */
+  buildId(epSlug: string): string {
+    return `${this.prefix}:${epSlug}`;
+  }
+
+  /** ¿Es este un id de EPISODIO (aceptable por getStreams)? Los catálogos
+   *  pueden traer ids de serie/movie y el debug (/debug-all) necesita
+   *  separarlos para expandir series → episodios. Default: el formato
+   *  genérico "{prefix}:…-SxE" que produce videoId(). Las fuentes con
+   *  ids de otro formato (yandi/kplay, pandrama, dsub, kisskh) lo pisán. */
+  /** Cuerpo de la regex del id de EPISODIO, aplicado al content del id
+   *  ("{prefix}:{content}"). Default: "titulo-NxM". Las fuentes con ids en
+   *  otro formato lo pisan como atributo (sin sobrecargar el método). */
+  protected readonly epIdPattern: string = ".+-\\d+x\\d+";
+
+  isEpisodeId(rawId: string): boolean {
+    return new RegExp(`^${this.prefix}:(?:${this.epIdPattern})$`).test(rawId);
   }
 
   /** Fetch genérico de página (default fetchHtml; sobrecargar si la fuente
@@ -88,6 +121,17 @@ export abstract class SourceBase {
    */
   protected async fetchEpisodePage(slug: string, env: Env): Promise<string> {
     return this.fetchBody(this.buildPageUrl(slug), env);
+  }
+
+  /** Rescatador de slug del episodio (slug de catálogo vencido → slug vigente
+   *  del sitio). Default: la fuente no rescata (null). Las fuentes que sí lo
+   *  hacen pisan el hook con el engine resolveEpisodeSlug de slugmap.ts (su
+   *  SiteAdapter) o con su propio rescate. */
+  protected async resolveEpisodeSlug(
+    epSlug: string,
+    env: Env
+  ): Promise<string | null> {
+    return null;
   }
 
   /** Dónde vive el player del episodio. */
@@ -117,18 +161,41 @@ export abstract class SourceBase {
 
     const denoBase = denoBaseFromEnv(env);
     const { add, streams } = makeStreamDeduper();
-    for (const embed of await this.extractEmbeds(html, slug, env)) {
-      if (!embed) continue;
-      await addEmbedStreams({
-        embed,
-        epSlug: this.emitSlug(slug),
-        label: this.label,
-        prefix: this.prefix,
-        denoBase,
-        add,
-        hostFallback: this.hostFor?.(embed),
-        env,
-      });
+
+    // Fase 1 (concurrente): cada embed colabora en su PROPIO deduper (sink),
+    // así no hay estado compartido mientras corre el pool. Los extractores
+    // con I/O (dood/mp4upload/hexload) pueden tardar varios segundos cada
+    // uno — en serie eran 4-12s+ por episodio; con límite 2 se corta por
+    // la mitad. El catch es por-embed: si uno falla, solo pierde él.
+    const perEmbed = await mapLimit(
+      (await this.extractEmbeds(html, slug, env)).filter(Boolean),
+      2,
+      async (embed) => {
+        const sink = makeStreamDeduper();
+        try {
+          await addEmbedStreams({
+            embed,
+            epSlug: this.emitSlug(slug),
+            label: this.label,
+            prefix: this.prefix,
+            denoBase,
+            add: sink.add,
+            hostFallback: this.hostFor?.(embed),
+            env,
+          });
+        } catch (e) {
+          console.log(
+            `[${this.prefix}] addEmbedStreams falló para ${embed}: ${e}`
+          );
+        }
+        return sink.streams;
+      }
+    );
+
+    // Fase 2 (sincrónica, barata): dedupe determinista en el orden original
+    // de los embeds — primer-entra por url/externalUrl, igual que antes.
+    for (const list of perEmbed) {
+      for (const st of list) add(st);
     }
     return { streams };
   }

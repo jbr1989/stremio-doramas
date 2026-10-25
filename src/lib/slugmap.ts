@@ -1,5 +1,5 @@
-import { Env } from "../types";
-import { cacheGet, cacheSet } from "../utils";
+import { Env } from "./types";
+import { cacheGet, cacheSet } from "./utils";
 
 /**
  * Baja la página del episodio; si viene vacía, resuelve el slug real vía

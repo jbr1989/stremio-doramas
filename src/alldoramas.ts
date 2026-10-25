@@ -1,15 +1,15 @@
-import { Env } from "../types";
-import { cleanTitle } from "../utils";
-import { genreSlug } from "../genres";
-import { dlatSource, dplaySource } from "./doramas";
-import { kplaySource } from "./kdramasplay";
-import { yandiSource } from "./yandispoiler";
-import { doramasflixSource } from "./doramasflix";
-import { tudoramaSource } from "./tudorama";
-import { pandramaSource } from "./pandrama";
-import { doramaYtSource } from "./doramasyt";
-import { doramaSubSource } from "./doramasub";
-import { kisskhSource } from "./kisskh";
+import { Env } from "./lib/types";
+import { cleanTitle } from "./lib/utils";
+import { genreSlug } from "./genres";
+import { dlatSource, dplaySource } from "./sources/doramas";
+import { kplaySource } from "./sources/kdramasplay";
+import { yandiSource } from "./sources/yandispoiler";
+import { doramasflixSource } from "./sources/doramasflix";
+import { tudoramaSource } from "./sources/tudorama";
+import { pandramaSource } from "./sources/pandrama";
+import { doramaYtSource } from "./sources/doramasyt";
+import { doramaSubSource } from "./sources/doramasub";
+import { kisskhSource } from "./sources/kisskh";
 
 // ─── Catálogo consolidado "Todos los Doramas" ───────────────────────────────
 // Orquesta los catálogos ya existentes en paralelo, fusiona, y de-duplica por

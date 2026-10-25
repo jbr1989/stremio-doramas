@@ -1,18 +1,10 @@
-import { Env, MetaPreview } from "../types";
+import { Env, MetaPreview } from "../lib/types";
 import { genreLabelForMeta, genreSlug } from "../genres";
-import {
-  CHROME_UA,
-  cleanTitle,
-  decodeEntities,
-  denoBaseFromEnv,
-  fetchTmdb,
-  makeStreamDeduper,
-  netFetch,
-  toMetaPreview,
-} from "../utils";
-import { addEmbedStreams } from "../extractors";
-import { resolveEpisodeSlug, searchVariants } from "./slugmap";
-import { SourceBase } from "./sourceBase";
+import { cleanTitle, decodeEntities, denoBaseFromEnv, fetchTmdb, makeStreamDeduper, toMetaPreview } from "../lib/utils";
+import { addEmbedStreams, decodeEmbedUrl } from "../lib/extractors";
+import { gqlFetch } from "../lib/gql";
+import { resolveEpisodeSlug, searchVariants } from "../lib/slugmap";
+import { SourceBase } from "../lib/sourceBase";
 
 const GRAPHQL_ENDPOINT = "https://user-api.seriesapi.co/graphql";
 const DORAMASFLIX_BASE = "https://doramasflix.in";
@@ -26,56 +18,13 @@ const GQL_ORIGINS = [
   "https://doramasmp4.io",     // espejo: otra marca, mismo backend
 ];
 
-async function fetchGql(
-  query: string,
-  variables: Record<string, any> = {},
-  timeoutMs = 12000
-): Promise<any> {
-  const errors: string[] = [];
-  for (const base of GQL_ORIGINS) {
-    try {
-      const res = await netFetch("direct", GRAPHQL_ENDPOINT, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Origin: base,
-          Referer: `${base}/`,
-          "User-Agent": CHROME_UA,
-        },
-        body: JSON.stringify({ query, variables }),
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-
-      const json: any = await res.json();
-      if (json.errors && json.errors.length > 0) {
-        throw new Error(`GraphQL: ${json.errors[0].message}`);
-      }
-
-      return json.data;
-    } catch (e) {
-      errors.push(`${base}: ${e instanceof Error ? e.message : String(e)}`);
-      // Red fallida con este origen -> probar el siguiente (failover secuencial).
-    }
-  }
-  throw new Error(
-    `Doramasflix GraphQL fallo en todos los orígenes — ${errors.join(" | ")}`
-  );
-}
-
 /** Doramasflix: GraphQL nativa de su backend (sin HTML que raspar) — los
  * tres templates son override completo. La clase aporta identidad + los
  * overrides (el failover de orígenes es el transporte propio). */
 class DoramasflixSource extends SourceBase {
-  get prefix() {
-    return "dflix";
-  }
-  get label() {
-    return "Doramasflix";
-  }
+  readonly prefix = "dflix";
+  readonly label = "Doramasflix";
+  readonly catalogId = "doramasflix";
 
   // No aplican (no hay HTML de episodio que bajar ni embeds de player):
   // los streams van por GraphQL getEpisodeLinks.
@@ -110,7 +59,7 @@ class DoramasflixSource extends SourceBase {
           }
         }
       `;
-      const data = await fetchGql(query, { input: q, page, perPage: 20 });
+      const data = await gqlFetch(GRAPHQL_ENDPOINT, query, { input: q, page, perPage: 20 }, GQL_ORIGINS);
       const items = data?.searchFullDoramas?.items || [];
       return { metas: items.map(dflixCardMeta) };
     }
@@ -137,11 +86,11 @@ class DoramasflixSource extends SourceBase {
           }
         }
       `;
-      const gdata = await fetchGql(gqlGenre, {
+      const gdata = await gqlFetch(GRAPHQL_ENDPOINT, gqlGenre, {
         page: gpage,
         limit: 24,
         filter: { genreSlug: gslug, isTVShow: false },
-      });
+      }, GQL_ORIGINS);
       const gitems = gdata?.paginationDorama?.items || [];
       return { metas: gitems.map(dflixCardMeta) };
     }
@@ -159,7 +108,7 @@ class DoramasflixSource extends SourceBase {
         }
       }
     `;
-    const data = await fetchGql(query, { limit });
+    const data = await gqlFetch(GRAPHQL_ENDPOINT, query, { limit }, GQL_ORIGINS);
     const items = (data?.listDoramas || []).slice((page - 1) * 20, page * 20);
     return { metas: items.map(dflixCardMeta) };
   }
@@ -194,7 +143,7 @@ class DoramasflixSource extends SourceBase {
         }
       }
     `;
-    const data = await fetchGql(query, { slug });
+    const data = await gqlFetch(GRAPHQL_ENDPOINT, query, { slug }, GQL_ORIGINS);
     const detail = data?.detailDorama;
     if (!detail) {
       return { meta: null };
@@ -292,18 +241,18 @@ class DoramasflixSource extends SourceBase {
   override async getStreams(rawId: string, env: Env) {
     const epSlug = rawId.replace("dflix:", "");
 
-    const found = await getEpisodeBySlug(epSlug);
+    const found = await this.getEpisodeBySlug(epSlug);
     let epId = found?.id || "";
     if (!epId) {
       // Slug venido de otro sitio (o fallo transitorio): resolver por título
       // y recomponer el id dflix (dflix:{serieSlug}-{s}x{e}) para reintentar.
       // El re-intent vale aunque coincida el slug: barato (1 GraphQL) y
       // cubre el caso de la primera query muerta por red.
-      const resolved = await resolveDflixEpisodeSlug(epSlug, env);
+      const resolved = await this.resolveEpisodeSlug(epSlug, env);
       if (resolved) {
         if (resolved !== epSlug)
           console.log(`[dflix] slug resuelto: ${epSlug} → ${resolved}`);
-        const found2 = await getEpisodeBySlug(resolved);
+        const found2 = await this.getEpisodeBySlug(resolved);
         epId = found2?.id || "";
       }
     }
@@ -325,7 +274,7 @@ class DoramasflixSource extends SourceBase {
     let rawLinks = [];
 
     try {
-      const linksData = await fetchGql(linksQuery, { episode_id: epId });
+      const linksData = await gqlFetch(GRAPHQL_ENDPOINT, linksQuery, { episode_id: epId }, GQL_ORIGINS);
       rawLinks = linksData?.getEpisodeLinks?.links_online || [];
 
       console.log(`[dflix] ${rawLinks.length} links para ${epSlug}`);
@@ -357,6 +306,83 @@ class DoramasflixSource extends SourceBase {
 
     return { streams };
   }
+
+  // ── Fan-out: rescate de slug (slugmap) ──
+  // Resuelve el epSlug propio de doramasflix para un epSlug venido de otro
+  // sitio (mapping por título, ver slugmap.ts). dflix no tiene HTML que
+  // raspar: la búsqueda es su GraphQL `searchFullDoramas` (por nombre, ya
+  // existente en el catálogo) y el id del episodio se RECOMPONE
+  // aritméticamente con el serieSlug de su BD: sus slugs de episodio siguen
+  // el patrón `{serieSlug}-{s}x{e}` (el mismo que genera el meta).
+  protected override async resolveEpisodeSlug(
+    epSlug: string,
+    env: Env
+  ): Promise<string | null> {
+    const SEARCH_QUERY = `
+      query SearchFullDoramas($input: String!, $page: Int, $perPage: Int) {
+        searchFullDoramas(input: $input, page: $page, perPage: $perPage) {
+          items { _id slug }
+        }
+      }
+    `;
+    return resolveEpisodeSlug(
+      {
+        site: this.prefix,
+        searchSeries: (title) =>
+          (async () => {
+            const slugs = new Set<string>();
+            for (const v of searchVariants(title)) {
+              const data = await gqlFetch(GRAPHQL_ENDPOINT, SEARCH_QUERY, {
+                input: v,
+                page: 1,
+                perPage: 20,
+              }, GQL_ORIGINS);
+              for (const it of data?.searchFullDoramas?.items || [])
+                if (it?.slug) slugs.add(it.slug);
+            }
+            return [...slugs];
+          })(),
+        fetchEpisodes: (seriesSlug) =>
+          (async () => {
+            // detailDorama (query del meta) trae seasons {season_number,
+            // number_of_episodes}: de ahí sale el mapa completo SxE → slug
+            // con el mismo criterio que el meta usa para sus videos.
+            const detail = await this.getMeta(
+              `dflix:${seriesSlug}`,
+              "" // sin TMDB: solo se necesitan las seasons
+            );
+            const videos = (detail.meta as any)?.videos || [];
+            const list: { s: number; e: number; epSlug: string }[] = [];
+            for (const v of videos)
+              if (v?.season && v?.episode)
+                list.push({
+                  s: v.season,
+                  e: v.episode,
+                  epSlug: `${seriesSlug}-${v.season}x${v.episode}`,
+                });
+            return list;
+          })(),
+      },
+      epSlug,
+      env
+    );
+  }
+
+  /** `_id` + `slug` del episodio por slug sintético ({serieSlug}-{s}x{e}) —
+   * o null si el slug no existe en su BD (detailEpisode null) o la GraphQL
+   * falla. Null NO distingue not-found de error: el llamador decide si
+   * resuelve (via hook) o termina. */
+  private async getEpisodeBySlug(
+    epSlug: string
+  ): Promise<{ id: string; slug: string } | null> {
+    try {
+      const data = await gqlFetch(GRAPHQL_ENDPOINT, EPISODE_DETAIL_QUERY, { slug: epSlug }, GQL_ORIGINS);
+      const ep = data?.detailEpisode;
+      return ep?._id ? { id: ep._id, slug: ep.slug } : null;
+    } catch {
+      return null;
+    }
+  }
 }
 
 // Card de catálogo de cualquier query (searchFullDoramas/paginationDorama/
@@ -375,24 +401,6 @@ function dflixCardMeta(item: any) {
   });
 }
 
-function decodeEmbedUrl(url: string): string {
-  if (!url || !url.includes("/e/")) return url;
-  try {
-    const jwtToken = url.split("/e/")[1];
-    const payloadB64 = jwtToken.split(".")[1];
-    if (!payloadB64) return url;
-    // Replace URL-safe base64 characters if any
-    const b64 = payloadB64.replace(/-/g, "+").replace(/_/g, "/");
-    const payloadStr = atob(b64);
-    const payload = JSON.parse(payloadStr);
-    if (payload && payload.link) {
-      const decodedLink = atob(payload.link);
-      return decodedLink || url;
-    }
-  } catch {}
-  return url;
-}
-
 const EPISODE_DETAIL_QUERY = `
   query EpisodeDetailSlug($slug: String!) {
     detailEpisode(filter: { slug: $slug }) {
@@ -404,81 +412,5 @@ const EPISODE_DETAIL_QUERY = `
     }
   }
 `;
-
-/** `_id` + `slug` del episodio por slug sintético ({serieSlug}-{s}x{e}) —
- * o null si el slug no existe en su BD (detailEpisode null) o la GraphQL
- * falla/transcurre con error. Null NO distingue not-found de error: el
- * llamador decide si resuelve o termina. */
-async function getEpisodeBySlug(
-  epSlug: string
-): Promise<{ id: string; slug: string } | null> {
-  try {
-    const data = await fetchGql(EPISODE_DETAIL_QUERY, { slug: epSlug });
-    const ep = data?.detailEpisode;
-    return ep?._id ? { id: ep._id, slug: ep.slug } : null;
-  } catch {
-    return null;
-  }
-}
-
-/** Resuelve el epSlug propio de doramasflix para un epSlug venido de otro
- * sitio (mapping por título, ver slugmap.ts). dflix no tiene HTML que raspar:
- * la búsqueda es su GraphQL `searchFullDoramas` (por nombre, ya existente en
- * el catálogo) y el id del episodio se RECOMPOne aritméticamente con el
- * serieSlug de su BD: sus slugs de episodio siguen el patrón
- * `{serieSlug}-{s}x{e}` (el mismo que genera el meta). */
-async function resolveDflixEpisodeSlug(
-  epSlug: string,
-  env: Env
-): Promise<string | null> {
-  const SEARCH_QUERY = `
-    query SearchFullDoramas($input: String!, $page: Int, $perPage: Int) {
-      searchFullDoramas(input: $input, page: $page, perPage: $perPage) {
-        items { _id slug }
-      }
-    }
-  `;
-  return resolveEpisodeSlug(
-    {
-      site: "dflix",
-      searchSeries: (title) =>
-        (async () => {
-          const slugs = new Set<string>();
-          for (const v of searchVariants(title)) {
-            const data = await fetchGql(SEARCH_QUERY, {
-              input: v,
-              page: 1,
-              perPage: 20,
-            });
-            for (const it of data?.searchFullDoramas?.items || [])
-              if (it?.slug) slugs.add(it.slug);
-          }
-          return [...slugs];
-        })(),
-      fetchEpisodes: (seriesSlug) =>
-        (async () => {
-          // detailDorama (query del meta) trae seasons {season_number,
-          // number_of_episodes}: de ahí sale el mapa completo SxE → slug con
-          // el mismo criterio que el meta usa para sus videos.
-          const detail = await doramasflixSource.getMeta(
-            `dflix:${seriesSlug}`,
-            "" // sin TMDB: solo se necesitan las seasons
-          );
-          const videos = (detail.meta as any)?.videos || [];
-          const list: { s: number; e: number; epSlug: string }[] = [];
-          for (const v of videos)
-            if (v?.season && v?.episode)
-              list.push({
-                s: v.season,
-                e: v.episode,
-                epSlug: `${seriesSlug}-${v.season}x${v.episode}`,
-              });
-          return list;
-        })(),
-    },
-    epSlug,
-    env
-  );
-}
 
 export const doramasflixSource = new DoramasflixSource();

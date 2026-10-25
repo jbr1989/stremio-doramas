@@ -10,6 +10,18 @@ export function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: CORS });
 }
 
+// decodeURIComponent que no lanza: un `%` suelto / `%2` truncado / `%ZZ`
+// inválido provocaba URIError fuera de todo try/catch en index.ts y mataba
+// la request entera (1101). Devuelve el texto original → el id no matchea
+// ninguna fuente → la ruta responde vacío (fail-soft) en vez de crashear.
+export function safeDecode(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
 // ─── request logging ────────────────────────────────────────────────────────
 // One [net] line per outgoing HTTP request of the addon, visible in the
 // wrangler terminal / wrangler tail. `how` marks the route: direct, proxy
@@ -107,7 +119,7 @@ export const CHROME_UA =
 export const MOBILE_UA =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1";
 
-export const CHROME_HEADERS = {
+const CHROME_HEADERS = {
   "User-Agent": CHROME_UA,
   "Accept":
     "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
@@ -208,6 +220,9 @@ export async function renderPage(
     wait?: "load" | "domcontentloaded" | "networkidle0" | "networkidle2";
     timeoutMs?: number;
     waitForSelector?: string;
+    /** Señal externa (p.ej. el techo global de fetchHtml): cancela el POST
+     *  de render en vuelo, además del timeout interno. */
+    signal?: AbortSignal;
   } = {}
 ): Promise<string | null> {
   const acct = (env.CF_ACCOUNT_ID || "").trim();
@@ -241,7 +256,7 @@ export async function renderPage(
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: anySignal(AbortSignal.timeout(timeoutMs), opts.signal),
       }
     );
     if (!r.ok) return null;
@@ -260,6 +275,21 @@ export function isCfChallenge(body: string): boolean {
   return /<title>Just a moment|_cf_chl_opt|__cf_chl_|challenge-platform|cf-browser-verification/i.test(
     body
   );
+}
+
+// Combine several abort signals into one: the merged signal aborts as soon as
+// any of the inputs aborts (portable AbortSignal.any). Used by fetchHtml to
+// attach the global deadline signal to each per-strategy timeout, so the 25s
+// global cap cancels in-flight network work instead of only gating new phases.
+// Exported: gqlFetch (failover con presupuesto global) usa el mismo patrón.
+export function anySignal(...signals: (AbortSignal | undefined | null)[]): AbortSignal {
+  const merged = new AbortController();
+  for (const s of signals) {
+    if (!s) continue;
+    if (s.aborted) merged.abort();
+    else s.addEventListener("abort", () => merged.abort(), { once: true });
+  }
+  return merged.signal;
 }
 
 // The target page does not exist upstream (404/410): retrying it through
@@ -337,6 +367,7 @@ export async function fetchHtml(
         const html = await renderPage(url, env, {
           wait: "load",
           timeoutMs: 16000,
+          signal: controller.signal,
         });
         if (html && html.length >= MIN_LEN) {
           clearTimeout(globalTimer);
@@ -349,7 +380,7 @@ export async function fetchHtml(
         () =>
           netFetch("direct", url, {
             headers: CHROME_HEADERS,
-            signal: AbortSignal.timeout(4000),
+            signal: anySignal(AbortSignal.timeout(4000), controller.signal),
           })
       );
       clearTimeout(globalTimer);
@@ -361,7 +392,7 @@ export async function fetchHtml(
       tryFetch("direct", () =>
         netFetch("direct", url, {
           headers: CHROME_HEADERS,
-          signal: AbortSignal.timeout(8000),
+          signal: anySignal(AbortSignal.timeout(8000), controller.signal),
         })
       ),
     ];
@@ -370,7 +401,7 @@ export async function fetchHtml(
         tryFetch("fetchproxy", () =>
           netFetch("proxy", `${proxyBase}?url=${encoded}`, {
             headers: { "User-Agent": CHROME_UA },
-            signal: AbortSignal.timeout(12000),
+            signal: anySignal(AbortSignal.timeout(12000), controller.signal),
           })
         )
       );
@@ -392,6 +423,7 @@ export async function fetchHtml(
       const html = await renderPage(url, env, {
         wait: "load",
         timeoutMs: 16000,
+        signal: controller.signal,
       });
       if (html && html.length >= MIN_LEN) {
         clearTimeout(globalTimer);
@@ -410,7 +442,7 @@ export async function fetchHtml(
         const html = await tryFetch(name, () =>
           netFetch(name, proxyUrl, {
             headers: { "User-Agent": CHROME_UA },
-            signal: AbortSignal.timeout(6000),
+            signal: anySignal(AbortSignal.timeout(6000), controller.signal),
           })
         );
         clearTimeout(globalTimer);
@@ -503,7 +535,7 @@ export function cleanTitle(s: string): string {
  *  - do7go.com / playmogo.com   familia Dood: la página /e/ desafía TLS
  *                  no-navegador (probado con egress Deno/.NET/CF Worker);
  *                  el pass_md5 funciona GET server-side directo. */
-export const CHALLENGE_HOSTS_RE =
+const CHALLENGE_HOSTS_RE =
   /(?:^|\.)(?:dsvplay\.com|do7go\.com|playmogo\.com)$/i;
 
 /** Hosts/mirrors de StreamWish admitidos por el relay Deno (/streamwish).
@@ -520,6 +552,20 @@ export const STREAMWISH_HOSTS_RE =
  * proxy Deno. Mantener sincronizada con la allowlist de /mp4 en deno/fetch.ts. */
 export const DOOD_HOSTS_RE = /dood|do7go|playmogo|ds2play|dsvplay/i;
 
+/** Familia "byse": la puerta del player hace challenge/attest (ECDSA P-256) +
+ * PoW y devuelve el m3u8 cifrado, que el relay Deno resuelve íntegro (/byse,
+ * ver deno/byse.ts) porque el token es ASN-bound.
+ *
+ * Detección POR FORMA de API (clones y dominios rotando incluidos), no por
+ * nombre: embed público https://<host>/e/<code> con código [a-z0-9-]{6,20}.
+ * Otras familias usan /e/ también (streamwish, dood, streamtape) — por eso la
+ * rama byse se evalúa AL FINAL de addEmbedStreams (extractors.ts), cuando ya
+ * ninguna otra familia matcheó, y el relay Deno confirma el host sondeando
+ * /api/videos/<code>/embed/details (502 "no compatible" si no es la familia).
+ * Mantener sincronizada con la allowlist de /byse en deno/byse.ts. */
+export const BYSE_SHAPE_RE =
+  /^https?:\/\/[^/"']+\/e\/[a-z0-9-]{6,20}(?:$|\/|\?|#)/i;
+
 /** Hosts de reto anti-bot (ver CHALLENGE_HOSTS_RE en README para la tabla con
  *  evidencia): fetchHtml los salta directos con techo corto, sin proxies. */
 
@@ -530,8 +576,7 @@ export function hostFromEmbed(embed: string, fallback = "host"): string {
 }
 
 /** Base del relay Deno derivada de FETCH_PROXY_URL:
- * https://<algo>.deno.dev/fetch → https://<algo>.deno.dev. Antes copiado ×7
- * (las 6 fuentes + /debug-streamwish en index.ts). */
+ * https://<algo>.deno.dev/fetch → https://<algo>.deno.dev. Antes copiado ×7. */
 export function denoBaseFromEnv(env?: Env): string {
   return (env?.FETCH_PROXY_URL || "")
     .trim()
@@ -558,4 +603,27 @@ export function makeStreamDeduper() {
     }
   };
   return { add, streams };
+}
+
+/** Ejecuta fn sobre items con concurrencia máxima `limit` (pool de workers).
+ *  Los resultados mantienen el orden original de los items (out[i] = resultado
+ *  de fn(items[i])), así que el consumo posterior es determinista.
+ *  Uso principal: extraer N embeds en paralelo sin pasarse del wall-clock
+ *  del Worker ni golpear a los origins con concurrencia descontrolada. */
+export async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i], i);
+    }
+  };
+  const n = Math.max(0, Math.min(limit, items.length));
+  await Promise.all(Array.from({ length: n }, worker));
+  return out;
 }

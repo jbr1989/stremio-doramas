@@ -1,14 +1,14 @@
-import { Env } from "../types";
-import { cleanTitle, fetchHtml, fetchTmdb } from "../utils";
+import { Env } from "../lib/types";
+import { cleanTitle, fetchHtml, fetchTmdb } from "../lib/utils";
 import {
   buildMovieMeta,
   buildSeriesMeta,
   dooplayEpisodeList,
   genresFromDooPlay,
   ogMetaFromHtml,
-} from "./dooplay";
-import { fetchWithSlugRescue, resolveEpisodeSlug, searchVariants } from "./slugmap";
-import { SourceBase, SourceCard } from "./sourceBase";
+} from "../lib/dooplay";
+import { fetchWithSlugRescue, resolveEpisodeSlug, searchVariants } from "../lib/slugmap";
+import { SourceBase, SourceCard } from "../lib/sourceBase";
 
 const YANDI_BASE = "https://yandispoiler.net";
 
@@ -18,6 +18,8 @@ const YANDI_BASE = "https://yandispoiler.net";
 export interface YandiCfg {
   prefix: string;
   label: string;
+  /** catalogId que resuelve la fuente en /catalog (registry.ts). */
+  catalogId: string;
   base: string;
   /** Ruta del directorio de series: "series" (ambos). */
   seriesPath: string;
@@ -35,15 +37,15 @@ export interface YandiCfg {
  * thumbs/grilla de episodios en el meta, parser de cards y rescatador de
  * slug. */
 export class YandiSource extends SourceBase {
+  readonly prefix: string;
+  readonly label: string;
+  readonly catalogId: string;
+
   constructor(private cfg: YandiCfg) {
     super();
-  }
-
-  get prefix() {
-    return this.cfg.prefix;
-  }
-  get label() {
-    return this.cfg.label;
+    this.prefix = cfg.prefix;
+    this.label = cfg.label;
+    this.catalogId = cfg.catalogId;
   }
 
   // ── Streams ──
@@ -71,23 +73,76 @@ export class YandiSource extends SourceBase {
       slug,
       env,
       (u, e) => this.fetchBody(u, e),
-      (s, e) => this.resolveEpisodeSlug?.(s, e) ?? Promise.resolve(null),
+      (s, e) => this.resolveEpisodeSlug(s, e),
       this.prefix
     );
   }
 
-  /** Rescatador de slug (slugmap). yandi usa el buscador del sitio (default);
-   * kplay lo pisa con el REST+nonce de DooPlay. */
-  protected async resolveEpisodeSlug(
+  /** Rescatador de slug (slugmap). yandi usa el buscador del sitio (?s=,
+   *  resultados server-side) — kplay lo pisa con el REST+nonce de DooPlay. */
+  protected override async resolveEpisodeSlug(
     epSlug: string,
     env: Env
   ): Promise<string | null> {
-    return resolveYandiEpisodeSlug(epSlug, env);
+    return resolveEpisodeSlug(
+      {
+        site: this.prefix,
+        searchSeries: async (title) => {
+          const variants = searchVariants(title);
+          const html = await fetchHtml(
+            `${this.cfg.base}/?s=${encodeURIComponent(variants[0])}`,
+            env
+          );
+          const slugs = [
+            ...new Set(
+              [...html.matchAll(/\/series\/([a-z0-9-]+)\//gi)].map((m) => m[1])
+            ),
+          ];
+          return slugs;
+        },
+        fetchEpisodes: async (seriesSlug) => {
+          const html = await fetchHtml(
+            `${this.cfg.base}/series/${seriesSlug}/`,
+            env
+          );
+          return dooplayEpisodeList(html, "episodios").map((ep) => ({
+            epSlug: ep.slug,
+            s: ep.s,
+            e: ep.e,
+          }));
+        },
+      },
+      epSlug,
+      env
+    );
   }
 
   // Ids de 3 segmentos: quitar "ep:"/"movie:" para los behaviorHints.
   protected override emitSlug(idSlug: string): string {
     return idSlug.replace(/^(?:ep|movie):/, "");
+  }
+
+  // Episodio = "ep:slug-1x2" o película = "movie:slug" (1x1). Los ids de
+  // serie del catálogo son "series:slug" y no pasan el filtro.
+  // Episodio = "{prefix}:ep:{slug-NxE}" o "{prefix}:movie:{slug}"; los ids
+  // de catálogo son "{prefix}:{season|series}:{slug}" y no cuentan como
+  // episodio (el alternate "suelto" del id tampoco).
+  readonly epIdPattern = "(?:ep:.+-\\d+x\\d+|movie:.+)";
+
+  // ── Fan-out de streams (registry) ──
+  // Id propio → slug canónico compartido entre fuentes. kplay y yandi usan
+  // el mismo formato de id (independiente del prefijo: partes[1]), así que
+  // kplay lo hereda de aquí. Las películas se representan como 1x1.
+  override async toEpSlug(rawId: string, _env?: Env): Promise<string> {
+    const parts = rawId.split(":");
+    if (parts[1] === "ep") return parts.slice(2).join(":");
+    if (parts[1] === "movie") return `${parts.slice(2).join(":")}-1x1`;
+    return parts.slice(1).join(":");
+  }
+
+  // Slug canónico → id propio de episodio (fan-out inverso).
+  buildId(epSlug: string): string {
+    return `${this.prefix}:ep:${epSlug}`;
   }
 
   // Embeds por defecto del tema: data-url="https://..." del player del
@@ -300,46 +355,10 @@ export class YandiSource extends SourceBase {
   }
 }
 
-async function resolveYandiEpisodeSlug(
-  epSlug: string,
-  env: Env
-): Promise<string | null> {
-  return resolveEpisodeSlug(
-    {
-      site: "yandi",
-      searchSeries: async (title) => {
-        const variants = searchVariants(title);
-        const html = await fetchHtml(
-          `${YANDI_BASE}/?s=${encodeURIComponent(variants[0])}`,
-          env
-        );
-        const slugs = [
-          ...new Set(
-            [...html.matchAll(/\/series\/([a-z0-9-]+)\//gi)].map((m) => m[1])
-          ),
-        ];
-        return slugs;
-      },
-      fetchEpisodes: async (seriesSlug) => {
-        const html = await fetchHtml(
-          `${YANDI_BASE}/series/${seriesSlug}/`,
-          env
-        );
-        return dooplayEpisodeList(html, "episodios").map((ep) => ({
-          epSlug: ep.slug,
-          s: ep.s,
-          e: ep.e,
-        }));
-      },
-    },
-    epSlug,
-    env
-  );
-}
-
 export const yandiSource = new YandiSource({
   prefix: "yandi",
   label: "Yandispoiler",
+  catalogId: "yandispoiler",
   base: YANDI_BASE,
   seriesPath: "series",
   epPath: "episodios",

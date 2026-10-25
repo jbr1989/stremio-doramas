@@ -1,8 +1,15 @@
-import { Env } from "../types";
-import { CHROME_UA, cleanTitle, decodeEntities, fetchHtml, netFetch } from "../utils";
-import { genresFromBadgeBlock } from "./dooplay";
-import { fetchWithSlugRescue, resolveEpisodeSlug, searchVariants } from "./slugmap";
-import { SourceBase, SourceCard, SourceEpisode } from "./sourceBase";
+import { Env } from "../lib/types";
+import {
+  CHROME_UA,
+  cleanTitle,
+  decodeEntities,
+  fetchHtml,
+  netFetch,
+  fetchTmdb,
+} from "../lib/utils";
+import { buildSeriesMeta, genresFromBadgeBlock } from "../lib/dooplay";
+import { fetchWithSlugRescue, resolveEpisodeSlug, searchVariants } from "../lib/slugmap";
+import { SourceBase, SourceCard, SourceEpisode } from "../lib/sourceBase";
 
 const DORAMASYT_BASE = "https://www.doramasyt.com";
 
@@ -16,56 +23,202 @@ export function canonicalDytSlug(slug: string): string {
   return `${m[1]}-1x${parseInt(m[2], 10)}`;
 }
 
-async function resolveDytEpisodeSlug(
-  epSlug: string,
+// ── AJAX de episodios (caplist) ─────────────────────────────────────────────
+// La ficha server-rendered expone el postId del listado en
+// `<section class="caplist" data-ajax="…/ajax/ajax_pagination/{id}">` y el
+// `<meta name="csrf-token">`. El AJAX NO requiere login ni "sesión" especial —
+// solo el par CSRF-token + cookie de sesión que revela el MISMO GET de la
+// ficha (validación Laravel). Verificado contra producción:
+//   POST /ajax/caplist/{id}  (X-CSRF-TOKEN + cookie de la ficha, p=N)
+//   → {"default":"…/img/capblank.png","caps":[{"episodio":1,"url":
+//      "…/ver/{serie}-episodio-1","thumb":"…/thumbs/portada/…"}]}
+// caps:[] o página incompleta = fin de la lista. Sin cookies
+// responde {"message":"CSRF token mismatch."} y con GET, 405.
+
+/** GET de la ficha capturando la sesión del sitio (Set-Cookie) y el CSRF
+ *  token: el par que exige el AJAX de caplist. Sin login real — el token es
+ *  session-bound, no post-bound (el de cualquier ficha abrió otra serie). */
+async function dytFichaWithCookie(
+  url: string,
   env: Env
-): Promise<string | null> {
-  return resolveEpisodeSlug(
-    {
-      site: "dyt",
-      searchSeries: (title) =>
-        (async () => {
-          const slugs = new Set<string>();
-          for (const v of searchVariants(title)) {
-            let html = "";
-            try {
-              html = await fetchHtml(`${DORAMASYT_BASE}/buscar?q=${encodeURIComponent(v)}`, env);
-            } catch {
-              html = "";
-            }
-            for (const m of html.matchAll(/\/dorama\/([a-z0-9-]+)/gi))
-              slugs.add(m[1]);
-          }
-          return [...slugs];
-        })(),
-      fetchEpisodes: (seriesSlug) =>
-        (async () => {
-          let html = "";
-          try {
-            html = await fetchHtml(`${DORAMASYT_BASE}/dorama/${seriesSlug}`, env);
-          } catch {
-            html = "";
-          }
-          const ep1Match = html.match(/\/ver\/([a-z0-9-]+-episodio-)1["'\s>]/i);
-          const base = ep1Match ? ep1Match[1] : `${seriesSlug.replace(/-sub-espanol$/, "")}-episodio-`;
-          const episodes: { s: number; e: number; epSlug: string }[] = [];
-          for (let i = 1; i <= 32; i++) {
-            episodes.push({ s: 1, e: i, epSlug: `${base}${i}` });
-          }
-          return episodes;
-        })(),
-    },
-    epSlug,
-    env
-  );
+): Promise<{ html: string; cookie: string; csrf: string }> {
+  try {
+    const r = await netFetch("dyt-ficha", url, {
+      headers: { "User-Agent": CHROME_UA, Referer: `${DORAMASYT_BASE}/` },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!r.ok) return { html: "", cookie: "", csrf: "" };
+    const html = await r.text();
+    // Headers.getSetCookie(): limpiar los cookie-ovu del challenge de CF y
+    // quedarse con name=value de cada cookie (el post solo necesita eso).
+    const getter = (r.headers as Headers & { getSetCookie?: () => string[] })
+      .getSetCookie?.bind(r.headers);
+    const cookie = (getter ? getter() : [])
+      .map((c) => c.split(";")[0])
+      .filter(Boolean)
+      .join("; ");
+    const csrf =
+      html.match(/<meta[^>]+name="csrf-token"[^>]+content="([^"]+)"/i)?.[1] || "";
+    return { html, cookie, csrf };
+  } catch {
+    return { html: "", cookie: "", csrf: "" };
+  }
+}
+
+/** Caps de un episodio AJAX. Se paginan todas las "páginas" (50/pág) hasta
+ *  caps:[] o hasta la página llena (el sitio no expone el total). */
+interface DytPageResult {
+  /** "…/img/capblank.png" — thumb placeholder: si caps.trumb==default no vale
+   *  como still real y se cae al póster de la serie/TMDB. */
+  default?: string;
+  caps?: { episodio?: number; url?: string; thumb?: string }[];
+}
+interface DytCap {
+  episodio: number;
+  slug: string;
+  thumb: string;
+}
+async function dytCapsFromAjax(
+  html: string,
+  session: { cookie: string; csrf: string; referer: string }
+): Promise<DytCap[]> {
+  const postId = html.match(
+    /data-ajax="[^"]*\/ajax\/ajax_pagination\/(\d+)/i
+  )?.[1];
+  if (!postId) return [];
+  const out: DytCap[] = [];
+  const seen = new Set<number>();
+  for (let p = 1; p <= 8; p++) {
+    let added = 0;
+    try {
+      const r = await netFetch(
+        "dyt-caps",
+        `${DORAMASYT_BASE}/ajax/caplist/${postId}`,
+        {
+          method: "POST",
+          headers: {
+            "User-Agent": CHROME_UA,
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "X-Requested-With": "XMLHttpRequest",
+            "X-CSRF-TOKEN": session.csrf,
+            Referer: session.referer,
+            Cookie: session.cookie,
+          },
+          body: `p=${p}`,
+          signal: AbortSignal.timeout(9000),
+        }
+      );
+      if (!r.ok) break;
+      const data = (await r.json()) as DytPageResult;
+      for (const c of data.caps ?? []) {
+        const n = c.episodio ?? 0;
+        // url real del episodio ("/ver/{serie}-episodio-N"): se acabó
+        // adivinar la plantilla base con el regex del ep1 del ficha.
+        const slug = (c.url || "").match(/\/ver\/([a-z0-9-]+)\/?$/i)?.[1];
+        if (!n || !slug || seen.has(n)) continue;
+        seen.add(n);
+        out.push({
+          episodio: n,
+          slug,
+          // thumbs/portada: sin thumb válida → cae al poster serie/TMDB.
+          thumb: c.thumb && c.thumb !== data.default ? c.thumb : "",
+        });
+        added++;
+      }
+      // Página no llena → fin de listado (perpage=50 del AJAX de dyt).
+      if (added < 50) break;
+    } catch (e) {
+      console.log(`[dyt] caplist p=${p} falló: ${e}`);
+      break;
+    }
+  }
+  return out;
 }
 
 class DoramaYtSource extends SourceBase {
-  get prefix() {
-    return "dyt";
+  readonly prefix = "dyt";
+  readonly label = "DoramasYT";
+  readonly catalogId = "doramasyt";
+
+  // DYT usa "titulo-episodio-N": a la forma canónica "titulo-1xN" para que
+  // las demás fuentes (que guardan sobre -\d+x\d+$) acepten el slug.
+  override async toEpSlug(rawId: string, _env?: Env): Promise<string> {
+    return canonicalDytSlug(rawId.slice(this.prefix.length + 1));
   }
-  get label() {
-    return "DoramasYT";
+
+  // ── Fan-out: rescate de slug (slugmap) ──
+  // Resuelve el epSlug propio de doramasyt para un epSlug venido de otro
+  // sitio (mapping por título, ver slugmap.ts). Búsqueda por /buscar
+  // (HTML, slugs /dorama/{slug}/); el listado de episodios va REAL por el
+  // AJAX caplist del ficha (misma sesión del GET) — el rango sintético
+  // 1..32 solo queda como fallback si el AJAX no responde.
+  protected override async resolveEpisodeSlug(
+    epSlug: string,
+    env: Env
+  ): Promise<string | null> {
+    return resolveEpisodeSlug(
+      {
+        site: this.prefix,
+        searchSeries: (title) =>
+          (async () => {
+            const slugs = new Set<string>();
+            for (const v of searchVariants(title)) {
+              let html = "";
+              try {
+                html = await fetchHtml(
+                  `${DORAMASYT_BASE}/buscar?q=${encodeURIComponent(v)}`,
+                  env
+                );
+              } catch {
+                html = "";
+              }
+              for (const m of html.matchAll(/\/dorama\/([a-z0-9-]+)/gi))
+                slugs.add(m[1]);
+            }
+            return [...slugs];
+          })(),
+        fetchEpisodes: (seriesSlug) =>
+          (async () => {
+            const fichaUrl = `${DORAMASYT_BASE}/dorama/${seriesSlug}`;
+            const { html, cookie, csrf } = await dytFichaWithCookie(
+              fichaUrl,
+              env
+            );
+            if (html && cookie && csrf) {
+              const caps = await dytCapsFromAjax(html, {
+                cookie,
+                csrf,
+                referer: fichaUrl,
+              });
+              if (caps.length > 0) {
+                return caps.map((c) => ({
+                  s: 1,
+                  e: c.episodio,
+                  epSlug: c.slug,
+                }));
+              }
+              console.log(
+                `[dyt] rescate ${seriesSlug}: caplist vacío — plantilla sintética`
+              );
+            }
+            // Fallback (antes era el camino primario): deduce la plantilla
+            // "{serieSlug}-episodio-N" probando 1..32 como su paginador.
+            const ep1Match = html.match(
+              /\/ver\/([a-z0-9-]+-episodio-)1["'\s>]/i
+            );
+            const base = ep1Match
+              ? ep1Match[1]
+              : `${seriesSlug.replace(/-sub-espanol$/, "")}-episodio-`;
+            const episodes: { s: number; e: number; epSlug: string }[] = [];
+            for (let i = 1; i <= 32; i++) {
+              episodes.push({ s: 1, e: i, epSlug: `${base}${i}` });
+            }
+            return episodes;
+          })(),
+      },
+      epSlug,
+      env
+    );
   }
 
   // ── Streams ──
@@ -127,7 +280,7 @@ class DoramaYtSource extends SourceBase {
       slug,
       env,
       (u, e) => this.fetchBody(u, e),
-      resolveDytEpisodeSlug,
+      (s, e) => this.resolveEpisodeSlug(s, e),
       this.prefix
     );
   }
@@ -223,7 +376,7 @@ class DoramaYtSource extends SourceBase {
     return `${DORAMASYT_BASE}/dorama/${slug}`;
   }
 
-  // parseMetaBasics → listEpisodes (el hook no recibe poster, lo guardo aquí).
+  // parseMetaBasics → listEpisodesDyt (el hook no recibe poster, lo guardo aquí).
   private sitePoster = "";
 
   // doramasyt no es DooPlay puro: el <h1> manda sobre og:title, el poster
@@ -261,10 +414,52 @@ class DoramaYtSource extends SourceBase {
     return genresFromBadgeBlock(html, "genero", "dyt");
   }
 
-  // doramasyt no expone el listado real de episodios (llega por AJAX con
-  // sesión): rango sintético 1..epCount a partir del patrón del ep1. El
-  // epCount sale de TMDB (24 tiene año; 32 sin match).
-  protected override listEpisodes(
+  // getMeta re-implementado para enhebrar la sesión del ficha (CSRF+cookie)
+  // hacia el AJAX de episodios por-request, sin estado mutable en el
+  // singleton: el par se capturó en el MISMO GET de la ficha que se parsea.
+  // (La base no puede: su fetchMetaPage/fetchBody devuelve solo el HTML.)
+  override async getMeta(
+    id: string,
+    tmdbKey: string,
+    env?: Env
+  ): Promise<{ meta: unknown }> {
+    const slug = this.parseId(id);
+    const fichaUrl = this.buildSeriesPageUrl!(slug);
+    const { html, cookie, csrf } = await dytFichaWithCookie(fichaUrl, env!);
+    if (!html) return { meta: null };
+
+    const basics = this.parseMetaBasics(html, slug);
+    const gens = this.parseGenres(html);
+    const tmdb = basics.name ? await fetchTmdb(basics.name, tmdbKey) : null;
+
+    const rawEps = await this.listEpisodesDyt(html, slug, tmdb, {
+      cookie,
+      csrf,
+      referer: fichaUrl,
+    });
+    const sorted = [...rawEps].sort((a, b) => a.s - b.s || a.e - b.e);
+
+    return buildSeriesMeta({
+      id,
+      name: basics.name,
+      poster: basics.poster,
+      description: basics.description,
+      genres: gens,
+      tmdb,
+      videos: sorted.map((ep) => ({
+        id: ep.id ?? this.videoId(ep),
+        season: ep.s,
+        episode: ep.e,
+        thumbnail: ep.thumb,
+      })),
+    });
+  }
+
+  /** Episodios REALES vía el AJAX caplist del ficha (número exacto, slug
+   *  real de la URL /ver/ y thumb real por episodio). El rango sintético
+   *  1..32 (rango el antiguo primario con epCount por TMDB 24/32) queda SOLO
+   *  como fallback con log si el AJAX no respondió. */
+  private async listEpisodesDyt(
     html: string,
     slug: string,
     tmdb: {
@@ -272,14 +467,32 @@ class DoramaYtSource extends SourceBase {
       background?: string;
       description?: string;
       year?: string;
-    } | null
-  ): SourceEpisode[] {
-    const ep1Match = html.match(/\/ver\/([a-z0-9-]+-episodio-)1["'\s>]/i);
-    const baseEpSlug = ep1Match ? ep1Match[1] : `${slug.replace(/-sub-espanol$/, "")}-episodio-`;
-    const epCount = tmdb?.year ? 24 : 32;
+    } | null,
+    session: { cookie: string; csrf: string; referer: string }
+  ): Promise<SourceEpisode[]> {
+    if (session.cookie && session.csrf) {
+      const caps = await dytCapsFromAjax(html, session);
+      if (caps.length > 0) {
+        return caps.map((c) => ({
+          slug: c.slug,
+          s: 1,
+          e: c.episodio,
+          thumb: c.thumb || tmdb?.poster || this.sitePoster,
+        }));
+      }
+      console.log(`[dyt] ${slug}: caplist sin caps — fallback sintético`);
+    } else {
+      console.log(`[dyt] ${slug}: ficha sin sesión (cookie/csrf) — fallback sintético`);
+    }
 
+    // Fallback (antes era el camino primario — bug): rango sintético
+    // 1..32 desde el patrón del ep1. Solo mientras exista la sintaxis.
+    const ep1Match = html.match(/\/ver\/([a-z0-9-]+-episodio-)1["'\s>]/i);
+    const baseEpSlug = ep1Match
+      ? ep1Match[1]
+      : `${slug.replace(/-sub-espanol$/, "")}-episodio-`;
     const eps: SourceEpisode[] = [];
-    for (let i = 1; i <= epCount; i++) {
+    for (let i = 1; i <= 32; i++) {
       eps.push({
         slug: `${baseEpSlug}${i}`,
         s: 1,

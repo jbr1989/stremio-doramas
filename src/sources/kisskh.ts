@@ -1,9 +1,9 @@
-import { Env } from "../types";
-import { kisskhKkeyFn } from "../kisskhKey";
-import { cleanTitle, fetchHtml } from "../utils";
-import { addEmbedStreams } from "../extractors";
-import { denoBaseFromEnv, makeStreamDeduper } from "../utils";
-import { SourceBase, SourceCard, SourceEpisode } from "./sourceBase";
+import { Env } from "../lib/types";
+import { kisskhKkeyFn } from "../vendor/kisskh/kisskhKey";
+import { cleanTitle, fetchHtml } from "../lib/utils";
+import { addEmbedStreams } from "../lib/extractors";
+import { denoBaseFromEnv, makeStreamDeduper } from "../lib/utils";
+import { SourceBase, SourceCard, SourceEpisode } from "../lib/sourceBase";
 
 const KISSKH_BASE = "https://kisskh.co";
 // Constantes del cliente oficial (fijas en el bundle de Angular):
@@ -20,12 +20,13 @@ const KISSKH_APP = "kisskh";
  * directo, HLS→relay /hls) es override completo — NO es el esqueleto HTML
  * universal. */
 class KisskhSource extends SourceBase {
-  get prefix() {
-    return "kisskh";
-  }
-  get label() {
-    return "KissKH";
-  }
+  readonly prefix = "kisskh";
+  readonly label = "KissKH";
+  readonly catalogId = "kisskh";
+
+  // Episodio = "kisskh:ep:{id-numérico}" (listEpisodes). Los ids de catálogo
+  // son "kisskh:{dramaId}" y no llevan el marcador "ep:".
+  readonly epIdPattern = "ep:\\d+";
 
   // ── Fetch: toda la fuente narra el API con allowShort (respuestas cortas
   // válidas del JSON — el default de fetchHtml las trataría como fracaso). ──
@@ -152,7 +153,7 @@ class KisskhSource extends SourceBase {
 
     // (2026) /api/Episode/<id> fue retirada del sitio (responde la SPA HTML).
     // Endpoint firmado: /api/DramaList/Episode/<epId>.png con kkey calculado
-    // por common.js (copiado literal en kisskhKey.js). Respuesta:
+    // por common.js (copiado literal en src/vendor/kisskh/kisskhKey.js). Respuesta:
     // { Video: mp4/hls directo, Video_tmp, ThirdParty: embed, Type: 0=mp4, 1=hls }.
     let kkey = "";
     try {

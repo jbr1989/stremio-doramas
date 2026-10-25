@@ -1,13 +1,13 @@
-import { Env, MetaPreview } from "../types";
+import { Env, MetaPreview } from "../lib/types";
 import {
   cleanTitle,
   decodeEntities,
   fetchHtml,
   toMetaPreview,
-} from "../utils";
+} from "../lib/utils";
 import { genreSlug } from "../genres";
-import { resolveEpisodeSlug, searchVariants } from "./slugmap";
-import { SourceBase, SourceEpisode } from "./sourceBase";
+import { resolveEpisodeSlug, searchVariants } from "../lib/slugmap";
+import { SourceBase, SourceEpisode } from "../lib/sourceBase";
 
 const DORAMASUB_BASE = "https://www.doramasub.com";
 
@@ -60,12 +60,20 @@ function parseFeedEntryCard(entry: any): { slug: string; name: string; poster: s
  * no scraping de grilla — getCatalog es override completo del template.
  * Streams y meta SÍ van por la base (parseMetaBasics + listEpisodes). */
 class DoramaSubSource extends SourceBase {
-  get prefix() {
-    return "dsub";
+  readonly prefix = "dsub";
+  readonly label = "DoramaSub";
+  readonly catalogId = "doramasub";
+
+  // La ruta de capítulo ("2026/10/serie-capitulo-N") a la forma canónica
+  // "serie-1xN" para el fan-out entre fuentes.
+  override async toEpSlug(rawId: string, _env?: Env): Promise<string> {
+    return canonicalDoramaSubSlug(rawId.slice(this.prefix.length + 1));
   }
-  get label() {
-    return "DoramaSub";
-  }
+
+  // Episodio = ruta completa de capítulo ("2026/10/serie-capitulo-N", sin
+  // .html — así llegan los ep.slug de listEpisodes). Los ids de catálogo
+  // nunca llevan "capitulo" (los filtra parseFeedEntryCard).
+  readonly epIdPattern = "\\d{4}/\\d{1,2}/.+cap[ií]tulo-\\d+(?:\\.html)?";
 
   // No aplica: la URL del capítulo se arma en fetchEpisodePage (depende de
   // si el slug trae la ruta completa de capítulo).
@@ -251,7 +259,6 @@ class DoramaSubSource extends SourceBase {
     return [...epMap.keys()].sort((a, b) => a - b).map((epNum) => {
       const ep = epMap.get(epNum)!;
       return {
-        id: ep.slug,
         slug: ep.slug,
         s: 1,
         e: epNum,
@@ -278,7 +285,8 @@ class DoramaSubSource extends SourceBase {
     let html = pageUrl ? await this.fetchBody(pageUrl, env) : "";
 
     if (!html) {
-      const resolved = await resolveDoramaSubEpisodeSlug(slug, env);
+      // Slug de catálogo vencido o venido de otro sitio: rescate por título.
+      const resolved = await this.resolveEpisodeSlug(slug, env);
       if (resolved && resolved !== slug) {
         console.log(`[dsub] slug resuelto: ${slug} → ${resolved}`);
         this.lastResolvedSlug = resolved;
@@ -294,6 +302,57 @@ class DoramaSubSource extends SourceBase {
   // filename de behaviorHints: sí el rescate mutó el slug, canonica el nuevo.
   protected override emitSlug(slug: string): string {
     return canonicalDoramaSubSlug(this.lastResolvedSlug || slug);
+  }
+
+  // ── Fan-out: rescate de slug (slugmap) ──
+  // Resuelve el epSlug propio de doramasub para un epSlug venido de otro
+  // sitio (mapping por título, ver slugmap.ts). La búsqueda va sobre el feed
+  // JSON de Blogger (feeds/posts/default?q= — reusa parseFeedEntryCard) y
+  // los episodios salen del meta (this.getMeta reusa listEpisodes: mapa
+  // SxE → ruta completa de capítulo).
+  protected override async resolveEpisodeSlug(
+    epSlug: string,
+    env: Env
+  ): Promise<string | null> {
+    return resolveEpisodeSlug(
+      {
+        site: this.prefix,
+        searchSeries: (title) =>
+          (async () => {
+            const slugs = new Set<string>();
+            for (const v of searchVariants(title)) {
+              try {
+                const feedUrl = `${DORAMASUB_BASE}/feeds/posts/default?alt=json&q=${encodeURIComponent(
+                  v
+                )}&max-results=20`;
+                const feedRes = await fetchHtml(feedUrl, env);
+                const data = JSON.parse(feedRes);
+                for (const entry of data?.feed?.entry || []) {
+                  const card = parseFeedEntryCard(entry);
+                  if (card) slugs.add(card.slug);
+                }
+              } catch {}
+            }
+            return [...slugs];
+          })(),
+        fetchEpisodes: (seriesSlug) =>
+          (async () => {
+            const metaRes = await this.getMeta(`dsub:${seriesSlug}`, "", env);
+            const episodes: { s: number; e: number; epSlug: string }[] = [];
+            const meta = metaRes?.meta as any;
+            for (const v of meta?.videos || []) {
+              episodes.push({
+                s: v.season,
+                e: v.episode,
+                epSlug: v.id.replace(/^dsub:/, ""),
+              });
+            }
+            return episodes;
+          })(),
+      },
+      epSlug,
+      env
+    );
   }
 
   // Embeds: arrays JSON "_du*", "_duSub,", "_duDub = [...]" del script del
@@ -325,55 +384,6 @@ class DoramaSubSource extends SourceBase {
     }
     return [...embedUrls];
   }
-}
-
-async function resolveDoramaSubEpisodeSlug(
-  epSlug: string,
-  env: Env
-): Promise<string | null> {
-  return resolveEpisodeSlug(
-    {
-      site: "dsub",
-      searchSeries: (title) =>
-        (async () => {
-          const slugs = new Set<string>();
-          for (const v of searchVariants(title)) {
-            try {
-              const feedUrl = `${DORAMASUB_BASE}/feeds/posts/default?alt=json&q=${encodeURIComponent(
-                v
-              )}&max-results=20`;
-              const feedRes = await fetchHtml(feedUrl, env);
-              const data = JSON.parse(feedRes);
-              for (const entry of data?.feed?.entry || []) {
-                const card = parseFeedEntryCard(entry);
-                if (card) slugs.add(card.slug);
-              }
-            } catch {}
-          }
-          return [...slugs];
-        })(),
-      fetchEpisodes: (seriesSlug) =>
-        (async () => {
-          const metaRes = await doramaSubSource.getMeta(
-            `dsub:${seriesSlug}`,
-            "",
-            env
-          );
-          const episodes: { s: number; e: number; epSlug: string }[] = [];
-          const meta = metaRes?.meta as any;
-          for (const v of meta?.videos || []) {
-            episodes.push({
-              s: v.season,
-              e: v.episode,
-              epSlug: v.id.replace(/^dsub:/, ""),
-            });
-          }
-          return episodes;
-        })(),
-    },
-    epSlug,
-    env
-  );
 }
 
 export const doramaSubSource = new DoramaSubSource();

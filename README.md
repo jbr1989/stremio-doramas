@@ -65,8 +65,8 @@ Los tres sitios WordPress usan el tema **DooPlay**, cuyo patrón es idéntico:
 | StreamWish y espejos (`streamwish`, `embedwish`, `wishfast`, `sfastwish`, `swishsrv`, `streamaly`, `streamis`, `flaswish`) | HLS `.m3u8` | Proxy Deno `/streamwish` |
 | Familia filelions "lulu" (`lulustream.com`, `luluvdo.com`) — hop entre dominios; master en CDN `cdn-tnmr.*` | HLS `.m3u8` | Mismo relay `/streamwish`; exige `Referer` = la URL del embed exacta + UA Chrome (el `/hls` reintentа con Chrome si el móvil da 403) |
 | `savefiles.com`, `streamhls.to` | HLS `.m3u8` | Proxy Deno `/savefiles` |
-| `mp4upload.com` | MP4 directo | `extractMp4upload` (`src/extractors.ts`) — descarta sin fetch los `embed-undef.html` (archivo borrado upstream) |
-| `hexload.com` | MP4 directo | `extractHexload` (`src/extractors.ts`) |
+| `mp4upload.com` | MP4 directo | `extractMp4upload` (`src/lib/extractors.ts`) — descarta sin fetch los `embed-undef.html` (archivo borrado upstream) |
+| `hexload.com` | MP4 directo | `extractHexload` (`src/lib/extractors.ts`) |
 | `pixeldrain.com` | MP4 directo | API pública de pixeldrain |
 | Cualquier otro | — | Fallback `externalUrl` (abrir en navegador) |
 
@@ -177,16 +177,17 @@ si no, esto crea un segundo Worker en otra URL en vez de actualizar el real.
 
 - `https://123456.vegettoson83.workers.dev/_health` — versión + binding KV
 - `https://123456.vegettoson83.workers.dev/debug` — config (proxy, rendering)
-- `/debug-streamwish?url=<embed>` — resuelve un embed de StreamWish (m3u8 + URL Deno)
-- `/debug-savefiles?code=<code>` — resuelve un código savefiles/streamhls
+- `/debug-extract?id=<stream-id>` — fan-out de streams para un episodio concreto (streams crudos)
+- `/debug-extractor?url=<embed>` — prueba un extractor individual autodetectado por la URL del embed
+  (familias: savefiles/streamhls, streamwish y sus mirrors, mixdrop, dood — do7go/playmogo/dood.*).
+  Devuelve `extractor/testUrl/streamUrl/ms` más extras por familia (`proxyUrl`, `denoUrl`+`ipBound`,
+  `browserRendering`). Los `externalUrl` (🌐) no reproducen — solo HLS y MP4 cuentan
 - `/debug-host?url=<embed>` — trae la página de un embed y vuelca las URLs de medios
-- `/debug-mixdrop?url=<embed>` — resuelve un embed de Mixdrop
 - `/debug-render?url=<url>` — prueba de Cloudflare Browser Rendering
-- `/debug-dood?url=<embed>` — resuelve un embed de la familia Dood (do7go/playmogo/dood.*) a un MP4 provisional vía `pass_md5`; devuelve el MP4 final y la URL del relay Deno `/mp4`
 - `/debug-all` — chequea las 7 fuentes a la vez. Comportamiento estándar (dinámico): de cada catálogo propio toma las series recientes, las expande a `?n=` episodios vía meta (default 10) y llama al getter de cada fuente con esos IDs reales. Salida plana, una fila por episodio: `source/id/streamsCount/tipos/totalMs` + `sample` con cada stream (`servidor`/`tipo`/`name`/`url`); sin episodios solo muestra contexto del catálogo. `?ids=id1,id2` hace override manual. Streams crudos: sin caché ni filtro de señuelos.
 - `/cache-clear?key=<clave KV completa>` — limpia una entrada de caché
 
-### Hosts de reto (`CHALLENGE_HOSTS_RE`, src/utils.ts)
+### Hosts de reto (`CHALLENGE_HOSTS_RE`, src/lib/utils.ts)
 
 Páginas de embed con challenge activo de Cloudflare contra TLS no-navegador.
 Para estos hosts `fetchHtml` **salta la cascada de proxies públicos** (que con

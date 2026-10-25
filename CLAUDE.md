@@ -3,7 +3,10 @@
 Cloudflare Worker que sirve el protocolo de addon de Stremio (`com.doramas.stremio`,
 v1.0.0) para **fuentes de doramas**: doramaslat.com, doramedplay.net,
 kdramasplay.com (WordPress + tema DooPlay), doramasflix.in (GraphQL), tudorama.com, pandrama.tv, doramasyt.com y doramasub.com. Archivo
-principal: `src/index.ts`, más un servicio auxiliar `deno/fetch.ts` que corre en
+principal: `src/index.ts` (router HTTP), con la camada de dispatch a fuentes en
+`src/resolve.ts`, las rutas de producción en `src/routes/` (`stremio.ts`,
+`proxy.ts`) y el tooling de diagnóstico en `src/debug/`; más un servicio
+auxiliar `deno/fetch.ts` que corre en
 **Deno Deploy** (ver notas del proxy abajo; `deno.json` fija su entrypoint). El
 Worker se despliega con **Cloudflare Workers Builds** (integración Git del dashboard)
 en cada push a `main`; el proxy se despliega con la integración Git de Deno Deploy.
@@ -49,7 +52,7 @@ Contratos estables. Cambiarlos es trabajo de protocolo y debe cumplir la spec
   de episodio inexistente en un sitio). Los 403/5xx sí reintentan (bloqueo de CF
   que un proxy puede salvar). El proxy permite solo los dominios de dorama
   integrados (allowlist en `deno/fetch.ts`).
-- **Slug mapping entre sitios** (`src/sources/slugmap.ts`): el fan-out de
+- **Slug mapping entre sitios** (`src/lib/slugmap.ts`): el fan-out de
   `getStreams` reutiliza el epSlug del sitio origen en los otros, pero cada
   sitio nombra sus episodios con su propio slug. Si a doramaslat.com,
   kdramasplay.com o doramedplay.net les da 404, se resuelve el slug correcto:
@@ -95,12 +98,12 @@ dejes la variante vieja detrás:
   `<li class="dooplay_player_option" data-post data-nume data-type>` → POST a
   `admin-ajax.php` con `action=doo_player_ajax` → `{"embed_url": "…"}` → resolver
   el host del embed (`resolveDoramaEmbed` / `resolveKplayEmbed`).
-- Extractores por host en `src/extractors.ts` (`extractMp4upload`, `extractHexload`,
-  `extractSavefiles`, `extractMixdrop`, `extractStreamwish`).
+- Extractores por host en `src/lib/extractors.ts` (`extractMp4upload`, `extractHexload`,
+  `extractSavefiles`, `extractMixdrop`, `extractStreamwish`, `extractDood`).
   Añade un host nuevo escribiendo otro extractor manual, no buscando un navegador.
   **Ojo**: los extractores Worker-side de hosts IP-bound (`extractSavefiles`,
-  `extractStreamwish`, `extractMixdrop`) existen SOLO para los endpoints
-  `/debug-savefiles`, `/debug-streamwish` y `/debug-mixdrop`. Nunca los uses como
+  `extractStreamwish`, `extractMixdrop`) existen SOLO para el endpoint
+  `/debug-extractor?url=<embed>` (autodetecta la familia por hostname). Nunca los uses como
   camino primario de streams — producen streams muertos (las URLs firmadas que
   acuñan quedan atadas a la IP del Worker y Stremio, con otra IP, recibe 403).
 - **Hosts IP-bound**: savefiles/streamhls y StreamWish se resuelven y se sirven
@@ -118,12 +121,11 @@ dejes la variante vieja detrás:
   de fiarse del caso límite.
 - `findMediaUrl` + `decodeVoe` + `isDecoyUrl` — detección de MP4/HLS directo y de
   enlaces señuelo dentro del HTML de un embed; los usan `/debug-host` y el filtro
-  de streams de `src/index.ts`.
-- `/debug-extract?id=…` corre los extractores con medidas de tiempo, y
-  `/debug-host?url=` / `/debug-mixdrop?url=` / `/debug-streamwish?url=` /
-  `/debug-savefiles?code=` sondean un embed concreto — úsalos para diagnosticar
-  fallos de extracción en el Worker desplegado.
-- `/debug-all` (src/index.ts, `DEBUG_SOURCES`) es el chequeo dinámico de las 7
+  de streams de `src/routes/stremio.ts` (la extracción vive en `src/resolve.ts`).
+- `/debug-extract?id=…` corre el fan-out completo de streams para un id concreto,
+  y `/debug-extractor?url=` sondea un embed concreto (autodetectando extractor) —
+  úsalos para diagnosticar fallos de extracción en el Worker desplegado.
+- `/debug-all` (src/debug/check.ts, `DEBUG_SOURCES`) es el chequeo dinámico de las 7
   fuentes: por fuente toma las series recientes de su propio catálogo
   (`getCatalog`), las expande a episodios vía `getMeta` (los catálogos traen
   ids de serie; `debugIsEpisodeId` valida el formato por fuente) y llama al
@@ -135,10 +137,10 @@ dejes la variante vieja detrás:
   `externalUrl` → hostname de `url`; `debugTipoOf`) siempre; `?ids=` hace
   override manual. Cuidado en CF Workers free: ~100 subrequests/invocación de
   este chequeo. Los hosts de la familia Cloudflare-challenge
-  (`CHALLENGE_HOSTS_RE` en utils.ts: dsvplay/do7go/playmogo) van por fast
+  (`CHALLENGE_HOSTS_RE` en src/lib/utils.ts: dsvplay/do7go/playmogo) van por fast
   path directo sin cascada de proxies; `extractMp4upload` descarta sin fetch
   los `embed-undef.html` (archivo borrado upstream).
-  `/debug-dood?url=` sondea la rama Dood de `extractDood`.
+  `/debug-extractor?url=<embed dood>` sondea la rama Dood de `extractDood`.
 
 ## Familia Dood (do7go/playmogo/dood.*) — NO es StreamWish
 
@@ -149,7 +151,7 @@ texto plano con la base del CDN (ej. `https://xx.cloudatacdn.com/path/foo~`) y
 el player le concatena 10 chars random + `?token=<code>&expiry=<ms>` (función
 `makePlay()`). El MP4 final **exige `Referer` del propio host del embed y NO
 es IP-bound** (con Referer responde 206 sin token query). Flujo:
-`extractDood` (src/extractors.ts, usa `fetchHtml` que cae a Browser Rendering
+`extractDood` (src/lib/extractors.ts, usa `fetchHtml` que cae a Browser Rendering
 si hay challenge) → rama `DOOD_HOSTS_RE` en `addEmbedStreams` y en el loop de
 pandrama → stream `url = ${denoBase}/mp4?url=…&r=<origin>` → relay `/mp4` en
 deno/fetch.ts (pasa el `Range` del cliente, sin timeout para no cortar el
@@ -158,7 +160,7 @@ Sincronizado con la allowlist de /mp4 en deno/fetch.ts.
 
 ## Allowlist de StreamWish (un contrato, 2 copias)
 
-La regex canónica vive en `STREAMWISH_HOSTS_RE` (`src/utils.ts`) y las fuentes
+La regex canónica vive en `STREAMWISH_HOSTS_RE` (`src/lib/utils.ts`) y las fuentes
 la comparten (directamente `pandrama.ts` o vía `addEmbedStreams`). Debe
 quedarse idéntica a la allowlist de `/streamwish` en `deno/fetch.ts`:
 
