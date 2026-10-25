@@ -2,12 +2,9 @@ import { Env } from "./lib/types";
 import { CORS, json } from "./lib/utils";
 import { MANIFEST } from "./manifest";
 import { LOGO_PNG_BASE64 } from "./logo";
-import { getCatalog, getMeta, getStreams, ResolveDeps } from "./resolve";
 import { handleDebug, isDebugPath } from "./debug";
 import { catalogRoute, metaRoute, streamRoute } from "./routes/stremio";
 import { proxyM3u8, proxySeg } from "./routes/proxy";
-
-const deps: ResolveDeps = { getCatalog, getMeta, getStreams };
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -37,7 +34,7 @@ export default {
       return json({ ...MANIFEST, logo: `${url.origin}/logo.png` });
 
     if (isDebugPath(path)) {
-      const resp = await handleDebug(request, url, path, env, deps);
+      const resp = await handleDebug(request, url, path, env);
       if (resp) return resp;
     }
 
@@ -76,15 +73,15 @@ export default {
         extra.search = url.searchParams.get("search")!;
       if (url.searchParams.get("genre"))
         extra.genre = url.searchParams.get("genre")!;
-      return catalogRoute(catalogId, extra, env, deps);
+      return catalogRoute(catalogId, extra, env);
     }
 
     const metaM = path.match(/^\/meta\/([^/]+)\/(.+)\.json$/);
     if (metaM)
-      return metaRoute(decodeURIComponent(metaM[2]), tmdbKey, env, deps);
+      return metaRoute(decodeURIComponent(metaM[2]), tmdbKey, env);
 
     const streamM = path.match(/^\/stream\/([^/]+)\/(.+)\.json$/);
-    if (streamM) return streamRoute(decodeURIComponent(streamM[2]), env, deps);
+    if (streamM) return streamRoute(decodeURIComponent(streamM[2]), env);
 
     if (path === "/proxy/m3u8") return proxyM3u8(request, url);
     if (path === "/proxy/seg") return proxySeg(url);

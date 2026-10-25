@@ -1,6 +1,5 @@
 import { Env } from "../lib/types";
 import { browserRenderingReady, json } from "../lib/utils";
-import { ResolveDeps } from "../resolve";
 import { debugAll, debugExtract } from "./check";
 import { debugExtractor } from "./extractor";
 import { debugHost, debugRender } from "./network";
@@ -27,8 +26,7 @@ export async function handleDebug(
   request: Request,
   url: URL,
   path: string,
-  env: Env,
-  deps: ResolveDeps
+  env: Env
 ): Promise<Response | null> {
   if (!isDebugPath(path)) return null;
   const tmdbKey = (env.TMDB_KEY || "").trim();
@@ -45,8 +43,8 @@ export async function handleDebug(
     });
   }
 
-  if (path === "/debug-extract") return debugExtract(url, env, deps);
-  if (path === "/debug-all") return debugAll(url, env, tmdbKey, deps);
+  if (path === "/debug-extract") return debugExtract(url, env);
+  if (path === "/debug-all") return debugAll(url, env, tmdbKey);
   if (path === "/debug-extractor") return debugExtractor(request, url, env);
   if (path === "/debug-render") return debugRender(url, env);
   if (path === "/debug-host") return debugHost(url);

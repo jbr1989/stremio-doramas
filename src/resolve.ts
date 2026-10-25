@@ -4,18 +4,6 @@ import { SOURCES, sourceByPrefix } from "./registry";
 import { doramasflixSource } from "./sources/doramasflix";
 import { getAllAlldoramasCatalog } from "./alldoramas";
 
-/** Funciones de dispatch que las rutas y el router de debug consumen
- *  inyectadas (evita que importen index.ts — dependencia circular). */
-export type ResolveDeps = {
-  getCatalog: (
-    catalogId: string,
-    extra: Record<string, string>,
-    env?: Env
-  ) => Promise<any>;
-  getMeta: (id: string, tmdbKey: string, env?: Env) => Promise<any>;
-  getStreams: (id: string, env: Env) => Promise<{ streams: any[] }>;
-};
-
 // ---------------------------------------------------------------------------
 // Camada de dispatch entre el router HTTP y las fuentes: dado un catalogId o
 // un id de stream (con prefijo p.ej. `dflix:`), determinar la(s) fuente(s)
@@ -48,7 +36,7 @@ export async function getStreams(rawId: string, env: Env) {
   const def = sourceByPrefix(rawId.split(":")[0]);
   let epSlug = "";
   if (def) {
-    epSlug = (def.toEpSlug ? await def.toEpSlug(rawId, env) : rawId.slice(def.prefix.length + 1)) || "";
+    epSlug = (await def.toEpSlug(rawId, env)) || "";
   }
 
   const tasks: Promise<{ streams: any[] }>[] = [];
@@ -57,7 +45,7 @@ export async function getStreams(rawId: string, env: Env) {
     if (rawId.startsWith(`${s.prefix}:`)) {
       tasks.push(s.getStreams(rawId, env));
     } else if (epSlug) {
-      tasks.push(s.getStreams(s.buildId?.(epSlug) ?? `${s.prefix}:${epSlug}`, env));
+      tasks.push(s.getStreams(s.buildId(epSlug), env));
     }
   }
 

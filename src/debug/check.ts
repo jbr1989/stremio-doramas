@@ -1,5 +1,5 @@
 import { Env } from "../lib/types";
-import { ResolveDeps } from "../resolve";
+import { getCatalog, getMeta, getStreams } from "../resolve";
 import { json } from "../lib/utils";
 import { SOURCES, sourceByPrefix } from "../registry";
 import {
@@ -41,11 +41,7 @@ function debugCheckFor(prefix: string, id: string, env: Env): DebugCheck | null 
 
 /** /debug-extract — fan-out completo de getStreams() para un id concreto,
  *  con los streams en crudo (sin caché KV ni filtro isDecoyUrl). */
-export async function debugExtract(
-  url: URL,
-  env: Env,
-  deps: ResolveDeps
-): Promise<Response> {
+export async function debugExtract(url: URL, env: Env): Promise<Response> {
   const id = url.searchParams.get("id") || "";
   if (!id)
     return json({
@@ -54,7 +50,7 @@ export async function debugExtract(
     });
   const t0 = Date.now();
   try {
-    const result = await deps.getStreams(id, env);
+    const result = await getStreams(id, env);
     return json({
       id,
       totalMs: Date.now() - t0,
@@ -73,10 +69,8 @@ export async function debugExtract(
 export async function debugAll(
   url: URL,
   env: Env,
-  tmdbKey: string,
-  deps: ResolveDeps
+  tmdbKey: string
 ): Promise<Response> {
-  const { getCatalog, getMeta } = deps;
   const n = Math.max(
     1,
     Math.min(parseInt(url.searchParams.get("n") || "10", 10) || 10, 25)
