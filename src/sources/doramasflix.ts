@@ -1,7 +1,7 @@
 import { Env, MetaPreview } from "../lib/types";
 import { genreLabelForMeta, genreSlug } from "../genres";
 import { cleanTitle, decodeEntities, denoBaseFromEnv, fetchTmdb, makeStreamDeduper, toMetaPreview } from "../lib/utils";
-import { addEmbedStreams } from "../lib/extractors";
+import { addEmbedStreams, decodeEmbedUrl } from "../lib/extractors";
 import { gqlFetch } from "../lib/gql";
 import { resolveEpisodeSlug, searchVariants } from "../lib/slugmap";
 import { SourceBase } from "../lib/sourceBase";
@@ -399,24 +399,6 @@ function dflixCardMeta(item: any) {
     name,
     poster,
   });
-}
-
-function decodeEmbedUrl(url: string): string {
-  if (!url || !url.includes("/e/")) return url;
-  try {
-    const jwtToken = url.split("/e/")[1];
-    const payloadB64 = jwtToken.split(".")[1];
-    if (!payloadB64) return url;
-    // Replace URL-safe base64 characters if any
-    const b64 = payloadB64.replace(/-/g, "+").replace(/_/g, "/");
-    const payloadStr = atob(b64);
-    const payload = JSON.parse(payloadStr);
-    if (payload && payload.link) {
-      const decodedLink = atob(payload.link);
-      return decodedLink || url;
-    }
-  } catch {}
-  return url;
 }
 
 const EPISODE_DETAIL_QUERY = `

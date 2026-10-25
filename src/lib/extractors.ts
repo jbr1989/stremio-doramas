@@ -246,6 +246,29 @@ function decodeVoe(encoded: string): { url: string; isHls: boolean } | null {
 const DECOY_RE =
   /big[_\-. ]?buck|test-videos\.co\.uk|sample-videos\.com|gtv-videos-bucket|commondatastorage\.googleapis\.com\/gtv|learningcontainer\.com|file-examples\.com|techslides\.com\/demos|download\.blender\.org\/peach|peach\.blender\.org/i;
 
+/** URL de embed "protegida" con formato /e/<JWT>: decodifica el payload
+ *  base64-urlsafe del token y devuelve el link real (la URL original si no
+ *  matchea el formato o el parseo falla). Pura, sin red — como los links de
+ *  este formato llegan de backends de video genéricos, vive aquí junto a
+ *  los decodificadores de servidores (extractDood, extractStreamwish…). */
+export function decodeEmbedUrl(url: string): string {
+  if (!url || !url.includes("/e/")) return url;
+  try {
+    const jwtToken = url.split("/e/")[1];
+    const payloadB64 = jwtToken.split(".")[1];
+    if (!payloadB64) return url;
+    // Replace URL-safe base64 characters if any
+    const b64 = payloadB64.replace(/-/g, "+").replace(/_/g, "/");
+    const payloadStr = atob(b64);
+    const payload = JSON.parse(payloadStr);
+    if (payload && payload.link) {
+      const decodedLink = atob(payload.link);
+      return decodedLink || url;
+    }
+  } catch {}
+  return url;
+}
+
 export function isDecoyUrl(u: string): boolean {
   let d = u;
   try {
