@@ -44,8 +44,8 @@ class TudoramaSource extends SourceBase {
     return `${TUDORAMA_BASE}/serie/${slug}/`;
   }
 
-  // Rescate propio: resolveTudoramaEpisodeSlug devuelve el epSlug en el
-  // formato del propio sitio; urlFor (buildPageUrl) re-normaliza a la vez.
+  // Rescate propio: el hook (abajo) devuelve el epSlug en el formato del
+  // propio sitio (-s1x4); urlFor (buildPageUrl) re-normaliza a la vez.
   protected override async fetchEpisodePage(
     slug: string,
     env: Env
@@ -55,7 +55,7 @@ class TudoramaSource extends SourceBase {
       slug,
       env,
       (u, e) => this.fetchBody(u, e),
-      (s, e) => resolveTudoramaEpisodeSlug(s, e),
+      (s, e) => this.resolveEpisodeSlug(s, e),
       this.prefix
     );
   }
@@ -319,59 +319,64 @@ class TudoramaSource extends SourceBase {
       "-$1x$2"
     )}`;
   }
+
+  // ── Fan-out: rescate de slug (slugmap) ──
+  // Resuelve el epSlug propio de tudorama para un epSlug venido de otro
+  // sitio (mapping por título, ver slugmap.ts). Devuelve el epSlug en el
+  // formato DEL PROPIO sitio ("-s1x4") — buildPageUrl lo re-normaliza a
+  // "-1xN" al fetchear.
+  protected override async resolveEpisodeSlug(
+    epSlug: string,
+    env: Env
+  ): Promise<string | null> {
+    return resolveEpisodeSlug(
+      {
+        site: this.prefix,
+        searchSeries: async (title) => {
+          const slugs = new Set<string>();
+          for (const v of searchVariants(title)) {
+            const html = await racerFetch(
+              `${TUDORAMA_BASE}/?s=${encodeURIComponent(v)}`,
+              env,
+              { minLen: 300, proxyTimeoutMs: 12000 }
+            );
+            for (const m of html.matchAll(/\/serie\/([a-z0-9-]+)\//gi)) {
+              slugs.add(m[1]);
+            }
+          }
+          return [...slugs];
+        },
+        fetchEpisodes: async (seriesSlug) => {
+          const html = await racerFetch(
+            `${TUDORAMA_BASE}/serie/${seriesSlug}/`,
+            env,
+            { minLen: 300, proxyTimeoutMs: 12000 }
+          );
+          const episodes: { s: number; e: number; epSlug: string }[] = [];
+          const seen = new Set<string>();
+          for (const m of html.matchAll(
+            /\/ver\/([a-z0-9-]+)-s(\d+)x(\d+)\/?/gi
+          )) {
+            const rawSlug = `${m[1]}-s${m[2]}x${m[3]}`;
+            if (seen.has(rawSlug)) continue;
+            seen.add(rawSlug);
+            episodes.push({
+              epSlug: `${m[1]}-1x${m[3]}`,
+              s: parseInt(m[2], 10),
+              e: parseInt(m[3], 10),
+            });
+          }
+          return episodes;
+        },
+      },
+      epSlug,
+      env
+    );
+  }
 }
 
 // (la firma de extractEmbeds/hostFor es por-embed; el nombre se conoce solo
 // dentro del AJAX del episodio).
 const hostByName = new Map<string, string>();
-
-async function resolveTudoramaEpisodeSlug(
-  epSlug: string,
-  env: Env
-): Promise<string | null> {
-  return resolveEpisodeSlug(
-    {
-      site: TUDORAMA_PREFIX,
-      searchSeries: async (title) => {
-        const slugs = new Set<string>();
-        for (const v of searchVariants(title)) {
-          const html = await racerFetch(
-            `${TUDORAMA_BASE}/?s=${encodeURIComponent(v)}`,
-            env,
-            { minLen: 300, proxyTimeoutMs: 12000 }
-          );
-          for (const m of html.matchAll(/\/serie\/([a-z0-9-]+)\//gi)) {
-            slugs.add(m[1]);
-          }
-        }
-        return [...slugs];
-      },
-      fetchEpisodes: async (seriesSlug) => {
-        const html = await racerFetch(
-          `${TUDORAMA_BASE}/serie/${seriesSlug}/`,
-          env,
-          { minLen: 300, proxyTimeoutMs: 12000 }
-        );
-        const episodes: { s: number; e: number; epSlug: string }[] = [];
-        const seen = new Set<string>();
-        for (const m of html.matchAll(
-          /\/ver\/([a-z0-9-]+)-s(\d+)x(\d+)\/?/gi
-        )) {
-          const rawSlug = `${m[1]}-s${m[2]}x${m[3]}`;
-          if (seen.has(rawSlug)) continue;
-          seen.add(rawSlug);
-          episodes.push({
-            epSlug: `${m[1]}-1x${m[3]}`,
-            s: parseInt(m[2], 10),
-            e: parseInt(m[3], 10),
-          });
-        }
-        return episodes;
-      },
-    },
-    epSlug,
-    env
-  );
-}
 
 export const tudoramaSource = new TudoramaSource();

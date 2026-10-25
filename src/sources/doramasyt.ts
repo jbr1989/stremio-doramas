@@ -16,50 +16,6 @@ export function canonicalDytSlug(slug: string): string {
   return `${m[1]}-1x${parseInt(m[2], 10)}`;
 }
 
-async function resolveDytEpisodeSlug(
-  epSlug: string,
-  env: Env
-): Promise<string | null> {
-  return resolveEpisodeSlug(
-    {
-      site: "dyt",
-      searchSeries: (title) =>
-        (async () => {
-          const slugs = new Set<string>();
-          for (const v of searchVariants(title)) {
-            let html = "";
-            try {
-              html = await fetchHtml(`${DORAMASYT_BASE}/buscar?q=${encodeURIComponent(v)}`, env);
-            } catch {
-              html = "";
-            }
-            for (const m of html.matchAll(/\/dorama\/([a-z0-9-]+)/gi))
-              slugs.add(m[1]);
-          }
-          return [...slugs];
-        })(),
-      fetchEpisodes: (seriesSlug) =>
-        (async () => {
-          let html = "";
-          try {
-            html = await fetchHtml(`${DORAMASYT_BASE}/dorama/${seriesSlug}`, env);
-          } catch {
-            html = "";
-          }
-          const ep1Match = html.match(/\/ver\/([a-z0-9-]+-episodio-)1["'\s>]/i);
-          const base = ep1Match ? ep1Match[1] : `${seriesSlug.replace(/-sub-espanol$/, "")}-episodio-`;
-          const episodes: { s: number; e: number; epSlug: string }[] = [];
-          for (let i = 1; i <= 32; i++) {
-            episodes.push({ s: 1, e: i, epSlug: `${base}${i}` });
-          }
-          return episodes;
-        })(),
-    },
-    epSlug,
-    env
-  );
-}
-
 class DoramaYtSource extends SourceBase {
   readonly prefix = "dyt";
   readonly label = "DoramasYT";
@@ -69,6 +25,66 @@ class DoramaYtSource extends SourceBase {
   // las demás fuentes (que guardan sobre -\d+x\d+$) acepten el slug.
   override async toEpSlug(rawId: string, _env?: Env): Promise<string> {
     return canonicalDytSlug(rawId.slice(this.prefix.length + 1));
+  }
+
+  // ── Fan-out: rescate de slug (slugmap) ──
+  // Resuelve el epSlug propio de doramasyt para un epSlug venido de otro
+  // sitio (mapping por título, ver slugmap.ts). La búsqueda va por /buscar
+  // (HTML, slugs /dorama/{slug}/) y los episodios se RECONSTRUYEN: el sitio
+  // no lista episodios en la ficha — se deduce la plantilla
+  // "{serieSlug}-episodio-N" (probando 1..32, como su paginador interno).
+  protected override async resolveEpisodeSlug(
+    epSlug: string,
+    env: Env
+  ): Promise<string | null> {
+    return resolveEpisodeSlug(
+      {
+        site: this.prefix,
+        searchSeries: (title) =>
+          (async () => {
+            const slugs = new Set<string>();
+            for (const v of searchVariants(title)) {
+              let html = "";
+              try {
+                html = await fetchHtml(
+                  `${DORAMASYT_BASE}/buscar?q=${encodeURIComponent(v)}`,
+                  env
+                );
+              } catch {
+                html = "";
+              }
+              for (const m of html.matchAll(/\/dorama\/([a-z0-9-]+)/gi))
+                slugs.add(m[1]);
+            }
+            return [...slugs];
+          })(),
+        fetchEpisodes: (seriesSlug) =>
+          (async () => {
+            let html = "";
+            try {
+              html = await fetchHtml(
+                `${DORAMASYT_BASE}/dorama/${seriesSlug}`,
+                env
+              );
+            } catch {
+              html = "";
+            }
+            const ep1Match = html.match(
+              /\/ver\/([a-z0-9-]+-episodio-)1["'\s>]/i
+            );
+            const base = ep1Match
+              ? ep1Match[1]
+              : `${seriesSlug.replace(/-sub-espanol$/, "")}-episodio-`;
+            const episodes: { s: number; e: number; epSlug: string }[] = [];
+            for (let i = 1; i <= 32; i++) {
+              episodes.push({ s: 1, e: i, epSlug: `${base}${i}` });
+            }
+            return episodes;
+          })(),
+      },
+      epSlug,
+      env
+    );
   }
 
   // ── Streams ──
@@ -130,7 +146,7 @@ class DoramaYtSource extends SourceBase {
       slug,
       env,
       (u, e) => this.fetchBody(u, e),
-      resolveDytEpisodeSlug,
+      (s, e) => this.resolveEpisodeSlug(s, e),
       this.prefix
     );
   }

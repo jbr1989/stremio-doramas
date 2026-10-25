@@ -122,6 +122,17 @@ export abstract class SourceBase {
     return this.fetchBody(this.buildPageUrl(slug), env);
   }
 
+  /** Rescatador de slug del episodio (slug de catálogo vencido → slug vigente
+   *  del sitio). Default: la fuente no rescata (null). Las fuentes que sí lo
+   *  hacen pisan el hook con el engine resolveEpisodeSlug de slugmap.ts (su
+   *  SiteAdapter) o con su propio rescate. */
+  protected async resolveEpisodeSlug(
+    epSlug: string,
+    env: Env
+  ): Promise<string | null> {
+    return null;
+  }
+
   /** Dónde vive el player del episodio. */
   protected abstract buildPageUrl(slug: string): string;
 

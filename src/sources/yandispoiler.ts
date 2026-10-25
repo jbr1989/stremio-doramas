@@ -73,18 +73,48 @@ export class YandiSource extends SourceBase {
       slug,
       env,
       (u, e) => this.fetchBody(u, e),
-      (s, e) => this.resolveEpisodeSlug?.(s, e) ?? Promise.resolve(null),
+      (s, e) => this.resolveEpisodeSlug(s, e),
       this.prefix
     );
   }
 
-  /** Rescatador de slug (slugmap). yandi usa el buscador del sitio (default);
-   * kplay lo pisa con el REST+nonce de DooPlay. */
-  protected async resolveEpisodeSlug(
+  /** Rescatador de slug (slugmap). yandi usa el buscador del sitio (?s=,
+   *  resultados server-side) — kplay lo pisa con el REST+nonce de DooPlay. */
+  protected override async resolveEpisodeSlug(
     epSlug: string,
     env: Env
   ): Promise<string | null> {
-    return resolveYandiEpisodeSlug(epSlug, env);
+    return resolveEpisodeSlug(
+      {
+        site: this.prefix,
+        searchSeries: async (title) => {
+          const variants = searchVariants(title);
+          const html = await fetchHtml(
+            `${this.cfg.base}/?s=${encodeURIComponent(variants[0])}`,
+            env
+          );
+          const slugs = [
+            ...new Set(
+              [...html.matchAll(/\/series\/([a-z0-9-]+)\//gi)].map((m) => m[1])
+            ),
+          ];
+          return slugs;
+        },
+        fetchEpisodes: async (seriesSlug) => {
+          const html = await fetchHtml(
+            `${this.cfg.base}/series/${seriesSlug}/`,
+            env
+          );
+          return dooplayEpisodeList(html, "episodios").map((ep) => ({
+            epSlug: ep.slug,
+            s: ep.s,
+            e: ep.e,
+          }));
+        },
+      },
+      epSlug,
+      env
+    );
   }
 
   // Ids de 3 segmentos: quitar "ep:"/"movie:" para los behaviorHints.
@@ -323,43 +353,6 @@ export class YandiSource extends SourceBase {
       })),
     });
   }
-}
-
-async function resolveYandiEpisodeSlug(
-  epSlug: string,
-  env: Env
-): Promise<string | null> {
-  return resolveEpisodeSlug(
-    {
-      site: "yandi",
-      searchSeries: async (title) => {
-        const variants = searchVariants(title);
-        const html = await fetchHtml(
-          `${YANDI_BASE}/?s=${encodeURIComponent(variants[0])}`,
-          env
-        );
-        const slugs = [
-          ...new Set(
-            [...html.matchAll(/\/series\/([a-z0-9-]+)\//gi)].map((m) => m[1])
-          ),
-        ];
-        return slugs;
-      },
-      fetchEpisodes: async (seriesSlug) => {
-        const html = await fetchHtml(
-          `${YANDI_BASE}/series/${seriesSlug}/`,
-          env
-        );
-        return dooplayEpisodeList(html, "episodios").map((ep) => ({
-          epSlug: ep.slug,
-          s: ep.s,
-          e: ep.e,
-        }));
-      },
-    },
-    epSlug,
-    env
-  );
 }
 
 export const yandiSource = new YandiSource({

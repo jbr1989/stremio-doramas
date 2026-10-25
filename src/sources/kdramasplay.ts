@@ -7,97 +7,6 @@ import { SourceCard } from "../lib/sourceBase";
 
 const KPLAY_BASE = "https://kdramasplay.com";
 
-/** Resuelve el epSlug propio de kdramasplay para un epSlug venido de otro
- * sitio (mapping por título, ver slugmap.ts). Devuelve null si no hay match.
- *
- * Búsqueda: el `?s=` de kdramasplay NO emite resultados server-side (grid lo
- * llena el livesearch) — el buscador real es la REST de DooPlay
- * `/wp-json/dooplay/search/?keyword=&nonce=`, que devuelve HTTP 200 con JSON
- * `{id: {title, url, img}}` (o `{error:"no_posts"|"no_verify_nonce"}`). El
- * nonce (`"nonce":"…"` en el config `dtGonza`) sale de la misma página `?s=`
- * que ya descargamos, así que cada resolución hace 1 fetch de página + 1-2
- * REST. El REST matchea por frase: si la frase completa no da nada se prueba
- * con la palabra más larga del título. */
-async function resolveKplayEpisodeSlug(
-  epSlug: string,
-  env: Env
-): Promise<string | null> {
-  const restSearch = async (
-    kw: string,
-    nonce: string
-  ): Promise<string[]> => {
-    if (!kw.trim() || !nonce) return [];
-    try {
-      const r = await netFetch(
-        "kplaysearch",
-        `${KPLAY_BASE}/wp-json/dooplay/search/?keyword=${encodeURIComponent(
-          kw
-        )}&nonce=${encodeURIComponent(nonce)}`,
-        {
-          headers: {
-            "User-Agent": CHROME_UA,
-            "X-Requested-With": "XMLHttpRequest",
-            Referer: `${KPLAY_BASE}/`,
-          },
-          signal: AbortSignal.timeout(8000),
-        }
-      );
-      if (!r.ok) return [];
-      const data: unknown = await r.json().catch(() => null);
-      if (!data || typeof data !== "object" || "error" in (data as object))
-        return [];
-      const slugs: string[] = [];
-      for (const v of Object.values(data as Record<string, { url?: string }>)) {
-        const m = (v?.url || "").match(/\/series\/([a-z0-9-]+)\//i);
-        if (m) slugs.push(m[1]);
-      }
-      return [...new Set(slugs)];
-    } catch {
-      return [];
-    }
-  };
-
-  return resolveEpisodeSlug(
-    {
-      site: "kplay",
-      searchSeries: (title) =>
-        (async () => {
-          const variants = searchVariants(title);
-          const html = await fetchHtml(
-            `${KPLAY_BASE}/?s=${encodeURIComponent(variants[0])}`,
-            env
-          );
-          // Server-side del grid (suele venir vacío) + nonce fresco del tema.
-          const slugs = [
-            ...new Set(
-              [...html.matchAll(/\/series\/([a-z0-9-]+)\//gi)].map((m) => m[1])
-            ),
-          ];
-          const nonce =
-            html.match(/"nonce":"([a-f0-9]{10})"/)?.[1] || "";
-          for (const v of variants) {
-            slugs.push(...(await restSearch(v, nonce)));
-          }
-          return [...new Set(slugs)];
-        })(),
-      fetchEpisodes: (seriesSlug) =>
-        (async () => {
-          const html = await fetchHtml(
-            `${KPLAY_BASE}/series/${seriesSlug}/`,
-            env
-          );
-          return dooplayEpisodeList(html, "episodios").map((ep) => ({
-            epSlug: ep.slug,
-            s: ep.s,
-            e: ep.e,
-          }));
-        })(),
-    },
-    epSlug,
-    env
-  );
-}
-
 /** Kplay hereda el layout 3-segmentos de yandi; pisa solo lo genuinamente
  * distinto: player AJAX DooPlay, grilla de thumbs en el meta, parser de
  * cards simple y rescatador de slug REST+nonce. */
@@ -148,11 +57,100 @@ export class KplaySource extends YandiSource {
     return dooplayEpThumbs(html, KPLAY_BASE, "episodios", 220);
   }
 
+  // ── Fan-out: rescate de slug (slugmap) ──
+  // Resuelve el epSlug propio de kdramasplay para un epSlug venido de otro
+  // sitio (mapping por título, ver slugmap.ts). Devuelve null si no hay match.
+  //
+  // Búsqueda: el `?s=` de kdramasplay NO emite resultados server-side (grid
+  // lo llena el livesearch) — el buscador real es la REST de DooPlay
+  // /wp-json/dooplay/search/?keyword=&nonce=, que devuelve HTTP 200 con JSON
+  // {id: {title, url, img}} (o {error:"no_posts"|"no_verify_nonce"}). El
+  // nonce ("nonce":"…" en el config dtGonza) sale de la misma página ?s= que
+  // ya descargamos, así que cada resolución hace 1 fetch de página + 1-2
+  // REST. El REST matchea por frase: si la frase completa no da nada se
+  // prueba con la palabra más larga del título.
   protected override async resolveEpisodeSlug(
     epSlug: string,
     env: Env
   ): Promise<string | null> {
-    return resolveKplayEpisodeSlug(epSlug, env);
+    const restSearch = async (
+      kw: string,
+      nonce: string
+    ): Promise<string[]> => {
+      if (!kw.trim() || !nonce) return [];
+      try {
+        const r = await netFetch(
+          "kplaysearch",
+          `${KPLAY_BASE}/wp-json/dooplay/search/?keyword=${encodeURIComponent(
+            kw
+          )}&nonce=${encodeURIComponent(nonce)}`,
+          {
+            headers: {
+              "User-Agent": CHROME_UA,
+              "X-Requested-With": "XMLHttpRequest",
+              Referer: `${KPLAY_BASE}/`,
+            },
+            signal: AbortSignal.timeout(8000),
+          }
+        );
+        if (!r.ok) return [];
+        const data: unknown = await r.json().catch(() => null);
+        if (!data || typeof data !== "object" || "error" in (data as object))
+          return [];
+        const slugs: string[] = [];
+        for (const v of Object.values(
+          data as Record<string, { url?: string }>
+        )) {
+          const m = (v?.url || "").match(/\/series\/([a-z0-9-]+)\//i);
+          if (m) slugs.push(m[1]);
+        }
+        return [...new Set(slugs)];
+      } catch {
+        return [];
+      }
+    };
+
+    return resolveEpisodeSlug(
+      {
+        site: this.prefix,
+        searchSeries: (title) =>
+          (async () => {
+            const variants = searchVariants(title);
+            const html = await fetchHtml(
+              `${KPLAY_BASE}/?s=${encodeURIComponent(variants[0])}`,
+              env
+            );
+            // Server-side del grid (suele venir vacío) + nonce fresco del tema.
+            const slugs = [
+              ...new Set(
+                [...html.matchAll(/\/series\/([a-z0-9-]+)\//gi)].map(
+                  (m) => m[1]
+                )
+              ),
+            ];
+            const nonce =
+              html.match(/"nonce":"([a-f0-9]{10})"/)?.[1] || "";
+            for (const v of variants) {
+              slugs.push(...(await restSearch(v, nonce)));
+            }
+            return [...new Set(slugs)];
+          })(),
+        fetchEpisodes: (seriesSlug) =>
+          (async () => {
+            const html = await fetchHtml(
+              `${KPLAY_BASE}/series/${seriesSlug}/`,
+              env
+            );
+            return dooplayEpisodeList(html, "episodios").map((ep) => ({
+              epSlug: ep.slug,
+              s: ep.s,
+              e: ep.e,
+            }));
+          })(),
+      },
+      epSlug,
+      env
+    );
   }
 
   // Parser de cards: 2 regex sin data-ptype/sideranking (el fallback de
