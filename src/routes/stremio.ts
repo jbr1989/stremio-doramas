@@ -25,14 +25,18 @@ export async function catalogRoute(
   if (cached) return json(cached);
   try {
     const result = await getCatalog(catalogId, extra, env);
-    await cacheSet(
-      cacheKey,
-      result,
-      // El consolidado cuesta ~7 requests por página: se cachea 1h en
-      // vez de los 10 min estándar.
-      catalogId.startsWith("alldoramas") ? 60 * 60 : TTL.catalog,
-      env.STREAM_CACHE
-    );
+    // Solo cachea si hay contenido: un resultado vacío (búsqueda sin hits o
+    // catalogId desconocido) no debe escribir claves KV que un cliente mal
+    // intencionado puede multiplicar a mano.
+    if (result?.metas?.length > 0)
+      await cacheSet(
+        cacheKey,
+        result,
+        // El consolidado cuesta ~7 requests por página: se cachea 1h en
+        // vez de los 10 min estándar.
+        catalogId.startsWith("alldoramas") ? 60 * 60 : TTL.catalog,
+        env.STREAM_CACHE
+      );
     return json(result);
   } catch (e) {
     return json({ metas: [], error: String(e) });

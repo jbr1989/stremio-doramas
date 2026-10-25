@@ -208,6 +208,9 @@ export async function renderPage(
     wait?: "load" | "domcontentloaded" | "networkidle0" | "networkidle2";
     timeoutMs?: number;
     waitForSelector?: string;
+    /** Señal externa (p.ej. el techo global de fetchHtml): cancela el POST
+     *  de render en vuelo, además del timeout interno. */
+    signal?: AbortSignal;
   } = {}
 ): Promise<string | null> {
   const acct = (env.CF_ACCOUNT_ID || "").trim();
@@ -241,7 +244,7 @@ export async function renderPage(
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: anySignal(AbortSignal.timeout(timeoutMs), opts.signal),
       }
     );
     if (!r.ok) return null;
@@ -260,6 +263,21 @@ export function isCfChallenge(body: string): boolean {
   return /<title>Just a moment|_cf_chl_opt|__cf_chl_|challenge-platform|cf-browser-verification/i.test(
     body
   );
+}
+
+// Combine several abort signals into one: the merged signal aborts as soon as
+// any of the inputs aborts (portable AbortSignal.any). Used by fetchHtml to
+// attach the global deadline signal to each per-strategy timeout, so the 25s
+// global cap cancels in-flight network work instead of only gating new phases.
+// Exported: gqlFetch (failover con presupuesto global) usa el mismo patrón.
+export function anySignal(...signals: (AbortSignal | undefined | null)[]): AbortSignal {
+  const merged = new AbortController();
+  for (const s of signals) {
+    if (!s) continue;
+    if (s.aborted) merged.abort();
+    else s.addEventListener("abort", () => merged.abort(), { once: true });
+  }
+  return merged.signal;
 }
 
 // The target page does not exist upstream (404/410): retrying it through
@@ -337,6 +355,7 @@ export async function fetchHtml(
         const html = await renderPage(url, env, {
           wait: "load",
           timeoutMs: 16000,
+          signal: controller.signal,
         });
         if (html && html.length >= MIN_LEN) {
           clearTimeout(globalTimer);
@@ -349,7 +368,7 @@ export async function fetchHtml(
         () =>
           netFetch("direct", url, {
             headers: CHROME_HEADERS,
-            signal: AbortSignal.timeout(4000),
+            signal: anySignal(AbortSignal.timeout(4000), controller.signal),
           })
       );
       clearTimeout(globalTimer);
@@ -361,7 +380,7 @@ export async function fetchHtml(
       tryFetch("direct", () =>
         netFetch("direct", url, {
           headers: CHROME_HEADERS,
-          signal: AbortSignal.timeout(8000),
+          signal: anySignal(AbortSignal.timeout(8000), controller.signal),
         })
       ),
     ];
@@ -370,7 +389,7 @@ export async function fetchHtml(
         tryFetch("fetchproxy", () =>
           netFetch("proxy", `${proxyBase}?url=${encoded}`, {
             headers: { "User-Agent": CHROME_UA },
-            signal: AbortSignal.timeout(12000),
+            signal: anySignal(AbortSignal.timeout(12000), controller.signal),
           })
         )
       );
@@ -392,6 +411,7 @@ export async function fetchHtml(
       const html = await renderPage(url, env, {
         wait: "load",
         timeoutMs: 16000,
+        signal: controller.signal,
       });
       if (html && html.length >= MIN_LEN) {
         clearTimeout(globalTimer);
@@ -410,7 +430,7 @@ export async function fetchHtml(
         const html = await tryFetch(name, () =>
           netFetch(name, proxyUrl, {
             headers: { "User-Agent": CHROME_UA },
-            signal: AbortSignal.timeout(6000),
+            signal: anySignal(AbortSignal.timeout(6000), controller.signal),
           })
         );
         clearTimeout(globalTimer);

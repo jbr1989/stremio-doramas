@@ -1,7 +1,6 @@
 import { Env } from "./lib/types";
 import { makeStreamDeduper } from "./lib/utils";
 import { SOURCES, sourceByPrefix } from "./registry";
-import { doramasflixSource } from "./sources/doramasflix";
 import { getAllAlldoramasCatalog } from "./alldoramas";
 
 // ---------------------------------------------------------------------------
@@ -22,7 +21,10 @@ export async function getCatalog(
   // El orden de SOURCES importa: los catalogId no se solapan, pero se
   // respeta el orden de registro igual que en la cadena original.
   const def = SOURCES.find((s) => catalogId.startsWith(s.catalogId));
-  return def ? def.getCatalog(extra, env) : doramasflixSource.getCatalog(extra);
+  // Un catalogId desconocido responde vacío en vez de recaer en otra fuente:
+  // el fallback anterior (dflix) devolvía catálogo para id cualquiera y
+  // catalogRoute cacheaba cada clave nueva → escrituras KV ilimitadas.
+  return def ? def.getCatalog(extra, env) : { metas: [] };
 }
 
 export async function getMeta(id: string, tmdbKey: string, env?: Env) {
