@@ -1,9 +1,9 @@
 import { Env } from "../lib/types";
+import { ResolveDeps } from "../resolve";
 import { json } from "../lib/utils";
 import { SOURCES, sourceByPrefix } from "../registry";
 import {
   DebugCheck,
-  DebugDeps,
   DEBUG_CONCURRENCY,
   debugMapLimit,
   debugRunOne,
@@ -44,7 +44,7 @@ function debugCheckFor(prefix: string, id: string, env: Env): DebugCheck | null 
 export async function debugExtract(
   url: URL,
   env: Env,
-  deps: DebugDeps
+  deps: ResolveDeps
 ): Promise<Response> {
   const id = url.searchParams.get("id") || "";
   if (!id)
@@ -74,7 +74,7 @@ export async function debugAll(
   url: URL,
   env: Env,
   tmdbKey: string,
-  deps: DebugDeps
+  deps: ResolveDeps
 ): Promise<Response> {
   const { getCatalog, getMeta } = deps;
   const n = Math.max(

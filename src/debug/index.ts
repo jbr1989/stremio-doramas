@@ -1,6 +1,6 @@
 import { Env } from "../lib/types";
 import { browserRenderingReady, json } from "../lib/utils";
-import { DebugDeps } from "./helpers";
+import { ResolveDeps } from "../resolve";
 import { debugAll, debugExtract } from "./check";
 import { debugExtractor } from "./extractor";
 import { debugHost, debugRender } from "./network";
@@ -28,7 +28,7 @@ export async function handleDebug(
   url: URL,
   path: string,
   env: Env,
-  deps: DebugDeps
+  deps: ResolveDeps
 ): Promise<Response | null> {
   if (!isDebugPath(path)) return null;
   const tmdbKey = (env.TMDB_KEY || "").trim();

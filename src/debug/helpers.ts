@@ -1,16 +1,3 @@
-import { Env } from "../lib/types";
-
-/** Funciones centrales de index.ts que el routing de debug consume. */
-export type DebugDeps = {
-  getCatalog: (
-    catalogId: string,
-    extra: Record<string, string>,
-    env?: Env
-  ) => Promise<any>;
-  getMeta: (id: string, tmdbKey: string, env?: Env) => Promise<any>;
-  getStreams: (id: string, env: Env) => Promise<{ streams: any[] }>;
-};
-
 export const DEBUG_TIMEOUT_MS = 45000;
 export const DEBUG_CONCURRENCY = 3;
 

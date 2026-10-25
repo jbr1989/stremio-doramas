@@ -107,7 +107,7 @@ export const CHROME_UA =
 export const MOBILE_UA =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1";
 
-export const CHROME_HEADERS = {
+const CHROME_HEADERS = {
   "User-Agent": CHROME_UA,
   "Accept":
     "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
@@ -503,7 +503,7 @@ export function cleanTitle(s: string): string {
  *  - do7go.com / playmogo.com   familia Dood: la página /e/ desafía TLS
  *                  no-navegador (probado con egress Deno/.NET/CF Worker);
  *                  el pass_md5 funciona GET server-side directo. */
-export const CHALLENGE_HOSTS_RE =
+const CHALLENGE_HOSTS_RE =
   /(?:^|\.)(?:dsvplay\.com|do7go\.com|playmogo\.com)$/i;
 
 /** Hosts/mirrors de StreamWish admitidos por el relay Deno (/streamwish).
@@ -534,10 +534,6 @@ export const DOOD_HOSTS_RE = /dood|do7go|playmogo|ds2play|dsvplay/i;
 export const BYSE_SHAPE_RE =
   /^https?:\/\/[^/"']+\/e\/[a-z0-9-]{6,20}(?:$|\/|\?|#)/i;
 
-/** Host por nombre (referencia histórica; los dominios rotan así que la
- * detección real es BYSE_SHAPE_RE + sondeo server-side). */
-export const BYSE_HOSTS_RE = /byse/i;
-
 /** Hosts de reto anti-bot (ver CHALLENGE_HOSTS_RE en README para la tabla con
  *  evidencia): fetchHtml los salta directos con techo corto, sin proxies. */
 
@@ -548,8 +544,7 @@ export function hostFromEmbed(embed: string, fallback = "host"): string {
 }
 
 /** Base del relay Deno derivada de FETCH_PROXY_URL:
- * https://<algo>.deno.dev/fetch → https://<algo>.deno.dev. Antes copiado ×7
- * (las 6 fuentes + /debug-streamwish en index.ts). */
+ * https://<algo>.deno.dev/fetch → https://<algo>.deno.dev. Antes copiado ×7. */
 export function denoBaseFromEnv(env?: Env): string {
   return (env?.FETCH_PROXY_URL || "")
     .trim()
