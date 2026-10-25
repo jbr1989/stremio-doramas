@@ -3,16 +3,16 @@
 // (fan-out). getCatalog, getMeta, getStreams y el chequeo /debug-all de
 // index.ts recorren esta tabla, así que añadir una fuente es crear la clase,
 // instanciar el singleton en su archivo y añadir una entrada aquí.
-import { Env } from "../types";
-import { dlatSource, dplaySource } from "./doramas";
-import { kplaySource } from "./kdramasplay";
-import { yandiSource } from "./yandispoiler";
-import { doramasflixSource } from "./doramasflix";
-import { tudoramaSource } from "./tudorama";
-import { pandramaSource, pandramaEpCanonicalSlug } from "./pandrama";
-import { canonicalDytSlug, doramaYtSource } from "./doramasyt";
-import { canonicalDoramaSubSlug, doramaSubSource } from "./doramasub";
-import { kisskhSource } from "./kisskh";
+import { Env } from "./lib/types";
+import { dlatSource, dplaySource } from "./sources/doramas";
+import { kplaySource } from "./sources/kdramasplay";
+import { yandiSource } from "./sources/yandispoiler";
+import { doramasflixSource } from "./sources/doramasflix";
+import { tudoramaSource } from "./sources/tudorama";
+import { pandramaSource, pandramaEpCanonicalSlug } from "./sources/pandrama";
+import { canonicalDytSlug, doramaYtSource } from "./sources/doramasyt";
+import { canonicalDoramaSubSlug, doramaSubSource } from "./sources/doramasub";
+import { kisskhSource } from "./sources/kisskh";
 
 export type SourceDef = {
   /** Prefijo de id de stream/meta, p.ej. "kplay" → "kplay:ep:slug-1x2". */
@@ -37,13 +37,8 @@ export type SourceDef = {
 };
 
 /** kplay/yandi comparten formato de id: `x:ep:slug`, `x:movie:slug` o suelto;
- *  los ids de película se representan como episodio 1x1. */
-function kplayYandiEpSlug(rawId: string): string {
-  const parts = rawId.split(":");
-  if (parts[1] === "ep") return parts.slice(2).join(":");
-  if (parts[1] === "movie") return `${parts.slice(2).join(":")}-1x1`;
-  return parts.slice(1).join(":");
-}
+ *  los ids de película se representan como episodio 1x1. Ver
+ *  YandiSource.toEpSlug (kplay lo hereda). */
 
 export const SOURCES: SourceDef[] = [
   {
@@ -68,8 +63,8 @@ export const SOURCES: SourceDef[] = [
     getCatalog: (extra, env) => kplaySource.getCatalog(extra, env),
     getMeta: (id, tmdbKey, env) => kplaySource.getMeta(id, tmdbKey, env),
     getStreams: (id, env) => kplaySource.getStreams(id, env),
-    toEpSlug: kplayYandiEpSlug,
-    buildId: (epSlug) => `kplay:ep:${epSlug}`,
+    toEpSlug: (id) => kplaySource.toEpSlug(id),
+    buildId: (epSlug) => kplaySource.buildId(epSlug),
     isEpisodeId: (id) => kplaySource.isEpisodeId(id),
   },
   {
@@ -78,8 +73,8 @@ export const SOURCES: SourceDef[] = [
     getCatalog: (extra, env) => yandiSource.getCatalog(extra, env),
     getMeta: (id, tmdbKey, env) => yandiSource.getMeta(id, tmdbKey, env),
     getStreams: (id, env) => yandiSource.getStreams(id, env),
-    toEpSlug: kplayYandiEpSlug,
-    buildId: (epSlug) => `yandi:ep:${epSlug}`,
+    toEpSlug: (id) => yandiSource.toEpSlug(id),
+    buildId: (epSlug) => yandiSource.buildId(epSlug),
     isEpisodeId: (id) => yandiSource.isEpisodeId(id),
   },
   {

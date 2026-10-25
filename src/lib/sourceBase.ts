@@ -1,14 +1,14 @@
-import { Env, MetaPreview } from "../types";
+import { Env, MetaPreview } from "./types";
 import {
   denoBaseFromEnv,
   fetchHtml,
   fetchTmdb,
   makeStreamDeduper,
   toMetaPreview,
-} from "../utils";
+} from "./utils";
 import { genreSlug } from "../genres";
 import { buildSeriesMeta, ogMetaFromHtml } from "./dooplay";
-import { addEmbedStreams } from "../extractors";
+import { addEmbedStreams } from "./extractors";
 
 /** Tarjeta de catálogo del hook parseCards. El id completo lo arma la base
  * con `cardId(entry)` ("{prefix}:{slug}", con hook para ids de 3 segmentos). */

@@ -1,9 +1,9 @@
-import { Env } from "../types";
+import { Env } from "../lib/types";
 import { kisskhKkeyFn } from "../vendor/kisskh/kisskhKey";
-import { cleanTitle, fetchHtml } from "../utils";
-import { addEmbedStreams } from "../extractors";
-import { denoBaseFromEnv, makeStreamDeduper } from "../utils";
-import { SourceBase, SourceCard, SourceEpisode } from "./sourceBase";
+import { cleanTitle, fetchHtml } from "../lib/utils";
+import { addEmbedStreams } from "../lib/extractors";
+import { denoBaseFromEnv, makeStreamDeduper } from "../lib/utils";
+import { SourceBase, SourceCard, SourceEpisode } from "../lib/sourceBase";
 
 const KISSKH_BASE = "https://kisskh.co";
 // Constantes del cliente oficial (fijas en el bundle de Angular):

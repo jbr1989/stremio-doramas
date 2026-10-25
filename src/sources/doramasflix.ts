@@ -1,4 +1,4 @@
-import { Env, MetaPreview } from "../types";
+import { Env, MetaPreview } from "../lib/types";
 import { genreLabelForMeta, genreSlug } from "../genres";
 import {
   CHROME_UA,
@@ -9,10 +9,10 @@ import {
   makeStreamDeduper,
   netFetch,
   toMetaPreview,
-} from "../utils";
-import { addEmbedStreams } from "../extractors";
-import { resolveEpisodeSlug, searchVariants } from "./slugmap";
-import { SourceBase } from "./sourceBase";
+} from "../lib/utils";
+import { addEmbedStreams } from "../lib/extractors";
+import { resolveEpisodeSlug, searchVariants } from "../lib/slugmap";
+import { SourceBase } from "../lib/sourceBase";
 
 const GRAPHQL_ENDPOINT = "https://user-api.seriesapi.co/graphql";
 const DORAMASFLIX_BASE = "https://doramasflix.in";

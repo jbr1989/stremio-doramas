@@ -1,11 +1,11 @@
-import { Env } from "../types";
-import { CHROME_UA, cleanTitle, decodeEntities, netFetch, racerFetch } from "../utils";
+import { Env } from "../lib/types";
+import { CHROME_UA, cleanTitle, decodeEntities, netFetch, racerFetch } from "../lib/utils";
 import {
   genresFromListItems,
   imgFromTag,
-} from "./dooplay";
-import { fetchWithSlugRescue, resolveEpisodeSlug, searchVariants } from "./slugmap";
-import { SourceBase, SourceCard, SourceEpisode } from "./sourceBase";
+} from "../lib/dooplay";
+import { fetchWithSlugRescue, resolveEpisodeSlug, searchVariants } from "../lib/slugmap";
+import { SourceBase, SourceCard, SourceEpisode } from "../lib/sourceBase";
 
 const TUDORAMA_BASE = "https://tudorama.com";
 const TUDORAMA_LABEL = "TuDorama";

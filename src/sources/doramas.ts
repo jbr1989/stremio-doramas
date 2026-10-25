@@ -1,14 +1,14 @@
-import { Env } from "../types";
-import { cleanTitle, racerFetch } from "../utils";
+import { Env } from "../lib/types";
+import { cleanTitle, racerFetch } from "../lib/utils";
 import {
   dooPlayerAjaxEmbed,
   dooplayEpisodeList,
   dooplayEpThumbs,
   genresFromDooPlay,
   ogMetaFromHtml,
-} from "./dooplay";
-import { fetchWithSlugRescue, resolveEpisodeSlug, searchVariants } from "./slugmap";
-import { SourceBase, SourceCard, SourceEpisode } from "./sourceBase";
+} from "../lib/dooplay";
+import { fetchWithSlugRescue, resolveEpisodeSlug, searchVariants } from "../lib/slugmap";
+import { SourceBase, SourceCard, SourceEpisode } from "../lib/sourceBase";
 
 interface DoramaSource {
   prefix: string;

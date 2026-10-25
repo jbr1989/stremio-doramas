@@ -1,4 +1,4 @@
-import { Env } from "./types";
+import { Env } from "./lib/types";
 import { MANIFEST } from "./manifest";
 import { LOGO_PNG_BASE64 } from "./logo";
 import {
@@ -14,19 +14,19 @@ import {
   netFetch,
   renderPage,
   isCfChallenge,
-} from "./utils";
+} from "./lib/utils";
 import {
   extractSavefiles,
   extractMixdrop,
   extractStreamwish,
   findMediaUrl,
-} from "./extractors";
+} from "./lib/extractors";
 import {
   SOURCES,
   sourceByPrefix,
-} from "./sources/registry";
+} from "./registry";
 import { doramasflixSource } from "./sources/doramasflix";
-import { getAllAlldoramasCatalog } from "./sources/alldoramas";
+import { getAllAlldoramasCatalog } from "./alldoramas";
 
 async function getCatalog(
   catalogId: string,
@@ -520,7 +520,7 @@ export default {
           error: "Missing ?url= (a dood family /e/ embed: do7go, playmogo, dood.*)",
         });
       const t0 = Date.now();
-      const { extractDood } = await import("./extractors");
+      const { extractDood } = await import("./lib/extractors");
       const mp4 = await extractDood(testUrl, env);
       const denoBase = denoBaseFromEnv(env);
       const origin = (() => {
@@ -620,7 +620,7 @@ export default {
       const cached = await cacheGet(`stream:v4:${id}`, env.STREAM_CACHE);
       if (cached) return json(cached);
       try {
-        const { isDecoyUrl } = await import("./extractors");
+        const { isDecoyUrl } = await import("./lib/extractors");
         const result = await getStreams(id, env);
         result.streams = result.streams.filter(
           (st: { url?: string; externalUrl?: string }) =>

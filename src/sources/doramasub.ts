@@ -1,13 +1,13 @@
-import { Env, MetaPreview } from "../types";
+import { Env, MetaPreview } from "../lib/types";
 import {
   cleanTitle,
   decodeEntities,
   fetchHtml,
   toMetaPreview,
-} from "../utils";
+} from "../lib/utils";
 import { genreSlug } from "../genres";
-import { resolveEpisodeSlug, searchVariants } from "./slugmap";
-import { SourceBase, SourceEpisode } from "./sourceBase";
+import { resolveEpisodeSlug, searchVariants } from "../lib/slugmap";
+import { SourceBase, SourceEpisode } from "../lib/sourceBase";
 
 const DORAMASUB_BASE = "https://www.doramasub.com";
 

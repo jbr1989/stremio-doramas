@@ -1,8 +1,8 @@
-import { Env } from "../types";
-import { CHROME_UA, cleanTitle, decodeEntities, fetchHtml, netFetch } from "../utils";
-import { genresFromBadgeBlock } from "./dooplay";
-import { fetchWithSlugRescue, resolveEpisodeSlug, searchVariants } from "./slugmap";
-import { SourceBase, SourceCard, SourceEpisode } from "./sourceBase";
+import { Env } from "../lib/types";
+import { CHROME_UA, cleanTitle, decodeEntities, fetchHtml, netFetch } from "../lib/utils";
+import { genresFromBadgeBlock } from "../lib/dooplay";
+import { fetchWithSlugRescue, resolveEpisodeSlug, searchVariants } from "../lib/slugmap";
+import { SourceBase, SourceCard, SourceEpisode } from "../lib/sourceBase";
 
 const DORAMASYT_BASE = "https://www.doramasyt.com";
 

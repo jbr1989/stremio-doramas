@@ -1,4 +1,4 @@
-import { Env, MetaPreview } from "../types";
+import { Env, MetaPreview } from "../lib/types";
 import { genreLabelForMeta, genreSlug } from "../genres";
 import {
   cacheGet,
@@ -12,9 +12,9 @@ import {
   racerFetch,
   STREAMWISH_HOSTS_RE,
   toMetaPreview,
-} from "../utils";
-import { extractDood, extractMp4upload } from "../extractors";
-import { SourceBase } from "./sourceBase";
+} from "../lib/utils";
+import { extractDood, extractMp4upload } from "../lib/extractors";
+import { SourceBase } from "../lib/sourceBase";
 const PANDRAMA_BASE = "https://www.pandrama.tv";
 
 // /explorar acepta filters=<encodeURIComponent(btoa(JSON))>. mainTypes id 2

@@ -1,14 +1,14 @@
-import { Env } from "../types";
-import { cleanTitle, fetchHtml, fetchTmdb } from "../utils";
+import { Env } from "../lib/types";
+import { cleanTitle, fetchHtml, fetchTmdb } from "../lib/utils";
 import {
   buildMovieMeta,
   buildSeriesMeta,
   dooplayEpisodeList,
   genresFromDooPlay,
   ogMetaFromHtml,
-} from "./dooplay";
-import { fetchWithSlugRescue, resolveEpisodeSlug, searchVariants } from "./slugmap";
-import { SourceBase, SourceCard } from "./sourceBase";
+} from "../lib/dooplay";
+import { fetchWithSlugRescue, resolveEpisodeSlug, searchVariants } from "../lib/slugmap";
+import { SourceBase, SourceCard } from "../lib/sourceBase";
 
 const YANDI_BASE = "https://yandispoiler.net";
 
@@ -95,6 +95,22 @@ export class YandiSource extends SourceBase {
   override isEpisodeId(rawId: string): boolean {
     const idSlug = rawId.slice(this.prefix.length + 1);
     return /^(?:ep:.+-\d+x\d+|movie:.+)$/.test(idSlug);
+  }
+
+  // ── Fan-out de streams (registry) ──
+  // Id propio → slug canónico compartido entre fuentes. kplay y yandi usan
+  // el mismo formato de id (independiente del prefijo: partes[1]), así que
+  // kplay lo hereda de aquí. Las películas se representan como 1x1.
+  toEpSlug(rawId: string): string {
+    const parts = rawId.split(":");
+    if (parts[1] === "ep") return parts.slice(2).join(":");
+    if (parts[1] === "movie") return `${parts.slice(2).join(":")}-1x1`;
+    return parts.slice(1).join(":");
+  }
+
+  // Slug canónico → id propio de episodio (fan-out inverso).
+  buildId(epSlug: string): string {
+    return `${this.prefix}:ep:${epSlug}`;
   }
 
   // Embeds por defecto del tema: data-url="https://..." del player del

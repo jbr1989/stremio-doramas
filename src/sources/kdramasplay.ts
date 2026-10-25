@@ -1,9 +1,9 @@
-import { Env } from "../types";
-import { CHROME_UA, cleanTitle, fetchHtml, netFetch } from "../utils";
-import { dooPlayerAjaxEmbed, dooplayEpisodeList, dooplayEpThumbs } from "./dooplay";
-import { resolveEpisodeSlug, searchVariants } from "./slugmap";
+import { Env } from "../lib/types";
+import { CHROME_UA, cleanTitle, fetchHtml, netFetch } from "../lib/utils";
+import { dooPlayerAjaxEmbed, dooplayEpisodeList, dooplayEpThumbs } from "../lib/dooplay";
+import { resolveEpisodeSlug, searchVariants } from "../lib/slugmap";
 import { YandiSource } from "./yandispoiler";
-import { SourceCard } from "./sourceBase";
+import { SourceCard } from "../lib/sourceBase";
 
 const KPLAY_BASE = "https://kdramasplay.com";
 
