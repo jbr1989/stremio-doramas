@@ -5,6 +5,7 @@ import {
   MOBILE_UA,
   netFetch,
   DOOD_HOSTS_RE,
+  BYSE_SHAPE_RE,
   STREAMWISH_HOSTS_RE,
 } from "./utils";
 import { Env } from "./types";
@@ -462,6 +463,25 @@ export async function addEmbedStreams(args: {
     }
     ext();
     return false;
+  }
+
+  // BYSE_SHAPE_RE (familia byse, detectada por forma de API y NO por nombre):
+  // rama de ÚLTIMA opción — otras familias (streamwish/dood/streamtape) usan
+  // /e/ también, así que solo se evalúa cuando ninguna matcheó. El relay Deno
+  // confirma el host sondeando /api/videos/<code>/embed/details y responde 502
+  // "no compatible" si no es la familia, para que Stremio ofrezca otra ruta.
+  if (denoBase && BYSE_SHAPE_RE.test(embed)) {
+    add({
+      url: `${denoBase}/byse?url=${encodeURIComponent(embed)}`,
+      name: `${label} HLS`,
+      title: `▶ byse — ${label}`,
+      behaviorHints: {
+        notWebReady: false,
+        filename: `${epSlug}.m3u8`,
+        bingeGroup: `${prefix}-byse`,
+      },
+    });
+    return true;
   }
 
   ext();

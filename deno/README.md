@@ -14,10 +14,12 @@ del que resuelve — por eso la extracción y cada segmento se sirven desde esta
 | `/fetch?url=` | Relay de HTML de una página de dorama | Solo los 4 dominios integrados: `doramaslat.com`, `doramedplay.net`, `kdramasplay.com`, `doramasflix.in` |
 | `/streamwish?url=` | Resuelve un embed de StreamWish/espejo a la playlist HLS master y la reescribe (referer/UA incluidos) | Hostname contra la allowlist canónica `/streamwish\|embedwish\|wishfast\|sfastwish\|swishsrv\|streamaly\|streamis\|flaswish\|do7go\|playmogo/i` — **idéntica** a la regex de las 3 fuentes del Worker; elízalas en el mismo commit |
 | `/savefiles?code=` | Resuelve un código de savefiles/streamhls (POST a `streamhls.to/dl` con `op=embed`) a la playlist master reescrita | — |
-| `/hls?u=&r=` | Sirve variantes y segmentos HLS con el referer correcto | CDNs: `savefiles.com`, `streamhls.to`, `premilkyway.com` |
+| `/byse?url=` *(implementación en `byse.ts`)* | Resuelve la cadena anti-bot de la familia "byse" (attest ECDSA P-256 + PoW de hash propio + payload AES-256-GCM) al master HLS reescrito | **Por forma de API**, no por nombre: cualquier host público con embed `/e/<code>` (`localhost`/IPs privadas fuera). El sondeo `/api/videos/<code>/embed/details` confirma la familia (502 "no compatible" si no). Donde antes se va el CDN (`sprintcdn`) sirviendo variaciones/segmentos por `/hls` |
+| `/hls?u=&r=` | Sirve variantes y segmentos HLS con el referer correcto | CDNs: `savefiles.com`, `streamhls.to`, `premilkyway.com`, `sprintcdn` (byse) |
 
-Sin `url`, el servicio responde un JSON de uso con los 4 formatos. Los logs van
-a consola con tags `[req]`, `[fetch]`, `[savefiles]`, `[streamwish]`, `[hls]`
+Sin `url`, el servicio responde un JSON de uso con los 5 formatos. Los logs van
+a consola con tags `[req]`, `[fetch]`, `[savefiles]`, `[streamwish]`, `[byse]`,
+`[hls]`
 (visibles en el dashboard de Deno Deploy). Timeouts de 11–15s por fetch.
 
 ## Deploy (integración GitHub — recomendado)

@@ -12,6 +12,14 @@
 //       extraction, so doing the extraction AND all playback fetches here — on
 //       Deno's single stable IP — keeps the token valid.
 //
+//   GET /byse?url=https://<host>/e/<code>   (impl. en byse.ts)
+//       Resuelve la cadena anti-bot de la familia byse (attest ECDSA P-256 +
+//       PoW hash propio + payload AES-256-GCM) y sirve el master reescrito por
+//       /hls. Detección POR FORMA de API (cualquier host público con /e/<code>,
+//       sondeo embed/details incluido — 502 si el host no es compatible), NO
+//       por nombre: los dominios/clones rotan libremente. El token del CDN es
+//       ASN-bound y expira a 3 h: resolver Y servir en el mismo egress.
+//
 //   GET /hls?u=<abs-url>&r=<referer>
 //       Fetches a variant playlist (rewriting it recursively) or a segment
 //       (streaming the bytes) with the streamhls referer. Allowlisted to the
@@ -33,6 +41,11 @@ const MOBILE_UA =
   "(KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1";
 
 const STREAMHLS_REFERER = "https://streamhls.to/";
+
+// La familia byse vive en deno/byse.ts; los helpers compartidos de abajo se
+// le inyectan con un objeto (ver ByseHelpers) para no duplicarlos ni extraer
+// un módulo común todavía.
+import { handleByse, type ByseHelpers } from "./byse.ts";
 
 function cors(body: BodyInit | null, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers);
@@ -144,7 +157,9 @@ async function handleFetch(target: string): Promise<Response> {
 function hlsHostAllowed(host: string): boolean {
   return /(^|\.)(savefiles\.com|streamhls\.to|premilkyway\.com)$/i.test(host) ||
     // CDN de la familia filelions (lulu): cdn-tnmr.org / .1x / .1y — TLDs raros que rotan.
-    /cdn-tnmr/i.test(host);
+    /cdn-tnmr/i.test(host) ||
+    // CDN de la familia byse (el edge rota: edge*-sprintcdn.<dominio>.com)
+    /(sprintcdn|owphbf24)/i.test(host);
 }
 
 const STREAMWISH_REFERER = "https://streamwish.top/";
@@ -469,6 +484,10 @@ async function handler(req: Request): Promise<Response> {
   if (url.pathname === "/streamwish") {
     return handleStreamwish((url.searchParams.get("url") || "").trim(), selfBase);
   }
+  if (url.pathname === "/byse") {
+    const H: ByseHelpers = { cors, jsonError, rewriteM3u8, log, logErr, ms, errText, trunc };
+    return handleByse((url.searchParams.get("url") || "").trim(), selfBase, H);
+  }
   if (url.pathname === "/mp4") {
     return handleDoodMp4(
       (url.searchParams.get("url") || "").trim(),
@@ -481,7 +500,7 @@ async function handler(req: Request): Promise<Response> {
   }
   const target = url.searchParams.get("url");
   if (!target) {
-    return cors(JSON.stringify({ ok: true, usage: "/fetch?url=… | /savefiles?code=… | /streamwish?url=… | /hls?u=…&r=… | /mp4?url=…" }), {
+    return cors(JSON.stringify({ ok: true, usage: "/fetch?url=… | /savefiles?code=… | /streamwish?url=… | /byse?url=… | /hls?u=…&r=… | /mp4?url=…" }), {
       headers: { "Content-Type": "application/json" },
     });
   }

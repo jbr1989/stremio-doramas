@@ -520,6 +520,24 @@ export const STREAMWISH_HOSTS_RE =
  * proxy Deno. Mantener sincronizada con la allowlist de /mp4 en deno/fetch.ts. */
 export const DOOD_HOSTS_RE = /dood|do7go|playmogo|ds2play|dsvplay/i;
 
+/** Familia "byse": la puerta del player hace challenge/attest (ECDSA P-256) +
+ * PoW y devuelve el m3u8 cifrado, que el relay Deno resuelve íntegro (/byse,
+ * ver deno/byse.ts) porque el token es ASN-bound.
+ *
+ * Detección POR FORMA de API (clones y dominios rotando incluidos), no por
+ * nombre: embed público https://<host>/e/<code> con código [a-z0-9-]{6,20}.
+ * Otras familias usan /e/ también (streamwish, dood, streamtape) — por eso la
+ * rama byse se evalúa AL FINAL de addEmbedStreams (extractors.ts), cuando ya
+ * ninguna otra familia matcheó, y el relay Deno confirma el host sondeando
+ * /api/videos/<code>/embed/details (502 "no compatible" si no es la familia).
+ * Mantener sincronizada con la allowlist de /byse en deno/byse.ts. */
+export const BYSE_SHAPE_RE =
+  /^https?:\/\/[^/"']+\/e\/[a-z0-9-]{6,20}(?:$|\/|\?|#)/i;
+
+/** Host por nombre (referencia histórica; los dominios rotan así que la
+ * detección real es BYSE_SHAPE_RE + sondeo server-side). */
+export const BYSE_HOSTS_RE = /byse/i;
+
 /** Hosts de reto anti-bot (ver CHALLENGE_HOSTS_RE en README para la tabla con
  *  evidencia): fetchHtml los salta directos con techo corto, sin proxies. */
 
