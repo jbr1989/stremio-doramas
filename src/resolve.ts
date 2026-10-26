@@ -2,6 +2,12 @@ import { Env } from "./lib/types";
 import { makeStreamDeduper } from "./lib/utils";
 import { SOURCES, sourceByPrefix } from "./registry";
 import { getAllAlldoramasCatalog } from "./alldoramas";
+import {
+  getMetaFromImdb,
+  imdbToEpisodeId,
+  isImdbId,
+  parseImdbId,
+} from "./lib/imdb";
 
 // ---------------------------------------------------------------------------
 // Camada de dispatch entre el router HTTP y las fuentes: dado un catalogId o
@@ -28,11 +34,26 @@ export async function getCatalog(
 }
 
 export async function getMeta(id: string, tmdbKey: string, env?: Env) {
+  // Ids IMDb ("tt…" o "tt:s:e"): meta ligera desde TMDB con videos "tt:s:e",
+  // para que Stremio pida stream por episodio con temporada y número.
+  if (env && isImdbId(id)) {
+    const ref = parseImdbId(id)!;
+    return getMetaFromImdb(ref, tmdbKey, env);
+  }
   const def = sourceByPrefix(id.split(":")[0]);
   return def ? def.getMeta(id, tmdbKey, env) : { meta: null };
 }
 
 export async function getStreams(rawId: string, env: Env) {
+  // Fan-out de streams desde ids IMDb: resolver primero ("tt" → nombre →
+  // id de episodio de una fuente) y reusar la misma cadena del fan-out.
+  if (isImdbId(rawId)) {
+    const ref = parseImdbId(rawId)!;
+    const tmdbKey = (env.TMDB_KEY || "").trim();
+    const epId = await imdbToEpisodeId(ref, tmdbKey, env);
+    if (!epId) return { streams: [], error: "no imdb match" };
+    rawId = epId;
+  }
   // Slug canónico compartido: cada fuente traduce su id propio (la tabla
   // registry soporta toEpSlug async, p.ej. pandrama resuelve su video vía KV).
   const def = sourceByPrefix(rawId.split(":")[0]);
