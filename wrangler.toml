@@ -20,6 +20,8 @@ TMDB_KEY     = ""
 # deno/README.md to deploy your own, then set the URL here (+ /fetch).
 # For local development (deno task dev in deno/):
 FETCH_PROXY_URL = "http://localhost:8000/fetch"
+# FETCH_PROXY_URL = "https://stremio-doramas.jbr1989.deno.net/fetch"
+
 # For production, override it in the Cloudflare dashboard (Settings >
 # Variables) or with `wrangler deploy --var FETCH_PROXY_URL:<url>`.
 # Cloudflare Browser Rendering (optional). Set your account id here (or via
