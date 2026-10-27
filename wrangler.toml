@@ -41,4 +41,4 @@ CF_ACCOUNT_ID = ""
 #   Para producción crea el tuyo:  wrangler kv namespace create STREAM_CACHE
 #   y pon aquí su id (no es un secreto, pero es dato de tu infra).
 binding   = "STREAM_CACHE"
-id        = "YOUR_KV_NAMESPACE_ID"
+id        = "3ab1c9ce707d4c5a84c4b369eb48254d"

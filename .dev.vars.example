@@ -40,16 +40,3 @@ CF_API_TOKEN=
 # En producción NO va aquí: define la variable en el dashboard de Cloudflare
 # (Settings > Variables) o usa `wrangler deploy --var FETCH_PROXY_URL:<url>`.
 FETCH_PROXY_URL=
-
-# CACHE de resultados (streams resueltos, metadatos, mapas de episodios)
-# para no repetir scraping de los sitios de doramas en cada petición.
-#
-# binding = nombre con el que el código accede a la cache (env.STREAM_CACHE).
-#   DEBE llamarse STREAM_CACHE — lo leen types.ts, index.ts, sources/*.
-# id = identificador del namespace KV de TU cuenta en Cloudflare.
-#   Es un binding, NO una variable de entorno: no va en .dev.vars.
-#   En `wrangler dev` da igual (se emula KV localmente, placeholder OK).
-#   Para producción crea el tuyo:  wrangler kv namespace create STREAM_CACHE
-#   y pon aquí su id (no es un secreto, pero es dato de tu infra).
-binding   = "STREAM_CACHE"
-id        = ""
