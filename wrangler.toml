@@ -19,8 +19,8 @@ TMDB_KEY     = ""
 # blocks Cloudflare Worker egress; this relays its HTML from Deno's edge. See
 # deno/README.md to deploy your own, then set the URL here (+ /fetch).
 # For local development (deno task dev in deno/):
-FETCH_PROXY_URL = "http://localhost:8000/fetch"
-# FETCH_PROXY_URL = "https://stremio-doramas.jbr1989.deno.net/fetch"
+# FETCH_PROXY_URL = "http://localhost:8000/fetch"
+FETCH_PROXY_URL = "https://stremio-doramas.jbr1989.deno.net/fetch"
 
 # For production, override it in the Cloudflare dashboard (Settings >
 # Variables) or with `wrangler deploy --var FETCH_PROXY_URL:<url>`.
