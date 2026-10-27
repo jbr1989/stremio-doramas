@@ -1,0 +1,112 @@
+import {
+  genreSourceOptions,
+  masterGenreLabels,
+} from "./genres";
+
+const ADDON_ID = "com.doramasweb.stremio";
+
+// Extras de catálogo: búsqueda y paginación estándar; el dropdown de género
+// se agrega con withGenre() únicamente donde el sitio lo soporta de verdad
+// (criterio Opción B y detalle in-vivo en src/genres.ts): términos del
+// registry propio de cada sitio, expuestos aunque hoy devuelvan 0 series —
+// si upstream etiqueta series mañana, el filtro se llena solo.
+type CatalogExtra = {
+  name: string;
+  isRequired: boolean;
+  options?: string[];
+  optionsLimit?: number;
+};
+
+const SEARCH_SKIP: CatalogExtra[] = [
+  { name: "search", isRequired: false },
+  { name: "skip", isRequired: false },
+];
+const withGenre = (opts: string[]): CatalogExtra[] => [
+  ...SEARCH_SKIP,
+  { name: "genre", isRequired: false, options: opts, optionsLimit: 1 },
+];
+
+export const MANIFEST = {
+  id: ADDON_ID,
+  version: "1.8.0",
+  name: "DoramasWeb",
+  description: "Fuentes de Doramas en español y subtituladas",
+  // Fallback por si el manifest se consume fuera del handler; en runtime
+  // index.ts reescribe logo al origin del request.
+  logo: "logo.png",
+  resources: ["catalog", "meta", "stream"],
+  types: ["series", "movie"],
+  catalogs: [
+    {
+      type: "series",
+      id: "alldoramas-directory",
+      name: "Todos los Doramas",
+      extra: withGenre(masterGenreLabels()),
+    },
+    {
+      type: "series",
+      id: "doramaslat-directory",
+      name: "Doramas Latino — Directorio",
+      extra: withGenre(genreSourceOptions("dlat")),
+    },
+    {
+      type: "series",
+      id: "doramedplay-directory",
+      name: "Doramed Play — Directorio",
+      extra: withGenre(genreSourceOptions("dplay")),
+    },
+    {
+      type: "series",
+      id: "kplay-directory",
+      name: "KDramas Play — Directorio",
+      extra: withGenre(genreSourceOptions("kplay")),
+    },
+    {
+      type: "series",
+      id: "doramasflix-directory",
+      name: "Doramasflix — Directorio",
+      extra: withGenre(genreSourceOptions("dflix")),
+    },
+    {
+      type: "series",
+      id: "tudorama-directory",
+      name: "TuDorama — Directorio",
+      extra: withGenre(genreSourceOptions("tudorama")),
+    },
+    {
+      type: "series",
+      id: "pandrama-directory",
+      name: "Pandrama — Dramas Populares",
+      extra: withGenre(genreSourceOptions("pandrama")),
+    },
+    {
+      type: "series",
+      id: "doramasyt-directory",
+      name: "DoramasYT — Directorio",
+      extra: withGenre(genreSourceOptions("dyt")),
+    },
+    {
+      type: "series",
+      id: "doramasub-directory",
+      name: "DoramaSub — Directorio",
+      extra: withGenre(genreSourceOptions("dsub")),
+    },
+    {
+      type: "series",
+      id: "yandispoiler-directory",
+      name: "Yandispoiler — Directorio",
+      extra: withGenre(genreSourceOptions("yandi")),
+    },
+    {
+      type: "series",
+      id: "kisskh-directory",
+      name: "KissKH — Directorio",
+      extra: withGenre(genreSourceOptions("kisskh")),
+    },
+  ],
+  idPrefixes: [
+    "tt", // ids IMDb de series (meta/stream ligeros + streams por s/e)
+    "dlat:", "dplay:", "kplay:", "dflix:", "tudorama:", "pandrama:",
+    "dyt:", "dsub:", "yandi:", "kisskh:",
+  ],
+};

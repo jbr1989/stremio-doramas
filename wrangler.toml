@@ -1,0 +1,44 @@
+# Must match the Worker's name in the Cloudflare dashboard. A different
+# name here makes a manual `wrangler deploy` create a second Worker at a new
+# URL instead of updating the live one.
+name = "stremio-doramas"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+[observability.logs]
+enabled = true
+invocation_logs = true
+[observability.traces]
+enabled = true
+
+[vars]
+TMDB_KEY     = ""
+# Non-Cloudflare HTML fetch proxy (deno/fetch.ts on Deno Deploy). latanime.org
+# blocks Cloudflare Worker egress; this relays its HTML from Deno's edge. See
+# deno/README.md to deploy your own, then set the URL here (+ /fetch).
+# For local development (deno task dev in deno/):
+FETCH_PROXY_URL = "http://localhost:8000/fetch"
+# For production, override it in the Cloudflare dashboard (Settings >
+# Variables) or with `wrangler deploy --var FETCH_PROXY_URL:<url>`.
+# Cloudflare Browser Rendering (optional). Set your account id here (or via
+# the CLOUDFLARE_ACCOUNT_ID env var) and the token as a secret:
+#   wrangler secret put CF_API_TOKEN
+# Token needs the "Browser Rendering: Edit" permission. Leave blank to keep
+# extraction fully manual (no browser, no cost).
+CF_ACCOUNT_ID = ""
+
+[[kv_namespaces]]
+# CACHE de resultados (streams resueltos, metadatos, mapas de episodios)
+# para no repetir scraping de los sitios de doramas en cada petición.
+#
+# binding = nombre con el que el código accede a la cache (env.STREAM_CACHE).
+#   DEBE llamarse STREAM_CACHE — lo leen types.ts, index.ts, sources/*.
+# id = identificador del namespace KV de TU cuenta en Cloudflare.
+#   Es un binding, NO una variable de entorno: no va en .dev.vars.
+#   En `wrangler dev` da igual (se emula KV localmente, placeholder OK).
+#   Para producción crea el tuyo:  wrangler kv namespace create STREAM_CACHE
+#   y pon aquí su id (no es un secreto, pero es dato de tu infra).
+binding   = "STREAM_CACHE"
+id        = "YOUR_KV_NAMESPACE_ID"

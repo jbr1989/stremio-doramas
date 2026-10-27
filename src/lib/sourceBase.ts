@@ -1,0 +1,368 @@
+import { Env, MetaPreview } from "./types";
+import {
+  denoBaseFromEnv,
+  fetchHtml,
+  fetchTmdb,
+  makeStreamDeduper,
+  mapLimit,
+  toMetaPreview,
+} from "./utils";
+import { genreSlug } from "../genres";
+import { buildSeriesMeta, ogMetaFromHtml } from "./dooplay";
+import { addEmbedStreams } from "./extractors";
+
+/** Tarjeta de catálogo del hook parseCards. El id completo lo arma la base
+ * con `cardId(entry)` ("{prefix}:{slug}", con hook para ids de 3 segmentos). */
+export interface SourceCard {
+  slug: string;
+  name: string;
+  poster: string;
+  /** "series" | "movie" — lo usan los filtros y los ids de 3 segmentos. */
+  type?: string;
+}
+
+/** Episodio del hook listEpisodes: con slug (scraping, feed) o id (API). */
+export interface SourceEpisode {
+  id?: string;
+  slug?: string;
+  s: number;
+  e: number;
+  thumb?: string;
+}
+
+/** Info TMDB que usa el ensamblado del meta (retorno de fetchTmdb). */
+type TmdbInfo = NonNullable<Awaited<ReturnType<typeof fetchTmdb>>>;
+
+/** Identidad (prefix/label/catalogId) se declara como atributos abstractos:
+ *  cada subclase los define como campos readonly o getters (cfg-driven). */
+/**
+ * Clase base de fuente (patrón Template Method) alineada al protocolo
+ * Stremio: cada fuente implementa SOLO su traducción del sitio a los tres
+ * endpoints del addon (catalog → {metas}, meta → {meta}, stream → {streams}).
+ *
+ *   getCatalog: ramas search → genre → page. Obligatorios: buildListUrl +
+ *               parseCards. Opcionales: buildSearchUrl, buildGenreUrl,
+ *               filterCards, pageSize, cardId.
+ *
+ *   getMeta:    ficha → basics → genres → TMDB → episodios → ensamblado
+ *               (buildSeriesMeta). Obligatorios: buildSeriesPageUrl +
+ *               listEpisodes. Opcionales: parseMetaBasics, parseGenres,
+ *               fetchMetaPage, videoId. Ramas movie (kplay/yandi):
+ *               la subclase sobrecarga getMeta entero con buildMovieMeta.
+ *
+ *   getStreams: página de episodio → embeds → addEmbedStreams con dedupe.
+ *               Obligatorios: buildPageUrl + extractEmbeds. Opcionales:
+ *               parseId, fetchBody, fetchEpisodePage (rescate/racer).
+ *
+ * Ver doramas.ts / kdramasplay.ts / etc. (migración pendiente).
+ */
+export abstract class SourceBase {
+  /** Prefijo de id (idPrefix del manifest) p. ej. "kplay". */
+  abstract readonly prefix: string;
+  /** Nombre visible en streams/cards ("KDramas Play"). */
+  abstract readonly label: string;
+  /** catalogId que resuelve la fuente en /catalog (registry.ts). */
+  abstract readonly catalogId: string;
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // getStreams — GET /stream/{type}/{id}.json → { streams }
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /** Parseo del id de video → slug de página. Default: quitar "{prefix}:". */
+  protected parseId(rawId: string): string {
+    return rawId.slice(this.prefix.length + 1);
+  }
+
+  /** id propio → epSlug canónico compartido entre fuentes (fan-out de
+   *  streams). Default: quitar "{prefix}:" (el id propio coincide con el
+   *  slug). Las fuentes cuyo id NO es el slug compartido lo pisan
+   *  (yandi/kplay: 3 segmentos; pandrama: video → "titulo-NxM" vía KV;
+   *  dyt/dsub: "…-episodio-N"/"…-capitulo-N" → "titulo-1xN"). */
+  async toEpSlug(rawId: string, env?: Env): Promise<string> {
+    return rawId.slice(this.prefix.length + 1);
+  }
+
+  /** epSlug canónico → id propio de episodio (fan-out inverso). Default:
+   *  "{prefix}:{epSlug}". Las fuentes con ids de 3 segmentos lo pisan. */
+  buildId(epSlug: string): string {
+    return `${this.prefix}:${epSlug}`;
+  }
+
+  /** ¿Es este un id de EPISODIO (aceptable por getStreams)? Los catálogos
+   *  pueden traer ids de serie/movie y el debug (/debug-all) necesita
+   *  separarlos para expandir series → episodios. Default: el formato
+   *  genérico "{prefix}:…-SxE" que produce videoId(). Las fuentes con
+   *  ids de otro formato (yandi/kplay, pandrama, dsub, kisskh) lo pisán. */
+  /** Cuerpo de la regex del id de EPISODIO, aplicado al content del id
+   *  ("{prefix}:{content}"). Default: "titulo-NxM". Las fuentes con ids en
+   *  otro formato lo pisan como atributo (sin sobrecargar el método). */
+  protected readonly epIdPattern: string = ".+-\\d+x\\d+";
+
+  isEpisodeId(rawId: string): boolean {
+    return new RegExp(`^${this.prefix}:(?:${this.epIdPattern})$`).test(rawId);
+  }
+
+  /** Fetch genérico de página (default fetchHtml; sobrecargar si la fuente
+   * tiene fetcher propio — racer, GraphQL, bootstrapData…). */
+  protected async fetchBody(url: string, env: Env): Promise<string> {
+    try {
+      return await fetchHtml(url, env);
+    } catch {
+      return "";
+    }
+  }
+
+  /**
+   * Fetch del HTML de la página del episodio. Default: buildPageUrl +
+   * fetchBody (un solo intento). El rescate de slug NO es universal
+   * (kisskh/pandrama/doramasflix no descargan una página de episodio):
+   * las fuentes que lo necesitan lo implementan aquí con el helper
+   * fetchWithSlugRescue (slugmap.ts).
+   */
+  protected async fetchEpisodePage(slug: string, env: Env): Promise<string> {
+    return this.fetchBody(this.buildPageUrl(slug), env);
+  }
+
+  /** Rescatador de slug del episodio (slug de catálogo vencido → slug vigente
+   *  del sitio). Default: la fuente no rescata (null). Las fuentes que sí lo
+   *  hacen pisan el hook con el engine resolveEpisodeSlug de slugmap.ts (su
+   *  SiteAdapter) o con su propio rescate. */
+  protected async resolveEpisodeSlug(
+    epSlug: string,
+    env: Env
+  ): Promise<string | null> {
+    return null;
+  }
+
+  /** Dónde vive el player del episodio. */
+  protected abstract buildPageUrl(slug: string): string;
+
+  /** Slug limpio para los behaviorHints (filename). Las fuentes con ids de
+   * 3 segmentos ("yandi:ep:x" → parseId deja "ep:x") lo limpian aquí. */
+  protected emitSlug(slug: string): string {
+    return slug;
+  }
+
+  // hostFallback del título external de addEmbedStreams (único consumidor:
+  // tudorama pasa el nombre del server del tema corvus). Sin hook = sin hint.
+  protected hostFor?(embed: string): string | undefined;
+
+  /** Cómo leer los embeds del player (AJAX DooPlay, data-url, tokens…). */
+  protected abstract extractEmbeds(
+    html: string,
+    slug: string,
+    env?: Env
+  ): Promise<string[]>;
+
+  async getStreams(rawId: string, env: Env): Promise<{ streams: unknown[] }> {
+    const slug = this.parseId(rawId);
+    const html = await this.fetchEpisodePage(slug, env);
+    if (!html) return { streams: [] };
+
+    const denoBase = denoBaseFromEnv(env);
+    const { add, streams } = makeStreamDeduper();
+
+    // Fase 1 (concurrente): cada embed colabora en su PROPIO deduper (sink),
+    // así no hay estado compartido mientras corre el pool. Los extractores
+    // con I/O (dood/mp4upload/hexload) pueden tardar varios segundos cada
+    // uno — en serie eran 4-12s+ por episodio; con límite 2 se corta por
+    // la mitad. El catch es por-embed: si uno falla, solo pierde él.
+    const perEmbed = await mapLimit(
+      (await this.extractEmbeds(html, slug, env)).filter(Boolean),
+      2,
+      async (embed) => {
+        const sink = makeStreamDeduper();
+        try {
+          await addEmbedStreams({
+            embed,
+            epSlug: this.emitSlug(slug),
+            label: this.label,
+            prefix: this.prefix,
+            denoBase,
+            add: sink.add,
+            hostFallback: this.hostFor?.(embed),
+            env,
+          });
+        } catch (e) {
+          console.log(
+            `[${this.prefix}] addEmbedStreams falló para ${embed}: ${e}`
+          );
+        }
+        return sink.streams;
+      }
+    );
+
+    // Fase 2 (sincrónica, barata): dedupe determinista en el orden original
+    // de los embeds — primer-entra por url/externalUrl, igual que antes.
+    for (const list of perEmbed) {
+      for (const st of list) add(st);
+    }
+    return { streams };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // getCatalog — GET /catalog/{type}/{prefix}/{extra}.json → { metas }
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /** Tamaño de página upstream (skip de Stremio ÷ pageSize + 1). */
+  protected get pageSize(): number {
+    return 24;
+  }
+
+  protected pageFromSkip(skip?: string): number {
+    return Math.floor(parseInt(skip || "0", 10) / this.pageSize) + 1;
+  }
+
+  protected buildSearchUrl?(q: string): string;
+
+  /** Archivo de género; sin hook = la fuente no soporta géneros. */
+  protected buildGenreUrl?(gslug: string, page: number): string;
+
+  /** Dónde está el listado de series (rama page; el directorio por defecto). */
+  protected buildListUrl?(page: number): string;
+
+  /** Cómo leer tarjetas del HTML/JSON de cualquier página de catálogo. */
+  protected parseCards?(data: string | unknown): SourceCard[];
+
+  /** id de catálogo de una tarjeta. Default: "{prefix}:{slug}". */
+  protected cardId(entry: SourceCard): string {
+    return `${this.prefix}:${entry.slug}`;
+  }
+
+  /** Filtrado post-página (fallback local de search, ajuste sólo-series). */
+  protected filterCards?(
+    cards: SourceCard[],
+    q: string,
+    isSearch: boolean
+  ): SourceCard[];
+
+  async getCatalog(
+    extra: Record<string, string>,
+    env?: Env
+  ): Promise<{ metas: MetaPreview[] }> {
+    const toMetas = (cards: SourceCard[]) =>
+      cards.map((c) =>
+        toMetaPreview({ id: this.cardId(c), name: c.name, poster: c.poster })
+      );
+
+    const q = (extra.search || "").trim();
+    if (q) {
+      if (!this.buildSearchUrl || !this.parseCards) return { metas: [] };
+      const cards = this.parseCards(
+        await this.fetchBody(this.buildSearchUrl(q), env!)
+      );
+      const filtered = this.filterCards
+        ? this.filterCards(cards, q, true)
+        : cards;
+      return { metas: toMetas(filtered.length > 0 ? filtered : cards) };
+    }
+
+    const g = (extra.genre || "").trim();
+    if (g) {
+      // Label ES → slug con la lista maestra canónica (src/genres.ts).
+      const gslug = genreSlug(this.prefix, g);
+      if (!gslug || !this.buildGenreUrl || !this.parseCards)
+        return { metas: [] };
+      const gurl = this.buildGenreUrl(gslug, this.pageFromSkip(extra.skip));
+      if (!gurl) return { metas: [] };
+      const cards = this.parseCards(await this.fetchBody(gurl, env!));
+      return {
+        metas: toMetas(
+          this.filterCards ? this.filterCards(cards, "", false) : cards
+        ),
+      };
+    }
+
+    if (!this.buildListUrl || !this.parseCards) return { metas: [] };
+    const cards = this.parseCards(
+      await this.fetchBody(
+        this.buildListUrl(this.pageFromSkip(extra.skip)),
+        env!
+      )
+    );
+    return { metas: toMetas(cards) };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // getMeta — GET /meta/{type}/{id}.json → { meta: MetaDetail | null }
+  // (solo series; las ramas movie sobrecargan getMeta con buildMovieMeta)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /** Dónde vive la ficha de la serie. */
+  protected buildSeriesPageUrl?(slug: string): string;
+
+  /** Fetch de la ficha. Default: buildSeriesPageUrl + fetchBody (HTML);
+   * fuentes JSON (kisskh, feeds Blogger) lo sobrecargan. */
+  protected async fetchMetaPage(
+    slug: string,
+    env?: Env
+  ): Promise<string | unknown> {
+    return this.buildSeriesPageUrl
+      ? this.fetchBody(this.buildSeriesPageUrl(slug), env!)
+      : "";
+  }
+
+  /** name/poster/description. Default: ogMetaFromHtml (sitios DooPlay). */
+  protected parseMetaBasics?(
+    data: string | unknown,
+    slug: string
+  ): { name: string; poster: string; description: string };
+
+  /** Géneros de la ficha. Default: []. */
+  protected parseGenres?(data: string | unknown): string[];
+
+  /** Episodios (scraping real, API, feed o rango sintético).
+   * Recibe el TMDB ya buscado (dyt/pandrama derivan de él el epCount) y el
+   * env (dsub hace fetch de feeds aquí). */
+  protected listEpisodes?(
+    data: string | unknown,
+    slug: string,
+    tmdb: TmdbInfo | null,
+    env?: Env
+  ): Promise<SourceEpisode[]> | SourceEpisode[];
+
+  /** id del video de un episodio. Default: "{prefix}:{slug o id}". */
+  protected videoId(ep: SourceEpisode): string {
+    return `${this.prefix}:${ep.id ?? ep.slug ?? ""}`;
+  }
+
+  async getMeta(
+    id: string,
+    tmdbKey: string,
+    env?: Env
+  ): Promise<{ meta: unknown }> {
+    const slug = this.parseId(id);
+    const data = await this.fetchMetaPage(slug, env);
+    if (!data) return { meta: null };
+
+    const basics = this.parseMetaBasics
+      ? this.parseMetaBasics(data, slug)
+      : typeof data === "string"
+      ? ogMetaFromHtml(data, slug)
+      : { name: slug, poster: "", description: "" };
+
+    const genres = this.parseGenres ? this.parseGenres(data) : [];
+
+    const tmdb: TmdbInfo | null = basics.name
+      ? await fetchTmdb(basics.name, tmdbKey)
+      : null;
+
+    const rawEps = (await this.listEpisodes?.(data, slug, tmdb, env)) ?? [];
+    const sorted = [...rawEps].sort((a, b) => a.s - b.s || a.e - b.e);
+
+    return buildSeriesMeta({
+      id,
+      name: basics.name,
+      poster: basics.poster,
+      description: basics.description,
+      genres,
+      tmdb,
+      videos: sorted.map((ep) => ({
+        id: ep.id ?? this.videoId(ep),
+        season: ep.s,
+        episode: ep.e,
+        thumbnail: ep.thumb,
+      })),
+    });
+  }
+}

@@ -1,0 +1,55 @@
+# Plantilla de variables locales de desarrollo.
+# COPIA este fichero a ".dev.vars" (ya ignorado por .gitignore) y rellena
+# tus valores reales. NUNCA subas .dev.vars al repositorio.
+#
+#   cp .dev.vars.example .dev.vars
+#
+# NOTA: aquí SOLO van variables de entorno planas. El binding KV
+# (STREAM_CACHE) y su id viven en wrangler.toml ([[kv_namespaces]]) y en
+# `wrangler dev` no hace falta configurarlo: se emula localmente.
+
+# Clave de API de TMDB (https://www.themoviedb.org/settings/api).
+# Opcional: sin ella el addon sigue funcionando con metadatos de IMDb.
+TMDB_KEY=
+
+# Cuenta de Cloudflare (id de cuenta, no es un secreto pero es personal).
+# Dice a qué cuenta de Cloudflare pertenece el Worker; lo usa el addon
+# junto con CF_API_TOKEN para activar Browser Rendering. Sin él no hay
+# Browser Rendering (la extracción sigue en modo manual/normal).
+# En producción NO va aquí: define la variable en el dashboard de Cloudflare
+# (Settings > Variables) o usa `wrangler deploy --var CF_ACCOUNT_ID:<id>`.
+CF_ACCOUNT_ID=
+
+# Token de API de Cloudflare con permiso "Browser Rendering: Edit".
+# No es lo mismo que CF_ACCOUNT_ID: el account_id dice "quién", el token
+# es la credencial que AUTORIZA al Worker a usar Browser Rendering
+# (navegador headless de Cloudflare, para extraer streams de sitios muy
+# protegidos tipo dood/playmogo). Sin él la extracción funciona igual,
+# solo que sin la vía del navegador.
+# Crear en: dashboard Cloudflare > My Profile > API Tokens
+# En producción NO va aquí: usa  wrangler secret put CF_API_TOKEN
+#   (guardo cifrado en Cloudflare, nunca en este fichero ni en el repo)
+CF_API_TOKEN=
+
+# URL del proxy de fetch de Deno (deno/fetch.ts en Deno Deploy) con /fetch final.
+# Qué hace: la fuente latanime.org BLOQUEA el tráfico saliente de los
+# Workers de Cloudflare, así que el Worker reenvía sus peticiones HTML
+# a través de este proxy (Deno sí puede llegar al sitio). Sin él todo
+# funciona salvo la fuente latanime.
+# En local: http://localhost:8000/fetch (arrancando `deno run -A deno/fetch.ts`).
+# En producción NO va aquí: define la variable en el dashboard de Cloudflare
+# (Settings > Variables) o usa `wrangler deploy --var FETCH_PROXY_URL:<url>`.
+FETCH_PROXY_URL=
+
+# CACHE de resultados (streams resueltos, metadatos, mapas de episodios)
+# para no repetir scraping de los sitios de doramas en cada petición.
+#
+# binding = nombre con el que el código accede a la cache (env.STREAM_CACHE).
+#   DEBE llamarse STREAM_CACHE — lo leen types.ts, index.ts, sources/*.
+# id = identificador del namespace KV de TU cuenta en Cloudflare.
+#   Es un binding, NO una variable de entorno: no va en .dev.vars.
+#   En `wrangler dev` da igual (se emula KV localmente, placeholder OK).
+#   Para producción crea el tuyo:  wrangler kv namespace create STREAM_CACHE
+#   y pon aquí su id (no es un secreto, pero es dato de tu infra).
+binding   = "STREAM_CACHE"
+id        = ""
