@@ -96,8 +96,8 @@ async function handleFetch(target: string): Promise<Response> {
     logErr("fetch", `url inválida: ${trunc(target, 120)}`);
     return jsonError("invalid url", 400);
   }
-  // Allowlist: doramaslat.com, doramedplay.net, kdramasplay.com, doramasflix.in, doramasyt.com, tudorama.com, pandrama.tv, doramasub.com, yandispoiler.net, kisskh.co.
-  if (u.protocol !== "https:" || !/(^|\.)(doramaslat\.com|doramedplay\.net|kdramasplay\.com|doramasflix\.in|doramasyt\.com|tudorama\.com|pandrama\.tv|doramasub\.com|yandispoiler\.net|kisskh\.co)$/i.test(u.hostname)) {
+  // Allowlist: doramaslat.com, doramedplay.net, kdramasplay.com, doramasflix.in, doramasyt.com, tudorama.com, pandrama.tv, doramasub.com, yandispoiler.net, kisskh.co, kisskh.club.
+  if (u.protocol !== "https:" || !/(^|\.)(doramaslat\.com|doramedplay\.net|kdramasplay\.com|doramasflix\.in|doramasyt\.com|tudorama\.com|pandrama\.tv|doramasub\.com|yandispoiler\.net|kisskh\.co|kisskh\.club)$/i.test(u.hostname)) {
     logErr("fetch", `host no permitido: ${u.protocol}//${u.hostname}`);
     return jsonError("host not allowed", 403);
   }
@@ -273,8 +273,9 @@ async function handleStreamwish(embedUrl: string, selfBase: string): Promise<Res
 // Este relay lo añade y pasa Range para el seeking (respuesta 206 upstream).
 function doodMp4HostAllowed(host: string): boolean {
   // CDN generoso: los MP4 de Dood viven en cloudatacdn.com y dominios
-  // doodcdn/dscdn/dl-*; también acepta CNAMEs con "dood" en el host.
-  return /(?:cloudatacdn|doodcdn|dscdn|dood)/i.test(host);
+  // doodcdn/dscdn/dl-*; también acepta CNAMEs con "dood" en el host,
+  // y CDNs directos de kisskh (hlscdn.vip).
+  return /(?:cloudatacdn|doodcdn|dscdn|dood|hlscdn\.vip)/i.test(host);
 }
 
 // GET /mp4?url=<mp4>&r=<referer> → re-sirve el MP4 con Referer y Range
