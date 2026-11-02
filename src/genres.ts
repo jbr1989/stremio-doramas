@@ -60,7 +60,8 @@ type GenreSourceName =
   | "dyt"
   | "yandi"
   | "dsub"
-  | "kisskh";
+  | "kisskh"
+  | "kissasia";
 
 interface GenreEntry {
   /** Label ES que ve el usuario en el dropdown de Stremio. */
@@ -87,6 +88,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dsub: "romance",
       yandi: "romance",
       kisskh: "Romance",
+      kissasia: "Romance",
     } 
   },
   { label: "Comedia", slugs:
@@ -101,6 +103,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dsub: "Comedia",
       yandi: "comedia",
       kisskh: "Comedy",
+      kissasia: "Comedy",
     }
   },
   { label: "Drama", slugs: 
@@ -115,6 +118,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dsub: "Drama",
       yandi: "drama",
       kisskh: "Drama",
+      kissasia: "Drama",
     } 
   },
   { label: "Acción", slugs: 
@@ -127,6 +131,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "35", 
       dflix: "accion",
       yandi: "accion",
+      kissasia: "Action",
     } 
   },
   { label: "Acción y aventura", slugs: 
@@ -136,6 +141,7 @@ const MASTER_GENRES: GenreEntry[] = [
       kplay: "action-adventure",
       pandrama: "12",
       yandi: "action-adventure",
+      kissasia: "Action & Adventure",
     } 
   },
   { label: "Aventura", slugs: 
@@ -147,6 +153,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "11", 
       dflix: "aventura",
       yandi: "aventura",
+      kissasia: "Adventure",
     } 
   },
   { label: "Misterio", slugs: 
@@ -159,6 +166,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "8", 
       dflix: "misterio",
       yandi: "misterio",
+      kissasia: "Mystery",
     } 
   },
   { label: "Suspense", slugs: 
@@ -176,6 +184,7 @@ const MASTER_GENRES: GenreEntry[] = [
       kplay: "thriller",
       dflix: "thriller",
       yandi: "thriller",
+      kissasia: "Thriller",
     } 
   },
   { label: "Crimen", slugs: 
@@ -187,6 +196,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "13", 
       dflix: "crimen",
       yandi: "crimen",
+      kissasia: "Crime",
     } 
   },
   { label: "Terror", slugs: 
@@ -200,6 +210,7 @@ const MASTER_GENRES: GenreEntry[] = [
     { 
       dplay: "horror",
       yandi: "horror",
+      kissasia: "Horror",
     } 
   },
   { label: "Fantasía", slugs: 
@@ -211,6 +222,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "28", 
       dflix: "fantasia",
       yandi: "fantasia",
+      kissasia: "Fantasy",
     } 
   },
   { label: "Ciencia ficción", slugs: 
@@ -221,6 +233,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "10", 
       dflix: "ciencia-ficcion",
       yandi: "ciencia-ficcion",
+      kissasia: "Science Fiction",
     } 
   },
   { label: "Sci-Fi y fantasía", slugs: 
@@ -230,6 +243,7 @@ const MASTER_GENRES: GenreEntry[] = [
       kplay: "sci-fi-fantasy",
       pandrama: "5",
       yandi: "sci-fi-fantasy",
+      kissasia: "Sci-Fi & Fantasy",
     } 
   },
   { label: "Histórico", slugs: 
@@ -240,6 +254,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dyt: "historico", 
       dflix: "history",
       yandi: "historico",
+      kissasia: "History",
     } 
   },
   { label: "Escolar", slugs: 
@@ -265,6 +280,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "7",
       dflix: "politica",
       yandi: "war-politics",
+      kissasia: "War & Politics",
     }
   },
   { label: "Bélica", slugs:
@@ -295,6 +311,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "6",
       dflix: "familia",
       yandi: "familia",
+      kissasia: "Family",
     }
   },
   { label: "Música", slugs: 
@@ -305,6 +322,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "14",
       dflix: "music",
       yandi: "musica",
+      kissasia: "Music",
     }
   },
   { label: "Documental", slugs: 
@@ -314,6 +332,7 @@ const MASTER_GENRES: GenreEntry[] = [
       kplay: "documental",
       dflix: "documental",
       yandi: "documental",
+      kissasia: "Documentary",
     } 
   },
   { label: "Reality", slugs: 
@@ -324,6 +343,7 @@ const MASTER_GENRES: GenreEntry[] = [
       tudorama: "reality", 
       dflix: "reality",
       yandi: "reality",
+      kissasia: "Reality",
     } 
   },
   { label: "Talk", slugs: 
@@ -344,6 +364,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "33", 
       dflix: "animacion",
       yandi: "animacion",
+      kissasia: "Animation",
     } 
   },
   { label: "Negocios", slugs: 
