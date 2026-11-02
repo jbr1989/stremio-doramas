@@ -60,7 +60,8 @@ type GenreSourceName =
   | "dyt"
   | "yandi"
   | "dsub"
-  | "kisskh";
+  | "kisskh"
+  | "korg";
 
 interface GenreEntry {
   /** Label ES que ve el usuario en el dropdown de Stremio. */
@@ -87,6 +88,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dsub: "romance",
       yandi: "romance",
       kisskh: "Romance",
+      korg: "romance",
     } 
   },
   { label: "Comedia", slugs:
@@ -101,6 +103,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dsub: "Comedia",
       yandi: "comedia",
       kisskh: "Comedy",
+      korg: "comedy",
     }
   },
   { label: "Drama", slugs: 
@@ -115,6 +118,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dsub: "Drama",
       yandi: "drama",
       kisskh: "Drama",
+      korg: "drama",
     } 
   },
   { label: "Acción", slugs: 
@@ -127,6 +131,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "35", 
       dflix: "accion",
       yandi: "accion",
+      korg: "action",
     } 
   },
   { label: "Acción y aventura", slugs: 
@@ -136,6 +141,7 @@ const MASTER_GENRES: GenreEntry[] = [
       kplay: "action-adventure",
       pandrama: "12",
       yandi: "action-adventure",
+      korg: "action-adventure",
     } 
   },
   { label: "Aventura", slugs: 
@@ -147,6 +153,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "11", 
       dflix: "aventura",
       yandi: "aventura",
+      korg: "adventure",
     } 
   },
   { label: "Misterio", slugs: 
@@ -159,6 +166,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "8", 
       dflix: "misterio",
       yandi: "misterio",
+      korg: "mystery",
     } 
   },
   { label: "Suspense", slugs: 
@@ -187,6 +195,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "13", 
       dflix: "crimen",
       yandi: "crimen",
+      korg: "crime",
     } 
   },
   { label: "Terror", slugs: 
@@ -200,6 +209,7 @@ const MASTER_GENRES: GenreEntry[] = [
     { 
       dplay: "horror",
       yandi: "horror",
+      korg: "horror",
     } 
   },
   { label: "Fantasía", slugs: 
@@ -211,6 +221,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "28", 
       dflix: "fantasia",
       yandi: "fantasia",
+      korg: "fantasy",
     } 
   },
   { label: "Ciencia ficción", slugs: 
@@ -221,6 +232,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "10", 
       dflix: "ciencia-ficcion",
       yandi: "ciencia-ficcion",
+      korg: "science-fiction",
     } 
   },
   { label: "Sci-Fi y fantasía", slugs: 
@@ -230,6 +242,7 @@ const MASTER_GENRES: GenreEntry[] = [
       kplay: "sci-fi-fantasy",
       pandrama: "5",
       yandi: "sci-fi-fantasy",
+      korg: "sci-fi-fantasy",
     } 
   },
   { label: "Histórico", slugs: 
@@ -240,6 +253,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dyt: "historico", 
       dflix: "history",
       yandi: "historico",
+      korg: "history",
     } 
   },
   { label: "Escolar", slugs: 
@@ -371,33 +385,38 @@ const MASTER_GENRES: GenreEntry[] = [
       dlat: "dramas-lgtb",
       pandrama: "1",
       yandi: "bl",
+      korg: "bl-drama",
     } 
   },
   { label: "K-Drama", slugs: 
     { 
-      dyt: "k-drama"
+      dyt: "k-drama",
+      korg: "korean-drama",
     } 
   },
   { label: "C-Drama", slugs: 
     { 
       dyt: "c-drama", 
-      tudorama: "cdrama" 
+      tudorama: "cdrama",
+      korg: "chinese-drama",
     }
   },
   { label: "J-Drama", slugs:
     { 
-      dyt: "j-drama"
+      dyt: "j-drama",
+      korg: "japan-drama",
     }
   },
   { label: "Thai", slugs:
     { 
-      dyt: "thai-drama"
+      dyt: "thai-drama",
+      korg: "thai-drama",
     }
   },
   { label: "Biografía", slugs: { yandi: "biografia" } },
   { label: "Deportes", slugs: { yandi: "deportes" } },
   { label: "Legal", slugs: { yandi: "legal" } },
-  { label: "LGBTQ", slugs: { yandi: "lgbtq" } },
+  { label: "LGBTQ", slugs: { yandi: "lgbtq", korg: "lgbtq" } },
   { label: "Medicina", slugs: { yandi: "medicina" } },
   { label: "Política", slugs: { yandi: "politica" } },
   { label: "Película de TV", slugs: { yandi: "pelicula-de-tv" } },
