@@ -1,0 +1,387 @@
+import { Env } from "../lib/types";
+import {
+  cleanTitle,
+  denoBaseFromEnv,
+  makeStreamDeduper,
+  cacheGet,
+  cacheSet,
+} from "../lib/utils";
+import { SourceBase, SourceCard, SourceEpisode } from "../lib/sourceBase";
+
+const BASE_API = "https://api3.devcorp.me";
+const AES_KEY_STRING = "im72charPasswordofdInitVectorStm";
+const AES_IV_STRING = "im72charPassword";
+
+let cachedKey: CryptoKey | null = null;
+const ivBytes = new TextEncoder().encode(AES_IV_STRING);
+
+async function getCryptoKey(): Promise<CryptoKey> {
+  if (cachedKey) return cachedKey;
+  const rawKey = new TextEncoder().encode(AES_KEY_STRING);
+  cachedKey = await crypto.subtle.importKey(
+    "raw",
+    rawKey,
+    { name: "AES-CBC" },
+    false,
+    ["decrypt"]
+  );
+  return cachedKey;
+}
+
+/**
+ * Realiza un fetch a la API de OneTouch TV y desencripta la respuesta en AES-256-CBC.
+ */
+async function fetchDecrypted(path: string): Promise<any> {
+  const url = `${BASE_API}${path.startsWith("/") ? "" : "/"}${path}`;
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      Accept: "*/*",
+      Origin: "https://onetouchtv.xyz",
+      Referer: "https://onetouchtv.xyz/",
+    },
+    signal: AbortSignal.timeout(15000),
+  });
+
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} from ${url}`);
+  }
+
+  const raw = await res.text();
+  if (!raw) return null;
+
+  // Formato sustituido de Base64 de OneTouch TV:
+  // '@' -> '+' y '-_.' -> '/'
+  let b64 = raw.replace(/@/g, "+").replace(/-_\./g, "/");
+  const pad = b64.length % 4;
+  if (pad) b64 += "=".repeat(4 - pad);
+
+  // Decodificar Base64 a binario
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) {
+    bytes[i] = bin.charCodeAt(i);
+  }
+
+  const key = await getCryptoKey();
+  const decryptedBuf = await crypto.subtle.decrypt(
+    { name: "AES-CBC", iv: ivBytes },
+    key,
+    bytes
+  );
+
+  const decryptedText = new TextDecoder().decode(decryptedBuf);
+  return JSON.parse(decryptedText);
+}
+
+export class OneTouchSource extends SourceBase {
+  readonly prefix = "onetouch";
+  readonly label = "OneTouch TV";
+  readonly catalogId = "onetouch";
+
+  // Identificador de episodio: "onetouch:ep:{identifier}:{playId}" o slug tradicional
+  protected override readonly epIdPattern = "(?:ep:[^:]+:[^:]+|.+-\\d+x\\d+)";
+
+  protected override get pageSize(): number {
+    return 30;
+  }
+
+  override isEpisodeId(rawId: string): boolean {
+    return (
+      rawId.startsWith("onetouch:ep:") ||
+      new RegExp(`^${this.prefix}:(?:${this.epIdPattern})$`).test(rawId)
+    );
+  }
+
+  override async toEpSlug(rawId: string, env?: Env): Promise<string> {
+    if (rawId.startsWith("onetouch:ep:")) {
+      const parts = rawId.slice("onetouch:ep:".length).split(":");
+      const identifier = parts[0];
+      const playId = parts[1];
+      const sxeMatch = playId.match(/^(\d+)$/);
+      const epNum = sxeMatch ? sxeMatch[1] : "1";
+      return `${identifier}-1x${epNum}`;
+    }
+    return rawId.slice(this.prefix.length + 1);
+  }
+
+  override buildId(epSlug: string): string {
+    const sxeMatch = epSlug.match(/^(.+)-(\d+)x(\d+)$/);
+    if (sxeMatch) {
+      const baseSlug = sxeMatch[1];
+      const epNum = sxeMatch[3];
+      return `onetouch:ep:${baseSlug}:${epNum}`;
+    }
+    return `onetouch:${epSlug}`;
+  }
+
+  // ─── Catálogo ────────────────────────────────────────────────────────────
+
+  protected override buildSearchUrl(q: string): string {
+    return `/vod/search?page=1&keyword=${encodeURIComponent(q)}`;
+  }
+
+  protected override buildListUrl(page: number): string {
+    return `/vod/popular?page=${page}`;
+  }
+
+  protected override async fetchBody(pathOrUrl: string, _env: Env): Promise<string> {
+    try {
+      const path = pathOrUrl.startsWith("http")
+        ? new URL(pathOrUrl).pathname + new URL(pathOrUrl).search
+        : pathOrUrl;
+      const json = await fetchDecrypted(path);
+      return JSON.stringify(json);
+    } catch (e) {
+      console.error(`[onetouch] fetchBody failed for ${pathOrUrl}: ${e}`);
+      return "";
+    }
+  }
+
+  protected override parseCards(resText: string): SourceCard[] {
+    try {
+      const data = JSON.parse(resText || "{}");
+      const list = Array.isArray(data.result) ? data.result : [];
+      const cards: SourceCard[] = [];
+      for (const item of list) {
+        const slug = String(item.id || item._id || "");
+        const title = item.title || "";
+        if (!slug || !title) continue;
+        cards.push({
+          slug,
+          type: item.type === "movie" ? "movie" : "series",
+          name: cleanTitle(title) || title,
+          poster: item.image || item.poster || "",
+        });
+      }
+      return cards;
+    } catch {
+      return [];
+    }
+  }
+
+  // ─── Meta ────────────────────────────────────────────────────────────────
+
+  protected override async fetchMetaPage(
+    slug: string,
+    _env?: Env
+  ): Promise<unknown> {
+    try {
+      const res = await fetchDecrypted(`/web/vod/${slug}/detail`);
+      return res?.result || null;
+    } catch (e) {
+      console.error(`[onetouch] meta failed for ${slug}: ${e}`);
+      return null;
+    }
+  }
+
+  protected override parseMetaBasics(data: unknown, slug: string) {
+    const d = (data || {}) as any;
+    const title = d.title || "";
+    return {
+      name: cleanTitle(title) || `Drama ${slug}`,
+      poster: d.image || d.poster || "",
+      description: d.description || "",
+    };
+  }
+
+  protected override parseGenres(data: unknown): string[] {
+    const d = (data || {}) as any;
+    return Array.isArray(d.genres) ? d.genres : [];
+  }
+
+  protected override listEpisodes(
+    data: unknown,
+    slug: string,
+    _tmdb: any,
+    env?: Env
+  ): SourceEpisode[] {
+    const d = (data || {}) as any;
+    const episodes: any[] = Array.isArray(d.episodes) ? d.episodes : [];
+    const sitePoster = d.image || d.poster || "";
+
+    const list: SourceEpisode[] = [];
+    const epMap: Record<string, string> = {};
+
+    for (const ep of episodes) {
+      // Si el episodio está bloqueado para la app, no emitirlo
+      if (ep.lockContentDetails?.lockContent) continue;
+
+      const identifier = ep.identifier || d.id || slug;
+      const playId = ep.playId || ep.episode || "1";
+      const epNum = parseFloat(ep.episode || "1");
+      const s = 1;
+      const e = Math.floor(epNum);
+
+      const customId = `onetouch:ep:${identifier}:${playId}`;
+      epMap[`${s}x${e}`] = customId;
+
+      list.push({
+        id: customId,
+        slug: `${identifier}-${s}x${e}`,
+        s,
+        e,
+        thumb: ep.thumbnail || sitePoster,
+      });
+    }
+
+    // Cachear mapeo de episodios si el KV está disponible
+    if (env?.STREAM_CACHE && Object.keys(epMap).length > 0) {
+      const titleKey = cleanTitle(d.title || slug);
+      cacheSet(`epmap:v1:onetouch:${titleKey}`, epMap, 24 * 3600, env.STREAM_CACHE).catch(() => {});
+    }
+
+    return list;
+  }
+
+  // ─── Streams ─────────────────────────────────────────────────────────────
+
+  protected override buildPageUrl(slug: string): string {
+    return slug;
+  }
+
+  protected override extractEmbeds(): Promise<string[]> {
+    return Promise.resolve([]);
+  }
+
+  override async getStreams(
+    rawId: string,
+    env: Env
+  ): Promise<{ streams: any[] }> {
+    let identifier = "";
+    let playId = "";
+
+    if (rawId.startsWith("onetouch:ep:")) {
+      const parts = rawId.slice("onetouch:ep:".length).split(":");
+      identifier = parts[0];
+      playId = parts[1];
+    } else {
+      // Formato "onetouch:slug-1x1" o "onetouch:slug"
+      const clean = rawId.replace(/^onetouch:/, "");
+      const m = clean.match(/^(.+)-(\d+)x(\d+)$/);
+      if (m) {
+        identifier = m[1];
+        playId = m[3];
+      } else {
+        identifier = clean;
+        playId = "1";
+      }
+    }
+
+    if (!identifier || !playId) return { streams: [] };
+
+    // Intentar obtener el detalle del episodio
+    let epData: any = null;
+    try {
+      epData = await fetchDecrypted(`/web/vod/${identifier}/episode/${playId}`);
+    } catch {
+      // Fallback a buscar por título / slugmap si fuera necesario
+    }
+
+    if (!epData?.success || !epData?.result) {
+      // Intento alternativo con detalle de la serie si identifier era un slug general
+      try {
+        const detail = await fetchDecrypted(`/web/vod/${identifier}/detail`);
+        if (detail?.result?.episodes) {
+          const matchEp = detail.result.episodes.find(
+            (e: any) =>
+              String(e.episode) === String(playId) ||
+              String(e.playId) === String(playId)
+          );
+          if (matchEp && (matchEp.identifier !== identifier || matchEp.playId !== playId)) {
+            epData = await fetchDecrypted(
+              `/web/vod/${matchEp.identifier || identifier}/episode/${matchEp.playId || matchEp.episode}`
+            );
+          }
+        }
+      } catch {}
+    }
+
+    if (!epData?.success || !epData?.result) {
+      return { streams: [] };
+    }
+
+    const res = epData.result;
+    const sources: any[] = Array.isArray(res.sources) ? res.sources : [];
+    const tracks: any[] = Array.isArray(res.track) ? res.track : [];
+
+    const { add, streams } = makeStreamDeduper();
+
+    // Formatear subtítulos
+    const langPriority: Record<string, number> = {
+      es: 0,
+      en: 1,
+      pt: 2,
+    };
+    const subtitles = tracks
+      .filter((t) => t.file && /^https?:\/\//i.test(t.file))
+      .sort((a, b) => {
+        const pa = langPriority[a.code] ?? 10;
+        const pb = langPriority[b.code] ?? 10;
+        return pa - pb;
+      })
+      .slice(0, 5)
+      .map((t) => ({
+        id: `onetouch-${t.code || t.name}`,
+        url: t.file,
+        ext: "vtt" as const,
+        lang: t.code || "es",
+        label: t.name || t.code || "Sub",
+      }));
+
+    for (const src of sources) {
+      const url = src.url;
+      if (!url || !/^https?:\/\//i.test(url)) continue;
+
+      const serverName = src.name || "OneTouch";
+      const quality = src.quality ? ` [${src.quality}]` : "";
+      const isHls = src.type === "hls" || /\.m3u8/i.test(url);
+      const isDash = src.type === "dash" || /\.mpd/i.test(url);
+
+      if (isHls) {
+        add({
+          url,
+          name: `OneTouch (${serverName})`,
+          title: `▶ OneTouch — ${serverName}${quality}`,
+          behaviorHints: {
+            notWebReady: false,
+            filename: `${identifier}-${playId}.m3u8`,
+            bingeGroup: `onetouch-${serverName}`,
+          },
+          ...(subtitles.length ? { subtitles } : {}),
+        });
+      } else if (isDash) {
+        // Formato DASH (.mpd): funcional en clientes con soporte DASH
+        add({
+          url,
+          name: `OneTouch DASH (${serverName})`,
+          title: `▶ OneTouch (DASH) — ${serverName}${quality}`,
+          behaviorHints: {
+            notWebReady: false,
+            filename: `${identifier}-${playId}.mpd`,
+            bingeGroup: `onetouch-${serverName}`,
+          },
+          ...(subtitles.length ? { subtitles } : {}),
+        });
+      } else {
+        // MP4 directo u otro formato
+        add({
+          url,
+          name: `OneTouch (${serverName})`,
+          title: `▶ OneTouch — ${serverName}${quality}`,
+          behaviorHints: {
+            notWebReady: false,
+            filename: `${identifier}-${playId}.mp4`,
+            bingeGroup: `onetouch-${serverName}`,
+          },
+          ...(subtitles.length ? { subtitles } : {}),
+        });
+      }
+    }
+
+    return { streams };
+  }
+}
+
+export const oneTouchSource = new OneTouchSource();
