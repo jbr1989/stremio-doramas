@@ -167,6 +167,8 @@ export function buildSeriesMeta(p: {
   description: string;
   genres: string[];
   tmdb: { poster?: string; background?: string; description?: string; year?: string } | null;
+  /** Año del sitio, fallback de releaseInfo cuando TMDB no matchea. */
+  year?: string;
   /** `{prefix}:{slug}` de cada episodio con season/episode y thumbnail. */
   videos: {
     id: string;
@@ -184,7 +186,7 @@ export function buildSeriesMeta(p: {
       background: p.tmdb?.background || p.poster,
       description: p.tmdb?.description || p.description,
       posterShape: "poster",
-      releaseInfo: p.tmdb?.year || "",
+      releaseInfo: p.tmdb?.year || p.year || "",
       genres: p.genres,
       videos: p.videos.map((v) => ({
         id: v.id,

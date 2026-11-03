@@ -11,7 +11,7 @@ del que resuelve — por eso la extracción y cada segmento se sirven desde esta
 
 | Ruta | Qué hace | Allowlist |
 |---|---|---|
-| `/fetch?url=` | Relay de HTML de una página de dorama | Solo los 4 dominios integrados: `doramaslat.com`, `doramedplay.net`, `kdramasplay.com`, `doramasflix.in` |
+| `/fetch?url=` | Relay de HTML de una página de dorama | Los dominios integrados: `doramaslat.com`, `doramedplay.net`, `kdramasplay.com`, `doramasflix.in`, `doramasyt.com`, `tudorama.com`, `pandrama.tv`, `doramasub.com`, `yandispoiler.net`, `kisskh.co`, `onetouchtv.xyz`, `devcorp.me` |
 | `/streamwish?url=` | Resuelve un embed de StreamWish/espejo a la playlist HLS master y la reescribe (referer/UA incluidos) | Hostname contra la allowlist canónica `/streamwish\|embedwish\|wishfast\|sfastwish\|swishsrv\|streamaly\|streamis\|flaswish\|do7go\|playmogo/i` — **idéntica** a la regex de las 3 fuentes del Worker; elízalas en el mismo commit |
 | `/savefiles?code=` | Resuelve un código de savefiles/streamhls (POST a `streamhls.to/dl` con `op=embed`) a la playlist master reescrita | — |
 | `/byse?url=` *(implementación en `byse.ts`)* | Resuelve la cadena anti-bot de la familia "byse" (attest ECDSA P-256 + PoW de hash propio + payload AES-256-GCM) al master HLS reescrito | **Por forma de API**, no por nombre: cualquier host público con embed `/e/<code>` (`localhost`/IPs privadas fuera). El sondeo `/api/videos/<code>/embed/details` confirma la familia (502 "no compatible" si no). Donde antes se va el CDN (`sprintcdn`) sirviendo variaciones/segmentos por `/hls` |
@@ -21,6 +21,11 @@ Sin `url`, el servicio responde un JSON de uso con los 5 formatos. Los logs van
 a consola con tags `[req]`, `[fetch]`, `[savefiles]`, `[streamwish]`, `[byse]`,
 `[hls]`
 (visibles en el dashboard de Deno Deploy). Timeouts de 11–15s por fetch.
+
+> `devcorp.me` (API de OneTouch TV) está en el allowlist de `/fetch` porque el
+> Worker intenta la API directa y, si el egress de Cloudflare está bloqueado,
+> reintenta por aquí el cuerpo cifrado (intacto, en texto plano). `devcorp.me`
+> también está en el allowlist de `/hls` por el mismo motivo.
 
 ## Deploy (integración GitHub — recomendado)
 
