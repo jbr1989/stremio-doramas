@@ -28,7 +28,7 @@ const withGenre = (opts: string[]): CatalogExtra[] => [
 
 export const MANIFEST = {
   id: ADDON_ID,
-  version: "1.9.1",
+  version: "1.10.2",
   name: "DoramasWeb",
   description: "Fuentes de Doramas en español y subtituladas",
   // Fallback por si el manifest se consume fuera del handler; en runtime
@@ -109,10 +109,16 @@ export const MANIFEST = {
       name: "OneTouch TV — Directorio",
       extra: SEARCH_SKIP,
     },
+    {
+      type: "series",
+      id: "kissasia-directory",
+      name: "KissAsia — Directorio",
+      extra: withGenre(genreSourceOptions("kissasia")),
+    },
   ],
   idPrefixes: [
     "tt", // ids IMDb de series (meta/stream ligeros + streams por s/e)
     "dlat:", "dplay:", "kplay:", "dflix:", "tudorama:", "pandrama:",
-    "dyt:", "dsub:", "yandi:", "kisskh:", "onetouch:",
+    "dyt:", "dsub:", "yandi:", "kisskh:", "onetouch:", "kissasia:",
   ],
 };
