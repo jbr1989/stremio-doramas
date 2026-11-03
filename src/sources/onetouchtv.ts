@@ -34,6 +34,20 @@ function seasonFromSlug(slugOrTitle: string): number {
   return m ? parseInt(m[1], 10) : 1;
 }
 
+/** Identificadores de OneTouch, dos formas observadas en la API (oct. 2026):
+ *    "556560-our-sticky-love-2026"  → id de BD (5-6 dígitos) + slug
+ *    "100-days-my-prince"           → slug puro, SIN id
+ *  El id numérico solo lo necesita la API de OneTouch; al resto de fuentes
+ *  les llega dentro del epSlug canónico y se convierte en un token de la
+ *  query de búsqueda que arruina el match ("556560 our sticky love 2026" →
+ *  0 candidatos). Se quita SOLO el prefijo de 5+ dígitos: NO usar ^\d+-,
+ *  porque hay slugs puros que empiezan por número y son fichas válidas
+ *  ("100-days-my-prince" → 16 eps, "49-days-with-a-merman").
+ *  Se conserva el año final: el scorer de slugmap es contención
+ *  bidireccional (tolera tokens extra) y desambigua entre la ficha con id
+ *  y la ficha pura de la misma serie. */
+const ONETOUCH_ID_PREFIX = /^\d{5,}-/;
+
 // El API devuelve slugs de género en inglés (vocabulario mydramalist). Se
 // traduce a ES los unívocos; el resto pasa por genreLabelForMeta (humanizado),
 // igual que el criterio de src/genres.ts para géneros no registrados.
@@ -172,13 +186,15 @@ export class OneTouchSource extends SourceBase {
   override async toEpSlug(rawId: string, env?: Env): Promise<string> {
     if (rawId.startsWith("onetouch:ep:")) {
       const parts = rawId.slice("onetouch:ep:".length).split(":");
-      const identifier = parts[0];
+      const identifier = parts[0].replace(ONETOUCH_ID_PREFIX, "");
       const playId = parts[1];
       const sxeMatch = playId.match(/^(\d+)$/);
       const epNum = sxeMatch ? sxeMatch[1] : "1";
       // La temporada viene delatada por el identificador (el site parte cada
-      // temporada en una ficha propia) y por defecto es 1.
-      return `${identifier}-${seasonFromSlug(identifier)}x${epNum}`;
+      // temporada en una ficha propia) y por defecto es 1. Se deduce del
+      // identificador ORIGINAL (parts[0]): la limpieza del id prefijo no lo
+      // afecta, pero así la regla no depende de la forma final.
+      return `${identifier}-${seasonFromSlug(parts[0])}x${epNum}`;
     }
     return rawId.slice(this.prefix.length + 1);
   }
