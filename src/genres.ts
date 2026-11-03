@@ -61,6 +61,7 @@ type GenreSourceName =
   | "yandi"
   | "dsub"
   | "kisskh"
+  | "kissasia"
   | "korg";
 
 interface GenreEntry {
@@ -88,6 +89,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dsub: "romance",
       yandi: "romance",
       kisskh: "Romance",
+      kissasia: "Romance",
       korg: "romance",
     } 
   },
@@ -103,6 +105,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dsub: "Comedia",
       yandi: "comedia",
       kisskh: "Comedy",
+      kissasia: "Comedy",
       korg: "comedy",
     }
   },
@@ -118,6 +121,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dsub: "Drama",
       yandi: "drama",
       kisskh: "Drama",
+      kissasia: "Drama",
       korg: "drama",
     } 
   },
@@ -131,6 +135,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "35", 
       dflix: "accion",
       yandi: "accion",
+      kissasia: "Action",
       korg: "action",
     } 
   },
@@ -141,6 +146,7 @@ const MASTER_GENRES: GenreEntry[] = [
       kplay: "action-adventure",
       pandrama: "12",
       yandi: "action-adventure",
+      kissasia: "Action & Adventure",
       korg: "action-adventure",
     } 
   },
@@ -153,6 +159,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "11", 
       dflix: "aventura",
       yandi: "aventura",
+      kissasia: "Adventure",
       korg: "adventure",
     } 
   },
@@ -166,6 +173,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "8", 
       dflix: "misterio",
       yandi: "misterio",
+      kissasia: "Mystery",
       korg: "mystery",
     } 
   },
@@ -184,6 +192,7 @@ const MASTER_GENRES: GenreEntry[] = [
       kplay: "thriller",
       dflix: "thriller",
       yandi: "thriller",
+      kissasia: "Thriller",
     } 
   },
   { label: "Crimen", slugs: 
@@ -195,6 +204,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "13", 
       dflix: "crimen",
       yandi: "crimen",
+      kissasia: "Crime",
       korg: "crime",
     } 
   },
@@ -209,6 +219,7 @@ const MASTER_GENRES: GenreEntry[] = [
     { 
       dplay: "horror",
       yandi: "horror",
+      kissasia: "Horror",
       korg: "horror",
     } 
   },
@@ -221,6 +232,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "28", 
       dflix: "fantasia",
       yandi: "fantasia",
+      kissasia: "Fantasy",
       korg: "fantasy",
     } 
   },
@@ -232,6 +244,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "10", 
       dflix: "ciencia-ficcion",
       yandi: "ciencia-ficcion",
+      kissasia: "Science Fiction",
       korg: "science-fiction",
     } 
   },
@@ -242,6 +255,7 @@ const MASTER_GENRES: GenreEntry[] = [
       kplay: "sci-fi-fantasy",
       pandrama: "5",
       yandi: "sci-fi-fantasy",
+      kissasia: "Sci-Fi & Fantasy",
       korg: "sci-fi-fantasy",
     } 
   },
@@ -253,6 +267,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dyt: "historico", 
       dflix: "history",
       yandi: "historico",
+      kissasia: "History",
       korg: "history",
     } 
   },
@@ -279,6 +294,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "7",
       dflix: "politica",
       yandi: "war-politics",
+      kissasia: "War & Politics",
     }
   },
   { label: "Bélica", slugs:
@@ -309,6 +325,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "6",
       dflix: "familia",
       yandi: "familia",
+      kissasia: "Family",
     }
   },
   { label: "Música", slugs: 
@@ -319,6 +336,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "14",
       dflix: "music",
       yandi: "musica",
+      kissasia: "Music",
     }
   },
   { label: "Documental", slugs: 
@@ -328,6 +346,7 @@ const MASTER_GENRES: GenreEntry[] = [
       kplay: "documental",
       dflix: "documental",
       yandi: "documental",
+      kissasia: "Documentary",
     } 
   },
   { label: "Reality", slugs: 
@@ -338,6 +357,7 @@ const MASTER_GENRES: GenreEntry[] = [
       tudorama: "reality", 
       dflix: "reality",
       yandi: "reality",
+      kissasia: "Reality",
     } 
   },
   { label: "Talk", slugs: 
@@ -358,6 +378,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "33", 
       dflix: "animacion",
       yandi: "animacion",
+      kissasia: "Animation",
     } 
   },
   { label: "Negocios", slugs: 

@@ -96,8 +96,8 @@ async function handleFetch(target: string): Promise<Response> {
     logErr("fetch", `url inválida: ${trunc(target, 120)}`);
     return jsonError("invalid url", 400);
   }
-  // Allowlist: doramaslat.com, doramedplay.net, kdramasplay.com, doramasflix.in, doramasyt.com, tudorama.com, pandrama.tv, doramasub.com, yandispoiler.net, kisskh.co, kisskh.org.
-  if (u.protocol !== "https:" || !/(^|\.)(doramaslat\.com|doramedplay\.net|kdramasplay\.com|doramasflix\.in|doramasyt\.com|tudorama\.com|pandrama\.tv|doramasub\.com|yandispoiler\.net|kisskh\.co|kisskh\.org)$/i.test(u.hostname)) {
+  // Allowlist: doramaslat.com, doramedplay.net, kdramasplay.com, doramasflix.in, doramasyt.com, tudorama.com, pandrama.tv, doramasub.com, yandispoiler.net, kisskh.co, onetouchtv.xyz, devcorp.me, kissasia.cam, kisskh.org.
+  if (u.protocol !== "https:" || !/(^|\.)(doramaslat\.com|doramedplay\.net|kdramasplay\.com|doramasflix\.in|doramasyt\.com|tudorama\.com|pandrama\.tv|doramasub\.com|yandispoiler\.net|kisskh\.co|onetouchtv\.xyz|devcorp\.me|kissasia\.cam|kisskh\.org)$/i.test(u.hostname)) {
     logErr("fetch", `host no permitido: ${u.protocol}//${u.hostname}`);
     return jsonError("host not allowed", 403);
   }
@@ -155,7 +155,7 @@ async function handleFetch(target: string): Promise<Response> {
 // premilkyway.com is StreamWish's HLS CDN. Its playlist/segment tokens
 // are IP-bound, so they must be fetched from this same Deno IP that resolved the embed.
 function hlsHostAllowed(host: string): boolean {
-  return /(^|\.)(savefiles\.com|streamhls\.to|premilkyway\.com)$/i.test(host) ||
+  return /(^|\.)(savefiles\.com|streamhls\.to|premilkyway\.com|devcorp\.me)$/i.test(host) ||
     // CDN de la familia filelions (lulu): cdn-tnmr.org / .1x / .1y — TLDs raros que rotan.
     /cdn-tnmr/i.test(host) ||
     // CDN de la familia byse (el edge rota: edge*-sprintcdn.<dominio>.com)
