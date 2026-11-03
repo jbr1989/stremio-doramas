@@ -48,6 +48,27 @@ function seasonFromSlug(slugOrTitle: string): number {
  *  y la ficha pura de la misma serie. */
 const ONETOUCH_ID_PREFIX = /^\d{5,}-/;
 
+/** La API mete el año de estreno al final del título ("Our Sticky Love
+ *  (2026)") y ADEMÁS lo manda en un campo `year` aparte (30/30 del popular).
+ *  El año pertenece a releaseInfo de la ficha, no al nombre de la tarjeta:
+ *  se quita de los strings preparados para mostrar/buscar, nunca de los
+ *  datos crudos que lo alimentan. Opt-in en esta fuente: en las DooPlay el
+ *  año puede ser parte del título real ("Reply 1988"), por lo que
+ *  cleanTitle compartido NO lo toca. */
+const TRAILING_YEAR = /\s*\((?:19|20)\d{2}\)\s*$/;
+
+/** El año de estreno también viaja en el identificador de la ficha
+ *  ("556560-our-sticky-love-2026"), donde estorba al fan-out: es un token
+ *  más en la query de búsqueda de las otras fuentes y en el intento de URL
+ *  directo (kplay solo acertó our-sticky-love-1x3 tras un rescate desde
+ *  our-sticky-love-2026-1x3). Guard: solo se quita si quedan ≥2 palabras,
+ *  para no destrozar títulos cuyo año forma parte del nombre ("reply-1988"
+ *  → "reply" colisionaría con las tres entregas; "overdo-2026" se queda). */
+function stripSlugYear(slug: string): string {
+  const out = slug.replace(/-(?:19|20)\d{2}$/, "");
+  return out.split("-").filter(Boolean).length >= 2 ? out : slug;
+}
+
 // El API devuelve slugs de género en inglés (vocabulario mydramalist). Se
 // traduce a ES los unívocos; el resto pasa por genreLabelForMeta (humanizado),
 // igual que el criterio de src/genres.ts para géneros no registrados.
@@ -186,7 +207,7 @@ export class OneTouchSource extends SourceBase {
   override async toEpSlug(rawId: string, env?: Env): Promise<string> {
     if (rawId.startsWith("onetouch:ep:")) {
       const parts = rawId.slice("onetouch:ep:".length).split(":");
-      const identifier = parts[0].replace(ONETOUCH_ID_PREFIX, "");
+      const identifier = stripSlugYear(parts[0].replace(ONETOUCH_ID_PREFIX, ""));
       const playId = parts[1];
       const sxeMatch = playId.match(/^(\d+)$/);
       const epNum = sxeMatch ? sxeMatch[1] : "1";
@@ -249,7 +270,7 @@ export class OneTouchSource extends SourceBase {
         cards.push({
           slug,
           type: item.type === "movie" ? "movie" : "series",
-          name: cleanTitle(title) || title,
+          name: (cleanTitle(title) || title).replace(TRAILING_YEAR, "").trim(),
           poster: item.image || item.poster || "",
         });
       }
@@ -287,7 +308,7 @@ export class OneTouchSource extends SourceBase {
     return {
       name:
         (cleanTitle(rawTitle) || `Drama ${slug}`)
-          .replace(/\s*\((\d{4})\)\s*$/, "")
+          .replace(TRAILING_YEAR, "")
           .trim() || `Drama ${slug}`,
       poster: d.image || d.poster || "",
       description: d.description || "",
