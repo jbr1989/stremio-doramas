@@ -16,6 +16,12 @@ const TMDB_IMAGE_PREFIX = "https://image.tmdb.org/t/p/w500";
 // traducible por slugmap, mientras que "kissasia-1758-1x2" solo contiene el
 // contentId. La misma ficha alimenta la meta (géneros, año, póster 2:3).
 const CONTENT_CACHE_PREFIX = "ka:content:";
+// slug → contentId: lo necesita el fan-out inverso (otra fuente o IMDb manda
+// "kissasia:{slug}-SxE", sin contentId ni episodeId).
+const SLUG_CACHE_PREFIX = "ka:slug:";
+// contentId → [{id, seasonNum, episodeNum}]: resuelve SxE → episodeId sin
+// volver a bajar la página de la serie.
+const EPS_CACHE_PREFIX = "ka:eps:";
 const CONTENT_CACHE_TTL = 24 * 3600; // 24 h
 
 export interface KissAsiaCardItem {
@@ -50,6 +56,14 @@ export interface KissAsiaMediaResponse {
   contentTitle?: string;
   episodeTitle?: string | null;
   error?: string;
+}
+
+/** Episodio de `/api/episodes?contentId=`. `id` es el episodeId que espera
+ *  `/api/get-media`. */
+export interface KissAsiaEpisode {
+  id: string;
+  seasonNum: number;
+  episodeNum: number;
 }
 
 /** Ficha completa de `/api/content?id={contentId}`. La página `/drama/{slug}`
@@ -108,9 +122,10 @@ export class KissAsiaSource extends SourceBase {
   readonly label = "KissAsia";
   readonly catalogId = "kissasia-directory";
 
-  // Episodio = "kissasia:ep:{contentId}:{episodeId}:{number}" o "kissasia:ep:{contentId}" (películas)
-  // Formato: ep:\d+:\d+(?::\d+)? o ep:\d+
-  protected override readonly epIdPattern = "ep:\\d+(?::\\d+)*";
+  // Episodio = "kissasia:ep:{contentId}:{episodeId}:{number}" o "kissasia:ep:{contentId}" (películas).
+  // También acepta el slug canónico del fan-out/IMDb: "kissasia:{slug}-SxE".
+  protected override readonly epIdPattern =
+    "ep:\\d+(?::\\d+)*|.+?-\\d+x\\d+";
 
   // ── Fetch: usar fetchHtml permitiendo respuestas JSON cortas ──
   protected override async fetchBody(url: string, env: Env): Promise<string> {
@@ -376,6 +391,13 @@ export class KissAsiaSource extends SourceBase {
       if (typeof data.title !== "string") data.title = "";
 
       await cacheSet(key, data, CONTENT_CACHE_TTL, kv);
+      // Caché inversa para el fan-out: el slug canónico llega sin contentId.
+      await cacheSet(
+        `${SLUG_CACHE_PREFIX}${data.slug}`,
+        String(data.id || contentId),
+        CONTENT_CACHE_TTL,
+        kv
+      );
       return data;
     } catch (e) {
       console.log(`[kissasia] no se pudo resolver la ficha de ${contentId}: ${e}`);
@@ -386,6 +408,111 @@ export class KissAsiaSource extends SourceBase {
   private async contentSlug(contentId: string, env?: Env): Promise<string> {
     const info = await this.contentInfo(contentId, env);
     return info?.slug?.trim() || "";
+  }
+
+  /** slug canónico → contentId. Lo usa el fan-out inverso (kissasia:{slug}-SxE)
+   *  y la entrada por IMDb. Primero caché, luego búsqueda por título y por
+   *  último la página de la ficha (necesaria para slugs con apóstrofes/signos
+   *  que el buscador no encuentra: "iroha's", "oh!", "doctor x"). */
+  private async contentIdBySlug(slug: string, env?: Env): Promise<string> {
+    const s = slug.trim();
+    if (!s) return "";
+    const kv = env?.STREAM_CACHE;
+    const key = `${SLUG_CACHE_PREFIX}${s}`;
+
+    if (kv) {
+      const cached = await cacheGet(key, kv);
+      if (typeof cached === "string" && cached) return cached;
+    }
+    if (!env) return "";
+
+    // 1) Búsqueda por título. Sin `type` para incluir también películas;
+    //    se exige coincidencia exacta de slug para evitar falsos positivos.
+    //    Variante quitando el año final ("-2026") que añaden otras fuentes.
+    const variants = [s.replace(/-/g, " ")];
+    const noYear = s.replace(/-\d{4}$/, "");
+    if (noYear !== s) variants.push(noYear.replace(/-/g, " "));
+    for (const q of variants) {
+      try {
+        const resText = await this.fetchBody(
+          `${KISSASIA_BASE}/api/content?q=${encodeURIComponent(q)}&limit=${this.pageSize}`,
+          env
+        );
+        if (!resText) continue;
+        const data = JSON.parse(resText) as KissAsiaContentResponse;
+        const hit = (data.items || []).find(
+          (it) => (it.slug || "").toLowerCase() === s.toLowerCase()
+        );
+        if (hit?.id) {
+          const id = String(hit.id);
+          await cacheSet(key, id, CONTENT_CACHE_TTL, kv);
+          return id;
+        }
+      } catch {
+        // Siguiente variante / fallback de página.
+      }
+    }
+
+    // 2) Página de la ficha: /drama/{slug} para series y /movie/{slug} para
+    //    películas. Un slug ajeno devuelve un soft-404 sin contentId.
+    for (const section of ["drama", "movie"]) {
+      try {
+        const html = await this.fetchBody(
+          `${KISSASIA_BASE}/${section}/${encodeURIComponent(s)}`,
+          env
+        );
+        const contentId = extractContentId(html);
+        if (contentId) {
+          await cacheSet(key, contentId, CONTENT_CACHE_TTL, kv);
+          return contentId;
+        }
+      } catch {
+        // Probar la siguiente sección.
+      }
+    }
+
+    return "";
+  }
+
+  /** Lista de episodios de la API: SxE → episodeId (id de get-media). Se
+   *  cachea porque el fan-out puede pedir varios episodios de la misma serie. */
+  private async contentEpisodes(
+    contentId: string,
+    env?: Env
+  ): Promise<KissAsiaEpisode[]> {
+    const kv = env?.STREAM_CACHE;
+    const key = `${EPS_CACHE_PREFIX}${contentId}`;
+
+    if (kv) {
+      const cached = await cacheGet(key, kv);
+      if (Array.isArray(cached)) return cached as KissAsiaEpisode[];
+    }
+    if (!env) return [];
+
+    try {
+      const resText = await this.fetchBody(
+        `${KISSASIA_BASE}/api/episodes?contentId=${encodeURIComponent(contentId)}`,
+        env
+      );
+      if (!resText) return [];
+      const data = JSON.parse(resText);
+      if (!Array.isArray(data)) return [];
+
+      const episodes: KissAsiaEpisode[] = data
+        .filter((e) => e && e.id != null)
+        .map((e) => ({
+          id: String(e.id),
+          seasonNum: Number(e.seasonNum) || 1,
+          episodeNum: Number(e.episodeNum) || 0,
+        }));
+
+      // También cachea [] (películas): evita repetir la consulta 24 h.
+      await cacheSet(key, episodes, CONTENT_CACHE_TTL, kv);
+      return episodes;
+    } catch (e) {
+      console.log(`[kissasia] no se pudieron listar episodios de ${contentId}: ${e}`);
+      return [];
+    }
   }
 
   /** id propio → epSlug canónico basado en el TÍTULO del sitio, no en el
@@ -418,20 +545,45 @@ export class KissAsiaSource extends SourceBase {
 
   // ── Streams ──
   override async getStreams(rawId: string, env: Env): Promise<{ streams: unknown[] }> {
-    let epPart = "";
+    let contentId = "";
+    let episodeId = "";
+    let epNum = "1";
+
     if (rawId.startsWith("kissasia:ep:")) {
-      epPart = rawId.slice("kissasia:ep:".length);
+      // Id propio: {contentId}:{episodeId}:{epNum} o {contentId} (película).
+      const epPart = rawId.slice("kissasia:ep:".length);
+      if (!epPart) return { streams: [] };
+      const parts = epPart.split(":");
+      contentId = parts[0];
+      episodeId = parts[1] || ""; // vacío en películas
+      epNum = parts[2] || "1";
     } else {
-      epPart = rawId.replace(/^kissasia:/, "");
+      // Id canónico del fan-out/IMDb: "kissasia:{slug}-SxE", sin contentId.
+      const epSlug = rawId.replace(/^kissasia:/, "");
+      const m = epSlug.match(/^(.+)-(\d+)x(\d+)$/);
+      if (!m) return { streams: [] };
+
+      const [, slug, seasonStr, numStr] = m;
+      const season = Number(seasonStr);
+      const num = Number(numStr);
+      if (!slug || !season || !num) return { streams: [] };
+
+      contentId = await this.contentIdBySlug(slug, env);
+      if (!contentId) return { streams: [] };
+
+      const episodes = await this.contentEpisodes(contentId, env);
+      const episode = episodes.find(
+        (ep) => ep.seasonNum === season && ep.episodeNum === num
+      );
+      if (episode) {
+        episodeId = episode.id;
+      } else if (season !== 1 || num !== 1) {
+        // Serie sin ese episodio: no hay nada que ofrecer.
+        return { streams: [] };
+      }
+      // Sin episodio y 1x1 → película: get-media solo necesita contentId.
+      epNum = String(num);
     }
-
-    if (!epPart) return { streams: [] };
-
-    // Partes: {contentId}:{episodeId}:{epNum} o {contentId}
-    const parts = epPart.split(":");
-    const contentId = parts[0];
-    const episodeId = parts[1]; // puede ser undefined si es película
-    const epNum = parts[2] || "1";
 
     if (!contentId) return { streams: [] };
 
@@ -448,12 +600,19 @@ export class KissAsiaSource extends SourceBase {
       console.error(`[kissasia] error fetching get-media: ${e}`);
       return { streams: [] };
     }
+    // fetchBody ya devuelve "" en fallos de red/HTTP: no intentes parsearlo.
+    if (!resText) return { streams: [] };
 
     let mediaData: KissAsiaMediaResponse | null = null;
     try {
       mediaData = JSON.parse(resText);
     } catch (e) {
       console.error(`[kissasia] error parseando media JSON: ${e}`);
+      return { streams: [] };
+    }
+
+    if (mediaData?.success === false) {
+      console.log(`[kissasia] get-media sin éxito: ${mediaData.error || "sin detalle"}`);
       return { streams: [] };
     }
 
@@ -464,6 +623,14 @@ export class KissAsiaSource extends SourceBase {
 
     const { add, streams } = makeStreamDeduper();
     const denoBase = denoBaseFromEnv(env);
+
+    // Etiqueta con el título real: la API devuelve contentTitle + episodeTitle.
+    const streamLabel = [
+      (mediaData?.contentTitle || "").trim(),
+      (mediaData?.episodeTitle || "").trim(),
+    ]
+      .filter(Boolean)
+      .join(" · ");
 
     // Mapear subtítulos
     const subTracks = (mediaData?.subtitles || [])
@@ -485,7 +652,7 @@ export class KissAsiaSource extends SourceBase {
       add({
         url: `${denoBase}/hls?u=${encodeURIComponent(videoUrl)}&r=${encodeURIComponent(KISSASIA_BASE + "/")}`,
         name: "KissAsia HLS",
-        title: "▶ KissAsia — HLS",
+        title: `▶ KissAsia${streamLabel ? ` — ${streamLabel}` : " — HLS"}`,
         behaviorHints: {
           notWebReady: false,
           filename: `kissasia-${contentId}-${epNum}.m3u8`,
@@ -497,13 +664,13 @@ export class KissAsiaSource extends SourceBase {
       add({
         externalUrl: videoUrl,
         name: "KissAsia 🌐",
-        title: "🌐 HLS — KissAsia",
+        title: streamLabel ? `🌐 HLS — KissAsia — ${streamLabel}` : "🌐 HLS — KissAsia",
       });
     } else {
       add({
         url: videoUrl,
         name: "KissAsia MP4",
-        title: "▶ KissAsia — directo",
+        title: `▶ KissAsia${streamLabel ? ` — ${streamLabel}` : " — directo"}`,
         behaviorHints: {
           notWebReady: false,
           filename: `kissasia-${contentId}-${epNum}.mp4`,
