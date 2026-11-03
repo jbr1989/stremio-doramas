@@ -55,7 +55,15 @@ export async function metaRoute(
   if (cached) return json(cached);
   try {
     const result = await getMeta(id, tmdbKey, env);
-    await cacheSet(`meta:v2:${id}`, result, TTL.meta, env.STREAM_CACHE);
+    // Ficha con contenido → TTL estándar (2 h). Vacía ({meta: null}: API
+    // caída, id desconocido) → castigo corto (10 min), para que un fallo
+    // puntual no deje la ficha muerta hasta su TTL completo.
+    await cacheSet(
+      `meta:v2:${id}`,
+      result,
+      result?.meta ? TTL.meta : TTL.metaNeg,
+      env.STREAM_CACHE
+    );
     return json(result);
   } catch (e) {
     return json({ meta: null, error: String(e) });
