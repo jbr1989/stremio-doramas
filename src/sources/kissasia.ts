@@ -1,9 +1,21 @@
 import { Env } from "../lib/types";
-import { cleanTitle, fetchHtml, denoBaseFromEnv, makeStreamDeduper } from "../lib/utils";
+import {
+  cacheGet,
+  cacheSet,
+  cleanTitle,
+  fetchHtml,
+  denoBaseFromEnv,
+  makeStreamDeduper,
+} from "../lib/utils";
 import { SourceBase, SourceCard, SourceEpisode } from "../lib/sourceBase";
 
 const KISSASIA_BASE = "https://kissasia.cam";
 const TMDB_IMAGE_PREFIX = "https://image.tmdb.org/t/p/w500";
+// contentId → slug real del sitio ("between-steps"). El slug se usa como
+// título canónico en el fan-out: "between-steps-1x2" es traducible por
+// slugmap, mientras que "kissasia-1758-1x2" solo contiene el contentId.
+const CONTENT_CACHE_PREFIX = "ka:content:";
+const CONTENT_CACHE_TTL = 24 * 3600; // 24 h
 
 export interface KissAsiaCardItem {
   id: number;
@@ -68,16 +80,19 @@ export class KissAsiaSource extends SourceBase {
     return 24;
   }
 
+  // Solo series: la API mezcla 1.204 series (type=tv) y 471 películas
+  // (type=movie) en /api/content. El catálogo de Stremio es type "series",
+  // así que se filtra en origen —equivale a /video-library?type=tvseries—.
   protected override buildSearchUrl(q: string): string {
-    return `${KISSASIA_BASE}/api/content?q=${encodeURIComponent(q)}&limit=${this.pageSize}`;
+    return `${KISSASIA_BASE}/api/content?q=${encodeURIComponent(q)}&limit=${this.pageSize}&type=tv`;
   }
 
   protected override buildGenreUrl(gslug: string, page: number): string {
-    return `${KISSASIA_BASE}/api/content?genre=${encodeURIComponent(gslug)}&limit=${this.pageSize}&page=${page}`;
+    return `${KISSASIA_BASE}/api/content?genre=${encodeURIComponent(gslug)}&limit=${this.pageSize}&page=${page}&type=tv`;
   }
 
   protected override buildListUrl(page: number): string {
-    return `${KISSASIA_BASE}/api/content?limit=${this.pageSize}&page=${page}`;
+    return `${KISSASIA_BASE}/api/content?limit=${this.pageSize}&page=${page}&type=tv`;
   }
 
   protected override parseCards(resText: string): SourceCard[] {
@@ -173,13 +188,29 @@ export class KissAsiaSource extends SourceBase {
     return [];
   }
 
-  protected override listEpisodes(data: string | unknown, slug: string): SourceEpisode[] {
+  protected override listEpisodes(
+    data: string | unknown,
+    slug: string,
+    _tmdb?: unknown,
+    env?: Env
+  ): SourceEpisode[] {
     const html = typeof data === "string" ? data : "";
     const episodes: SourceEpisode[] = [];
 
     // Extraer contentId del HTML
     const mCid = html.match(/contentId[\\\"]*:\s*[\\\"]*(\d+)/);
     const contentId = mCid ? mCid[1] : "";
+
+    // Precalentar el slug del fan-out mientras Stremio pide la meta: evita
+    // que toEpSlug tenga que pedir /api/content?id= en la primera reproducción.
+    if (contentId && slug) {
+      void cacheSet(
+        `${CONTENT_CACHE_PREFIX}${contentId}`,
+        slug,
+        CONTENT_CACHE_TTL,
+        env?.STREAM_CACHE
+      );
+    }
 
     // Extraer array initialEpisodes
     const mEps = html.match(/initialEpisodes[\\\"]*:\s*\[(.*?)(?:\]\s*,\s*[\\\"]*downloadUrl|\]\s*,\s*\[)/);
@@ -213,12 +244,48 @@ export class KissAsiaSource extends SourceBase {
   }
 
   // ── Fan-out de streams ──
-  override async toEpSlug(rawId: string, _env?: Env): Promise<string> {
+  /** contentId → slug real del sitio, cacheado en KV. La API pública
+   *  `/api/content?id={contentId}` devuelve la ficha completa (título, slug…). */
+  private async contentSlug(contentId: string, env?: Env): Promise<string> {
+    const kv = env?.STREAM_CACHE;
+    const key = `${CONTENT_CACHE_PREFIX}${contentId}`;
+    if (kv) {
+      const cached = await cacheGet(key, kv);
+      if (typeof cached === "string" && cached) return cached;
+    }
+    if (!env) return "";
+
+    try {
+      const resText = await this.fetchBody(
+        `${KISSASIA_BASE}/api/content?id=${encodeURIComponent(contentId)}`,
+        env
+      );
+      if (!resText) return "";
+      const data = JSON.parse(resText) as Partial<KissAsiaCardItem>;
+      const slug = typeof data.slug === "string" ? data.slug.trim() : "";
+      if (slug) await cacheSet(key, slug, CONTENT_CACHE_TTL, kv);
+      return slug;
+    } catch (e) {
+      console.log(`[kissasia] no se pudo resolver slug de ${contentId}: ${e}`);
+      return "";
+    }
+  }
+
+  /** id propio → epSlug canónico basado en el TÍTULO del sitio, no en el
+   *  contentId: `between-steps-1x2` en vez de `kissasia-1758-1x2`. Así el
+   *  fan-out puede buscar la serie en las demás fuentes vía slugmap. */
+  override async toEpSlug(rawId: string, env?: Env): Promise<string> {
     const parts = rawId.split(":");
-    // kissasia:ep:{contentId}:{episodeId}:{num} -> episodio num
-    if (parts.length >= 5 && parts[1] === "ep") {
-      const epNum = parts[4];
-      return `kissasia-${parts[2]}-1x${epNum}`;
+    // kissasia:ep:{contentId}:{episodeId}:{num} (serie) o kissasia:ep:{contentId} (película)
+    if (parts.length >= 3 && parts[1] === "ep") {
+      const contentId = parts[2];
+      const epNum = parts[4] || "1";
+      const slug = contentId ? await this.contentSlug(contentId, env) : "";
+      // Fallback al formato antiguo si la API no responde: el fan-out no
+      // encuentra el título, pero los streams de KissAsia siguen funcionando.
+      return slug
+        ? `${slug}-1x${epNum}`
+        : `kissasia-${contentId}-1x${epNum}`;
     }
     return rawId.slice(this.prefix.length + 1);
   }
