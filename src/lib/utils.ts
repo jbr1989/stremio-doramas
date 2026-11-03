@@ -139,6 +139,9 @@ const CHROME_HEADERS = {
 export const TTL = {
   catalog: 10 * 60, // 10 min (seconds for KV)
   meta: 2 * 60 * 60, // 2 hr
+  /** Ficha vacía ({meta: null}): la API falló o la fuente no la tiene.
+   *  Castigo corto — 2 h de null tras un fallo puntual deja la ficha muerta. */
+  metaNeg: 10 * 60,
   stream: 30 * 60, // 30 min
 };
 

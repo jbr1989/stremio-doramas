@@ -15,6 +15,7 @@ import { pandramaSource } from "./sources/pandrama";
 import { doramaYtSource } from "./sources/doramasyt";
 import { doramaSubSource } from "./sources/doramasub";
 import { kisskhSource } from "./sources/kisskh";
+import { oneTouchSource } from "./sources/onetouchtv";
 import { kissAsiaSource } from "./sources/kissasia";
 
 /** Contrato que toda fuente singleton lista en SOURCES debe cumplir (los
@@ -58,6 +59,7 @@ export const SOURCES: SourceDef[] = [
   doramaYtSource,
   doramaSubSource,
   kisskhSource,
+  oneTouchSource,
   kissAsiaSource,
 ];
 

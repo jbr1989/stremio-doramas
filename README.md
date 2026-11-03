@@ -12,14 +12,34 @@ Addon de Stremio para ver **doramas en español** (sub español/latino), corrien
 |---|---|---|---|---|
 | `dlat:` | [doramaslat.com](https://doramaslat.com) | `src/sources/doramas.ts` | WordPress + tema DooPlay | ✅ Funcional |
 | `dplay:` | [doramedplay.net](https://doramedplay.net) | `src/sources/doramas.ts` | WordPress + tema DooPlay | ✅ Funcional |
-| `kplay:` | [kdramasplay.com](https://kdramasplay.com) | `src/sources/kdramasplay.ts` | WordPress + tema DooPlay | ⚠️ Episodios sin streams (ver problema conocido) |
+| `kplay:` | [kdramasplay.com](https://kdramasplay.com) | `src/sources/kdramasplay.ts` | WordPress + tema DooPlay | ✅ Funcional (problema de streams resuelto, ver abajo) |
 | `dflix:` | [doramasflix.in](https://doramasflix.in) | `src/sources/doramasflix.ts` | App propia (GraphQL) | ✅ Funcional |
 | `tudorama:` | [tudorama.com](https://tudorama.com) | `src/sources/tudorama.ts` | WordPress + tema WStream | ⚠️ Miniaturas/pósters en blanco en Stremio Web (ver problema conocido) |
 | `pandrama:` | [pandrama.tv](https://www.pandrama.tv) | `src/sources/pandrama.ts` | App propia (Laravel + React) | ✅ Funcional |
 | `dsub:` | [doramasub.com](https://www.doramasub.com) | `src/sources/doramasub.ts` | Blogger + API Feeds | ✅ Funcional |
+| `dyt:` | [doramasyt.com](https://www.doramasyt.com) | `src/sources/doramasyt.ts` | App propia (carga dinámica) | ✅ Funcional |
+| `yandi:` | [yandispoiler.net](https://yandispoiler.net) | `src/sources/yandispoiler.ts` | WordPress + DooPlay (base `kplay`) | ✅ Funcional |
+| `kisskh:` | [kisskh.co](https://kisskh.co) | `src/sources/kisskh.ts` | API firmada | ✅ Funcional |
+| `onetouch:` | [onetouchtv.xyz](https://onetouchtv.xyz) | `src/sources/onetouchtv.ts` | API propia (AES-256-CBC) | ✅ Funcional |
 | `kissasia:` | [kissasia.cam](https://kissasia.cam) | `src/sources/kissasia.ts` | App propia (Next.js + API) | ✅ Funcional |
 
 Todas exponen catálogo (directorio + búsqueda), meta con episodios (pósteres vía TMDB) y streams.
+
+### Notas de `onetouch` (OneTouch TV)
+
+- **API propia** en `api3.devcorp.me`: respuesta cifrada AES-256-CBC (clave/IV
+  reverse-engineered del bundle del site). Si upstream rota la clave, la fuente
+  devuelve vacío en silencio — tras una rotación conviene mirar el log
+  `[onetouch]` del Worker y `/debug-all`.
+- **Streams** HLS/MP4/DASH **directos** desde `aapanel.devcorp.me` (master con
+  CORS abierto; no pasa por el proxy Deno). DASH se marca `notWebReady` (soporte
+  irregular en clientes web). Si la API bloquea el egress de Cloudflare Workers,
+  `fetchDecrypted` reintenta por el proxy Deno `/fetch` (allowlist incluye
+  `devcorp.me`).
+- **Limitaciones** (oct. 2026): sin endpoint jugable para películas — se filtran
+  de los resultados de búsqueda; la temporada se deduce del slug de la ficha
+  ("…-season-2-2026"); las miniaturas de episodio son el póster de la serie.
+
 
 ### Espejos de cabeceras para `dflix` (failover de `fetchGql`)
 
@@ -124,12 +144,11 @@ cliente-side.
 
 | Sitio | Tecnología | Hallazgos | Esfuerzo |
 |---|---|---|---|
-| **[doramasyt.com](https://www.doramasyt.com)** | App propia (no WP), carga dinámica | Episodios `/ver/{slug}-episodio-N`; servidores DooD, StreamTape, Filemoon → requiere extractores nuevos (DooD/StreamTape son duros; Filemoon viable). | Alto |
 | **[seriesbl.net](https://seriesbl.net)** | WordPress + DooPlay | Patrón DooPlay estándar: basta añadir una entrada a `DORAMA_SOURCES`. Nicho: series/pelis Boys Love. | Bajo |
 
-Descartados: `doramedplay.com` (misma marca que doramedplay.net, ya integrada como `dplay:`), `doramasmp4.com` (muerto, redirige a la alianza antipiratería; **no confundir con `doramasmp4.io`, espejo vivo de la plataforma doramasflix** — ver arriba) y `doramasia.com` como fuente independiente (es espejo de la plataforma dflix, ver arriba; su contenido ya se sirve bajo `dflix:`).
+Descartados/integrados: `doramasyt.com` (implementada como `dyt:` — ha pasado a la tabla de fuentes de arriba), `doramedplay.com` (misma marca que doramedplay.net, ya integrada como `dplay:`), `doramasmp4.com` (muerto, redirige a la alianza antipiratería; **no confundir con `doramasmp4.io`, espejo vivo de la plataforma doramasflix** — ver arriba) y `doramasia.com` como fuente independiente (es espejo de la plataforma dflix, ver arriba; su contenido ya se sirve bajo `dflix:`).
 
-Orden de integración sugerido: `doramasyt.com` → `seriesbl.net` (nicho). (El fix de `kplay` está aplicado — ver arriba.)
+Orden de integración sugerido: `seriesbl.net` (nicho). (El fix de `kplay` está aplicado — ver arriba.)
 
 ## Añadir a Stremio
 
@@ -186,7 +205,7 @@ esto crea un segundo Worker en otra URL en vez de actualizar el real.
   `browserRendering`). Los `externalUrl` (🌐) no reproducen — solo HLS y MP4 cuentan
 - `/debug-host?url=<embed>` — trae la página de un embed y vuelca las URLs de medios
 - `/debug-render?url=<url>` — prueba de Cloudflare Browser Rendering
-- `/debug-all` — chequea las 7 fuentes a la vez. Comportamiento estándar (dinámico): de cada catálogo propio toma las series recientes, las expande a `?n=` episodios vía meta (default 10) y llama al getter de cada fuente con esos IDs reales. Salida plana, una fila por episodio: `source/id/streamsCount/tipos/totalMs` + `sample` con cada stream (`servidor`/`tipo`/`name`/`url`); sin episodios solo muestra contexto del catálogo. `?ids=id1,id2` hace override manual. Streams crudos: sin caché ni filtro de señuelos.
+- `/debug-all` - chequea las 11 fuentes a la vez. Comportamiento estándar (dinámico): de cada catálogo propio toma las series recientes, las expande a `?n=` episodios vía meta (default 10) y llama al getter de cada fuente con esos IDs reales. Salida plana, una fila por episodio: `source/id/streamsCount/tipos/totalMs` + `sample` con cada stream (`servidor`/`tipo`/`name`/`url`); sin episodios solo muestra contexto del catálogo. `?ids=id1,id2` hace override manual. Streams crudos: sin caché ni filtro de señuelos.
 - `/cache-clear?key=<clave KV completa>` — limpia una entrada de caché
 
 ### Hosts de reto (`CHALLENGE_HOSTS_RE`, src/lib/utils.ts)
