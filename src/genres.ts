@@ -61,7 +61,8 @@ type GenreSourceName =
   | "yandi"
   | "dsub"
   | "kisskh"
-  | "kissasia";
+  | "kissasia"
+  | "korg";
 
 interface GenreEntry {
   /** Label ES que ve el usuario en el dropdown de Stremio. */
@@ -89,6 +90,7 @@ const MASTER_GENRES: GenreEntry[] = [
       yandi: "romance",
       kisskh: "Romance",
       kissasia: "Romance",
+      korg: "romance",
     } 
   },
   { label: "Comedia", slugs:
@@ -104,6 +106,7 @@ const MASTER_GENRES: GenreEntry[] = [
       yandi: "comedia",
       kisskh: "Comedy",
       kissasia: "Comedy",
+      korg: "comedy",
     }
   },
   { label: "Drama", slugs: 
@@ -119,6 +122,7 @@ const MASTER_GENRES: GenreEntry[] = [
       yandi: "drama",
       kisskh: "Drama",
       kissasia: "Drama",
+      korg: "drama",
     } 
   },
   { label: "Acción", slugs: 
@@ -132,6 +136,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dflix: "accion",
       yandi: "accion",
       kissasia: "Action",
+      korg: "action",
     } 
   },
   { label: "Acción y aventura", slugs: 
@@ -142,6 +147,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "12",
       yandi: "action-adventure",
       kissasia: "Action & Adventure",
+      korg: "action-adventure",
     } 
   },
   { label: "Aventura", slugs: 
@@ -154,6 +160,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dflix: "aventura",
       yandi: "aventura",
       kissasia: "Adventure",
+      korg: "adventure",
     } 
   },
   { label: "Misterio", slugs: 
@@ -167,6 +174,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dflix: "misterio",
       yandi: "misterio",
       kissasia: "Mystery",
+      korg: "mystery",
     } 
   },
   { label: "Suspense", slugs: 
@@ -197,6 +205,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dflix: "crimen",
       yandi: "crimen",
       kissasia: "Crime",
+      korg: "crime",
     } 
   },
   { label: "Terror", slugs: 
@@ -211,6 +220,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dplay: "horror",
       yandi: "horror",
       kissasia: "Horror",
+      korg: "horror",
     } 
   },
   { label: "Fantasía", slugs: 
@@ -223,6 +233,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dflix: "fantasia",
       yandi: "fantasia",
       kissasia: "Fantasy",
+      korg: "fantasy",
     } 
   },
   { label: "Ciencia ficción", slugs: 
@@ -234,6 +245,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dflix: "ciencia-ficcion",
       yandi: "ciencia-ficcion",
       kissasia: "Science Fiction",
+      korg: "science-fiction",
     } 
   },
   { label: "Sci-Fi y fantasía", slugs: 
@@ -244,6 +256,7 @@ const MASTER_GENRES: GenreEntry[] = [
       pandrama: "5",
       yandi: "sci-fi-fantasy",
       kissasia: "Sci-Fi & Fantasy",
+      korg: "sci-fi-fantasy",
     } 
   },
   { label: "Histórico", slugs: 
@@ -255,6 +268,7 @@ const MASTER_GENRES: GenreEntry[] = [
       dflix: "history",
       yandi: "historico",
       kissasia: "History",
+      korg: "history",
     } 
   },
   { label: "Escolar", slugs: 
@@ -392,33 +406,38 @@ const MASTER_GENRES: GenreEntry[] = [
       dlat: "dramas-lgtb",
       pandrama: "1",
       yandi: "bl",
+      korg: "bl-drama",
     } 
   },
   { label: "K-Drama", slugs: 
     { 
-      dyt: "k-drama"
+      dyt: "k-drama",
+      korg: "korean-drama",
     } 
   },
   { label: "C-Drama", slugs: 
     { 
       dyt: "c-drama", 
-      tudorama: "cdrama" 
+      tudorama: "cdrama",
+      korg: "chinese-drama",
     }
   },
   { label: "J-Drama", slugs:
     { 
-      dyt: "j-drama"
+      dyt: "j-drama",
+      korg: "japan-drama",
     }
   },
   { label: "Thai", slugs:
     { 
-      dyt: "thai-drama"
+      dyt: "thai-drama",
+      korg: "thai-drama",
     }
   },
   { label: "Biografía", slugs: { yandi: "biografia" } },
   { label: "Deportes", slugs: { yandi: "deportes" } },
   { label: "Legal", slugs: { yandi: "legal" } },
-  { label: "LGBTQ", slugs: { yandi: "lgbtq" } },
+  { label: "LGBTQ", slugs: { yandi: "lgbtq", korg: "lgbtq" } },
   { label: "Medicina", slugs: { yandi: "medicina" } },
   { label: "Política", slugs: { yandi: "politica" } },
   { label: "Película de TV", slugs: { yandi: "pelicula-de-tv" } },

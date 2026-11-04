@@ -12,6 +12,7 @@ import { doramaSubSource } from "./sources/doramasub";
 import { kisskhSource } from "./sources/kisskh";
 import { oneTouchSource } from "./sources/onetouchtv";
 import { kissAsiaSource } from "./sources/kissasia";
+import { kisskhOrgSource } from "./sources/kisskhorg";
 
 // ─── Catálogo consolidado "Todos los Doramas" ───────────────────────────────
 // Orquesta los catálogos ya existentes en paralelo, fusiona, y de-duplica por
@@ -52,6 +53,7 @@ const SOURCES: SourceSpec[] = [
   { name: "kisskh", page: 24, fetch: (e, env) => kisskhSource.getCatalog(e, env) },
   { name: "onetouch", page: 30, fetch: (e, env) => oneTouchSource.getCatalog(e, env) },
   { name: "kissasia", page: 24, fetch: (e, env) => kissAsiaSource.getCatalog(e, env) },
+  { name: "korg", page: 24, fetch: (e, env) => kisskhOrgSource.getCatalog(e, env) },
   { name: "pandrama", page: 48, fetch: (e, env) => pandramaSource.getCatalog(e, env) },
 ];
 

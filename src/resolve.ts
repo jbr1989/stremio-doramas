@@ -24,9 +24,12 @@ export async function getCatalog(
 ) {
   if (catalogId.startsWith("alldoramas"))
     return getAllAlldoramasCatalog(extra, env);
-  // El orden de SOURCES importa: los catalogId no se solapan, pero se
-  // respeta el orden de registro igual que en la cadena original.
-  const def = SOURCES.find((s) => catalogId.startsWith(s.catalogId));
+  // El match exige límite de id (igualdad o "catalogId-"): un startsWith a
+  // secas hacía que "kisskhorg-directory" cayera en la fuente "kisskh"
+  // (kisskh.co) por ser prefijo, no en "kisskhorg" (kisskh.org).
+  const def = SOURCES.find(
+    (s) => catalogId === s.catalogId || catalogId.startsWith(`${s.catalogId}-`)
+  );
   // Un catalogId desconocido responde vacío en vez de recaer en otra fuente:
   // el fallback anterior (dflix) devolvía catálogo para id cualquiera y
   // catalogRoute cacheaba cada clave nueva → escrituras KV ilimitadas.
