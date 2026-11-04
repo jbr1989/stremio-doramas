@@ -96,8 +96,8 @@ async function handleFetch(target: string): Promise<Response> {
     logErr("fetch", `url inválida: ${trunc(target, 120)}`);
     return jsonError("invalid url", 400);
   }
-  // Allowlist: doramaslat.com, doramedplay.net, kdramasplay.com, doramasflix.in, doramasyt.com, tudorama.com, pandrama.tv, doramasub.com, yandispoiler.net, kisskh.co, onetouchtv.xyz, devcorp.me, kissasia.cam, kisskh.org.
-  if (u.protocol !== "https:" || !/(^|\.)(doramaslat\.com|doramedplay\.net|kdramasplay\.com|doramasflix\.in|doramasyt\.com|tudorama\.com|pandrama\.tv|doramasub\.com|yandispoiler\.net|kisskh\.co|onetouchtv\.xyz|devcorp\.me|kissasia\.cam|kisskh\.org)$/i.test(u.hostname)) {
+  // Allowlist: doramaslat.com, doramedplay.net, kdramasplay.com, doramasflix.in, doramasyt.com, tudorama.com, pandrama.tv, doramasub.com, yandispoiler.net, kisskh.co, onetouchtv.xyz, devcorp.me, kissasia.cam, kisskh.org, kisskh.club.
+  if (u.protocol !== "https:" || !/(^|\.)(doramaslat\.com|doramedplay\.net|kdramasplay\.com|doramasflix\.in|doramasyt\.com|tudorama\.com|pandrama\.tv|doramasub\.com|yandispoiler\.net|kisskh\.co|onetouchtv\.xyz|devcorp\.me|kissasia\.cam|kisskh\.org|kisskh\.club)$/i.test(u.hostname)) {
     logErr("fetch", `host no permitido: ${u.protocol}//${u.hostname}`);
     return jsonError("host not allowed", 403);
   }
@@ -277,7 +277,8 @@ function doodMp4HostAllowed(host: string): boolean {
   // doodcdn/dscdn/dl-*; también acepta CNAMEs con "dood" en el host.
   // zudrama.* sirve los mp4 de kisskh.org (hlsz.zudrama.top) y exige
   // Referer https://kisskh.org/ (verificado: sin él → 403).
-  return /(?:cloudatacdn|doodcdn|dscdn|dood|zudrama\.)/i.test(host);
+  // hlscdn.vip sirve los mp4 de kisskh.club y exige Referer: https://kisskh.club/.
+  return /(?:cloudatacdn|doodcdn|dscdn|dood|zudrama\.|hlscdn\.vip)/i.test(host);
 }
 
 // GET /mp4?url=<mp4>&r=<referer> → re-sirve el MP4 con Referer y Range

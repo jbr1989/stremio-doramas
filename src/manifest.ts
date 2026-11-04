@@ -28,7 +28,7 @@ const withGenre = (opts: string[]): CatalogExtra[] => [
 
 export const MANIFEST = {
   id: ADDON_ID,
-  version: "1.11.1",
+  version: "1.12.0",
   name: "DoramasWeb",
   description: "Fuentes de Doramas en español y subtituladas",
   // Fallback por si el manifest se consume fuera del handler; en runtime
@@ -121,10 +121,16 @@ export const MANIFEST = {
       name: "KissKH.org — Directorio",
       extra: withGenre(genreSourceOptions("korg")),
     },
+    {
+      type: "series",
+      id: "kisskhclub-directory",
+      name: "KissKH.club — Directorio",
+      extra: SEARCH_SKIP,
+    },
   ],
   idPrefixes: [
     "tt", // ids IMDb de series (meta/stream ligeros + streams por s/e)
     "dlat:", "dplay:", "kplay:", "dflix:", "tudorama:", "pandrama:",
-    "dyt:", "dsub:", "yandi:", "kisskh:", "onetouch:", "kissasia:", "korg:",
+    "dyt:", "dsub:", "yandi:", "kisskh:", "onetouch:", "kissasia:", "korg:", "kclub:",
   ],
 };
