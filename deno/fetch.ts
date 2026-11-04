@@ -159,7 +159,10 @@ function hlsHostAllowed(host: string): boolean {
     // CDN de la familia filelions (lulu): cdn-tnmr.org / .1x / .1y — TLDs raros que rotan.
     /cdn-tnmr/i.test(host) ||
     // CDN de la familia byse (el edge rota: edge*-sprintcdn.<dominio>.com)
-    /(sprintcdn|owphbf24)/i.test(host);
+    /(sprintcdn|owphbf24)/i.test(host) ||
+    // sooplive.com sirve los m3u8 de las películas de kisskh.club
+    // (verificado in-vivo: no exige Referer, responde 200 sin él).
+    /(^|\.)sooplive\.com$/i.test(host);
 }
 
 const STREAMWISH_REFERER = "https://streamwish.top/";
