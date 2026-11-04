@@ -15,6 +15,9 @@ import { pandramaSource } from "./sources/pandrama";
 import { doramaYtSource } from "./sources/doramasyt";
 import { doramaSubSource } from "./sources/doramasub";
 import { kisskhSource } from "./sources/kisskh";
+import { oneTouchSource } from "./sources/onetouchtv";
+import { kissAsiaSource } from "./sources/kissasia";
+import { kisskhOrgSource } from "./sources/kisskhorg";
 
 /** Contrato que toda fuente singleton lista en SOURCES debe cumplir (los
  *  defaults de toEpSlug/buildId viven en SourceBase, así que son métodos
@@ -57,6 +60,9 @@ export const SOURCES: SourceDef[] = [
   doramaYtSource,
   doramaSubSource,
   kisskhSource,
+  oneTouchSource,
+  kissAsiaSource,
+  kisskhOrgSource,
 ];
 
 export function sourceByPrefix(prefix: string): SourceDef | undefined {

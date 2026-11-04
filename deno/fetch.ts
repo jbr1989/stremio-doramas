@@ -96,8 +96,8 @@ async function handleFetch(target: string): Promise<Response> {
     logErr("fetch", `url inválida: ${trunc(target, 120)}`);
     return jsonError("invalid url", 400);
   }
-  // Allowlist: doramaslat.com, doramedplay.net, kdramasplay.com, doramasflix.in, doramasyt.com, tudorama.com, pandrama.tv, doramasub.com, yandispoiler.net, kisskh.co, kisskh.club.
-  if (u.protocol !== "https:" || !/(^|\.)(doramaslat\.com|doramedplay\.net|kdramasplay\.com|doramasflix\.in|doramasyt\.com|tudorama\.com|pandrama\.tv|doramasub\.com|yandispoiler\.net|kisskh\.co|kisskh\.club)$/i.test(u.hostname)) {
+  // Allowlist: doramaslat.com, doramedplay.net, kdramasplay.com, doramasflix.in, doramasyt.com, tudorama.com, pandrama.tv, doramasub.com, yandispoiler.net, kisskh.co, kisskh.club, onetouchtv.xyz, devcorp.me, kissasia.cam, kisskh.org.
+  if (u.protocol !== "https:" || !/(^|\.)(doramaslat\.com|doramedplay\.net|kdramasplay\.com|doramasflix\.in|doramasyt\.com|tudorama\.com|pandrama\.tv|doramasub\.com|yandispoiler\.net|kisskh\.co|kisskh\.club|onetouchtv\.xyz|devcorp\.me|kissasia\.cam|kisskh\.org)$/i.test(u.hostname)) {
     logErr("fetch", `host no permitido: ${u.protocol}//${u.hostname}`);
     return jsonError("host not allowed", 403);
   }
@@ -155,7 +155,7 @@ async function handleFetch(target: string): Promise<Response> {
 // premilkyway.com is StreamWish's HLS CDN. Its playlist/segment tokens
 // are IP-bound, so they must be fetched from this same Deno IP that resolved the embed.
 function hlsHostAllowed(host: string): boolean {
-  return /(^|\.)(savefiles\.com|streamhls\.to|premilkyway\.com)$/i.test(host) ||
+  return /(^|\.)(savefiles\.com|streamhls\.to|premilkyway\.com|devcorp\.me)$/i.test(host) ||
     // CDN de la familia filelions (lulu): cdn-tnmr.org / .1x / .1y — TLDs raros que rotan.
     /cdn-tnmr/i.test(host) ||
     // CDN de la familia byse (el edge rota: edge*-sprintcdn.<dominio>.com)
@@ -267,15 +267,18 @@ async function handleStreamwish(embedUrl: string, selfBase: string): Promise<Res
   }
 }
 
-// ─── Dood MP4 relay ─────────────────────────────────────────────────────────
-// A família Dood (do7go/playmogo/dood.*) sirve MP4 progresivo gateado por
-// Referer — NO es IP-bound, pero el player de Stremio no envía Referer.
-// Este relay lo añade y pasa Range para el seeking (respuesta 206 upstream).
+// ─── MP4 relay (Dood + zudrama) ─────────────────────────────────────────────
+// Los MP4 progresivos de la familia Dood (do7go/playmogo/dood.*) y de
+// zudrama.top (playlist de kisskh.org) están gateados por Referer — NO son
+// IP-bound, pero el player de Stremio no envía Referer. Este relay lo añade y
+// pasa Range para el seeking (respuesta 206 upstream).
 function doodMp4HostAllowed(host: string): boolean {
   // CDN generoso: los MP4 de Dood viven en cloudatacdn.com y dominios
-  // doodcdn/dscdn/dl-*; también acepta CNAMEs con "dood" en el host,
-  // y CDNs directos de kisskh (hlscdn.vip).
-  return /(?:cloudatacdn|doodcdn|dscdn|dood|hlscdn\.vip)/i.test(host);
+  // doodcdn/dscdn/dl-*; también acepta CNAMEs con "dood" en el host.
+  // zudrama.* sirve los mp4 de kisskh.org (hlsz.zudrama.top) y exige
+  // Referer https://kisskh.org/ (verificado: sin él → 403).
+  // hlscdn.vip sirve los mp4 directos de kisskh.club (Referer https://kisskh.club/).
+  return /(?:cloudatacdn|doodcdn|dscdn|dood|zudrama\.|hlscdn\.vip)/i.test(host);
 }
 
 // GET /mp4?url=<mp4>&r=<referer> → re-sirve el MP4 con Referer y Range

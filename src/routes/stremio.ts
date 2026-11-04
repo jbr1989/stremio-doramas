@@ -44,18 +44,26 @@ export async function catalogRoute(
 }
 
 /** /meta/{type}/{id}.json — ficha de la serie con su lista de episodios.
- *  Clave v2: los metas exponen `genres` (scrape de la ficha) — bump de
- *  clave para no servir metas cacheados sin géneros hasta su TTL. */
+ *  Clave v3: las metas de fuentes API enriquecidas (kissasia) traen géneros y
+ *  año que el scraper no tenía — bump para no servir metas cacheados viejos. */
 export async function metaRoute(
   id: string,
   tmdbKey: string,
   env: Env
 ): Promise<Response> {
-  const cached = await cacheGet(`meta:v2:${id}`, env.STREAM_CACHE);
+  const cached = await cacheGet(`meta:v3:${id}`, env.STREAM_CACHE);
   if (cached) return json(cached);
   try {
     const result = await getMeta(id, tmdbKey, env);
-    await cacheSet(`meta:v2:${id}`, result, TTL.meta, env.STREAM_CACHE);
+    // Ficha con contenido → TTL estándar (2 h). Vacía ({meta: null}: API
+    // caída, id desconocido) → castigo corto (10 min), para que un fallo
+    // puntual no deje la ficha muerta hasta su TTL completo.
+    await cacheSet(
+      `meta:v3:${id}`,
+      result,
+      result?.meta ? TTL.meta : TTL.metaNeg,
+      env.STREAM_CACHE
+    );
     return json(result);
   } catch (e) {
     return json({ meta: null, error: String(e) });

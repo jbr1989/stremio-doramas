@@ -302,11 +302,12 @@ export abstract class SourceBase {
       : "";
   }
 
-  /** name/poster/description. Default: ogMetaFromHtml (sitios DooPlay). */
+  /** name/poster/description (y opcionalmente year del sitio). Default:
+   *  ogMetaFromHtml (sitios DooPlay). */
   protected parseMetaBasics?(
     data: string | unknown,
     slug: string
-  ): { name: string; poster: string; description: string };
+  ): { name: string; poster: string; description: string; year?: string };
 
   /** Géneros de la ficha. Default: []. */
   protected parseGenres?(data: string | unknown): string[];
@@ -335,11 +336,12 @@ export abstract class SourceBase {
     const data = await this.fetchMetaPage(slug, env);
     if (!data) return { meta: null };
 
-    const basics = this.parseMetaBasics
-      ? this.parseMetaBasics(data, slug)
-      : typeof data === "string"
-      ? ogMetaFromHtml(data, slug)
-      : { name: slug, poster: "", description: "" };
+    const basics: { name: string; poster: string; description: string; year?: string } =
+      this.parseMetaBasics
+        ? this.parseMetaBasics(data, slug)
+        : typeof data === "string"
+        ? ogMetaFromHtml(data, slug)
+        : { name: slug, poster: "", description: "" };
 
     const genres = this.parseGenres ? this.parseGenres(data) : [];
 
@@ -357,6 +359,7 @@ export abstract class SourceBase {
       description: basics.description,
       genres,
       tmdb,
+      year: basics.year,
       videos: sorted.map((ep) => ({
         id: ep.id ?? this.videoId(ep),
         season: ep.s,
