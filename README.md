@@ -20,8 +20,10 @@ Addon de Stremio para ver **doramas en español** (sub español/latino), corrien
 | `dyt:` | [doramasyt.com](https://www.doramasyt.com) | `src/sources/doramasyt.ts` | App propia (carga dinámica) | ✅ Funcional |
 | `yandi:` | [yandispoiler.net](https://yandispoiler.net) | `src/sources/yandispoiler.ts` | WordPress + DooPlay (base `kplay`) | ✅ Funcional |
 | `kisskh:` | [kisskh.co](https://kisskh.co) | `src/sources/kisskh.ts` | API firmada | ✅ Funcional |
+| `korg:` | [kisskh.org](https://kisskh.org) | `src/sources/kisskhorg.ts` | WordPress DooPlay + Blogger API | ✅ Funcional |
 | `onetouch:` | [onetouchtv.xyz](https://onetouchtv.xyz) | `src/sources/onetouchtv.ts` | API propia (AES-256-CBC) | ✅ Funcional |
 | `kissasia:` | [kissasia.cam](https://kissasia.cam) | `src/sources/kissasia.ts` | App propia (Next.js + API) | ✅ Funcional |
+| `kclub:` | [kisskh.club](https://kisskh.club) | `src/sources/kisskhclub.ts` | App propia (Next.js + API JSON) | ✅ Funcional |
 
 Todas exponen catálogo (directorio + búsqueda), meta con episodios (pósteres vía TMDB) y streams.
 
